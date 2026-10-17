@@ -86,76 +86,11 @@ as $$
   ), false);
 $$;
 
-create or replace function public.is_vendor_member(p_vendor_id uuid)
-returns boolean
-language sql stable security definer
-set search_path = public
-as $$
-  select exists (
-    select 1
-    from public.vendor_members vm
-    where vm.vendor_id = p_vendor_id
-      and vm.profile_id = auth.uid()
-  );
-$$;
-
-create or replace function public.is_vendor_owner(p_vendor_id uuid)
-returns boolean
-language sql stable security definer
-set search_path = public
-as $$
-  select exists (
-    select 1
-    from public.vendor_members vm
-    where vm.vendor_id = p_vendor_id
-      and vm.profile_id = auth.uid()
-      and vm.role = 'owner'
-  );
-$$;
-
-create or replace function public.is_vendor_manager(p_vendor_id uuid)
-returns boolean
-language sql stable security definer
-set search_path = public
-as $$
-  select exists (
-    select 1
-    from public.vendor_members vm
-    where vm.vendor_id = p_vendor_id
-      and vm.profile_id = auth.uid()
-      and vm.role in ('owner', 'manager')
-  );
-$$;
-
-create or replace function public.is_vendor_staff(p_vendor_id uuid)
-returns boolean
-language sql stable security definer
-set search_path = public
-as $$
-  select exists (
-    select 1
-    from public.vendor_members vm
-    where vm.vendor_id = p_vendor_id
-      and vm.profile_id = auth.uid()
-  );
-$$;
-
--- Restrict EXECUTE: no anon, no public role. Authenticated app code + policies only.
-revoke all on function
-  public.is_platform_admin(),
-  public.is_vendor_member(uuid),
-  public.is_vendor_owner(uuid),
-  public.is_vendor_manager(uuid),
-  public.is_vendor_staff(uuid)
-from public, anon;
-
-grant execute on function
-  public.is_platform_admin(),
-  public.is_vendor_member(uuid),
-  public.is_vendor_owner(uuid),
-  public.is_vendor_manager(uuid),
-  public.is_vendor_staff(uuid)
-to authenticated;
+-- Restrict EXECUTE: drop the default PUBLIC grant. Read-only boolean checks that
+-- only inspect auth.uid(); executable by anon + authenticated so RLS policy
+-- expressions can evaluate for either role.
+revoke all on function public.is_platform_admin() from public;
+grant execute on function public.is_platform_admin() to anon, authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Guard: ordinary users cannot grant/deny themselves platform admin.
@@ -254,6 +189,78 @@ create trigger vendor_members_set_updated_at
 create index vendor_members_profile_idx on public.vendor_members (profile_id);
 create index vendor_members_vendor_idx on public.vendor_members (vendor_id);
 
+-- Membership authorization helpers. Defined after vendor_members exists because
+-- PostgreSQL validates function bodies at CREATE time. SECURITY DEFINER + pinned
+-- search_path so RLS policies can use them without recursion; EXECUTE granted to
+-- anon + authenticated (read-only boolean checks over auth.uid()).
+create or replace function public.is_vendor_member(p_vendor_id uuid)
+returns boolean
+language sql stable security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.vendor_members vm
+    where vm.vendor_id = p_vendor_id
+      and vm.profile_id = auth.uid()
+  );
+$$;
+
+create or replace function public.is_vendor_owner(p_vendor_id uuid)
+returns boolean
+language sql stable security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.vendor_members vm
+    where vm.vendor_id = p_vendor_id
+      and vm.profile_id = auth.uid()
+      and vm.role = 'owner'
+  );
+$$;
+
+create or replace function public.is_vendor_manager(p_vendor_id uuid)
+returns boolean
+language sql stable security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.vendor_members vm
+    where vm.vendor_id = p_vendor_id
+      and vm.profile_id = auth.uid()
+      and vm.role in ('owner', 'manager')
+  );
+$$;
+
+create or replace function public.is_vendor_staff(p_vendor_id uuid)
+returns boolean
+language sql stable security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.vendor_members vm
+    where vm.vendor_id = p_vendor_id
+      and vm.profile_id = auth.uid()
+  );
+$$;
+
+revoke all on function
+  public.is_vendor_member(uuid),
+  public.is_vendor_owner(uuid),
+  public.is_vendor_manager(uuid),
+  public.is_vendor_staff(uuid)
+from public;
+
+grant execute on function
+  public.is_vendor_member(uuid),
+  public.is_vendor_owner(uuid),
+  public.is_vendor_manager(uuid),
+  public.is_vendor_staff(uuid)
+to anon, authenticated;
+
 -- ---------------------------------------------------------------------------
 -- Vendor application audit trail (status transitions are logged; required for
 -- trustworthy admin review of pending/suspended/rejected decisions)
@@ -315,6 +322,11 @@ create policy "profiles: update own"
 
 -- (is_platform_admin changes are additionally guarded by trigger above.)
 
+create policy "profiles: platform admin update others"
+  on public.profiles for update
+  using (public.is_platform_admin())
+  with check (public.is_platform_admin());
+
 -- vendors
 --   public: read active vendors only (storefront browsing).
 --   platform admin: full read/write (including pending/suspended details).
@@ -347,9 +359,35 @@ create policy "vendors: members read own"
 create policy "vendors: owner update own"
   on public.vendors for update
   using (public.is_vendor_owner(id))
-  with check (public.is_vendor_owner(id) and status = old.status);
+  with check (public.is_vendor_owner(id));
 
--- Owners may edit descriptive fields but NOT status/commission (platform-only).
+-- Owners may edit descriptive fields, but status and commission_rate are
+-- platform-admin-only. A SECURITY DEFINER trigger (below) enforces this —
+-- WITH CHECK cannot reference the OLD row, so a trigger is required.
+create or replace function public.guard_vendor_finance_fields()
+returns trigger
+language plpgsql security definer
+set search_path = public
+as $$
+begin
+  if (new.status is distinct from old.status
+      or new.commission_rate is distinct from old.commission_rate)
+     and not exists (
+       select 1 from public.profiles p
+       where p.id = auth.uid() and p.is_platform_admin = true
+     ) then
+    raise exception 'Only platform administrators can change vendor status or commission rate.';
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.guard_vendor_finance_fields() from public, anon;
+grant execute on function public.guard_vendor_finance_fields() to authenticated;
+
+create trigger vendors_guard_finance_fields
+  before update of status, commission_rate on public.vendors
+  for each row execute function public.guard_vendor_finance_fields();
 
 -- vendor_members
 --   members: read own vendor's roster.
@@ -389,7 +427,7 @@ create policy "vendor_status_history: vendor members read"
 grant usage on schema public to anon, authenticated;
 
 -- Tables: authenticated gets table-level DML grant; RLS policies are the actual
--- boundary (no anon table grants except what is explicitly needed later).
+-- boundary.
 grant select, insert, update, delete on table
   public.profiles,
   public.vendors,
@@ -397,11 +435,13 @@ grant select, insert, update, delete on table
   public.vendor_status_history
 to authenticated;
 
--- Remove broad anon table access (public store reads will be added per-table
--- when catalog tables exist; Phase 1 has no anon-readable business tables).
+-- anon may only read the public storefront surface (active vendors). RLS
+-- restricts the rows; no anon access to profiles/members/history.
+grant select on table public.vendors to anon;
+
 revoke all on table
   public.profiles,
-  public.vendors,
   public.vendor_members,
   public.vendor_status_history
 from anon;
+
