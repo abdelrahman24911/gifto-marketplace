@@ -1,36 +1,94 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Gifto Marketplace
+
+Multi-vendor gift marketplace connecting gift shops across Egypt. Alexandria focus for initial operations.
+
+Separate product and infrastructure from FL Tase3 (single-vendor store). This repository never reuses FL Tase3 code, credentials, database, or business logic.
+
+## Tech Stack
+
+- Next.js App Router, React, TypeScript (strict)
+- Tailwind CSS
+- Supabase (Auth, Postgres, Row Level Security, Storage)
+- ESLint
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+npm install
+cp .env.example .env.local   # then fill in Gifto Supabase values
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Environment variables (names only)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Name | Exposed to browser | Purpose |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | yes | Gifto Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Supabase anon key (RLS-scoped) |
+| `SUPABASE_SERVICE_ROLE_KEY` | **no** | Server-only. Never expose or commit. |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Never commit `.env*`. Only variable *names* belong in `.env.example`.
 
-## Learn More
+## Scripts
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run dev       # local dev server
+npm run build     # production build
+npm run lint      # eslint
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Type check: `npx tsc --noEmit` (TypeScript strict mode).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Database / Migrations
 
-## Deploy on Vercel
+All schema changes live in version-controlled SQL under `supabase/migrations/`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+supabase link --project-ref <gifto-project-ref>
+supabase db push          # applies pending migrations to the linked Gifto project
+supabase migration list   # verify applied migrations
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Only ever apply migrations to the **Gifto** project. Do not link or push to the FL Tase3 project.
+
+### Phase 1 schema (implemented)
+
+- `profiles` — linked to `auth.users`; single privilege flag `is_platform_admin`.
+- `vendors` — store identity: name, slug, description, `logo_path` (Storage path only),
+  `status` (`pending` | `active` | `suspended` | `rejected`), city/governorate,
+  `delivery_coverage` (jsonb), `commission_rate`, timestamps.
+- `vendor_members` — profile ↔ vendor membership with role (`owner` | `manager` | `staff`).
+- `vendor_status_history` — audit trail of vendor status transitions.
+- Committed-privilege helpers (`is_platform_admin`, `is_vendor_member/owner/manager/staff`),
+  `SECURITY DEFINER` with pinned `search_path` and restricted `EXECUTE` grants.
+- A trigger that prevents ordinary users from granting themselves platform-admin.
+
+### Status semantics (defined now, checkout enforced later)
+
+- `pending` — submitted, awaiting review; not public.
+- `active` — approved and selling; publicly visible.
+- `suspended` — blocked by admin; not public; **must be blocked from checkout** once
+  checkout is implemented (Phase 4/5). Defined here, enforced there.
+- `rejected` — declined; not public.
+
+## Architecture notes (planned — not yet implemented)
+
+The following are documented for direction only; no tables are created for them in Phase 1:
+
+- **Catalog**: `products` (with `vendor_id`), `categories`, images (Storage paths), tags, options.
+- **Checkout**: parent `orders` + `order_vendors` (per-vendor suborders) + `order_items`,
+  created atomically in a single `SECURITY DEFINER` RPC. Vendors share one checkout but
+  fulfill independently. Availability/stock re-validated server-side with row locks.
+- **Inventory**: `inventory_movements`, stock enforced in the checkout RPC.
+- **Money**: `commission_entries` (rate snapshotted at order time; `pending` → `earned`
+  on qualifying status; reversed on cancel/return), `settlements` + `settlement_lines`.
+- **Subscriptions (optional)**: `subscription_plans`, `vendor_subscriptions`, entitlements
+  checked server-side; kept separate from per-order commission.
+
+## Security model
+
+- RLS is the authorization boundary — UI hiding is never relied on.
+- A vendor cannot read or mutate another vendor's private data.
+- Ordinary users cannot self-assign platform-admin; vendor owners cannot grant platform-admin;
+  users cannot create memberships for vendors they do not control.
+- Privileged `SECURITY DEFINER` functions pin `search_path` and restrict `EXECUTE`.
