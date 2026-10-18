@@ -1,26 +1,74 @@
 @import "tailwindcss";
 
+/*
+ * Gifto design tokens — warm ivory paper, deep berry accents, gold detail.
+ * Neighbouring neutrals are tinted toward the same warm hue so the whole
+ * surface reads as one material rather than "white with a red button".
+ */
+@theme {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-display: var(--font-fraunces), "Iowan Old Style", Georgia,
+    "Times New Roman", serif;
+
+  --color-paper: oklch(0.973 0.012 84);
+  --color-paper-soft: oklch(0.988 0.008 88);
+  --color-paper-deep: oklch(0.955 0.016 82);
+
+  --color-ink: oklch(0.28 0.03 40);
+  --color-ink-soft: oklch(0.45 0.025 45);
+  --color-ink-mute: oklch(0.58 0.02 50);
+
+  --color-berry: oklch(0.45 0.16 12);
+  --color-berry-deep: oklch(0.33 0.13 12);
+  --color-berry-soft: oklch(0.94 0.035 12);
+  --color-berry-tint: oklch(0.9 0.06 12);
+
+  --color-gold: oklch(0.76 0.11 75);
+  --color-gold-soft: oklch(0.91 0.05 80);
+
+  --color-line: oklch(0.9 0.012 80);
+  --color-line-strong: oklch(0.84 0.016 78);
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background: var(--color-berry-tint);
+  color: var(--color-berry-deep);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@keyframes gifto-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .gifto-rise {
+    animation: gifto-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
 }

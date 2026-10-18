@@ -3,12 +3,15 @@ import { NextResponse, type NextRequest } from "next/server";
 
 /**
  * Keeps the Supabase auth cookies fresh on every request (Next 16 `proxy`
- * convention — the `middleware` file convention is deprecated).
+ * convention — the `middleware` file convention is deprecated) and redirects
+ * anonymous visitors away from authenticated-only areas.
  *
- * Phase 1 does not protect any routes yet (auth UI is a later phase), so this
- * only refreshes the session. Route guards will be added when login/account
- * pages exist, and will be enforced server-side — never by UI hiding.
+ * Route guards here are a convenience layer only. Each protected page still
+ * verifies the session server-side, and all data access is enforced by Row
+ * Level Security — UI/route hiding is never the security boundary.
  */
+
+const PROTECTED_PREFIXES = ["/account", "/admin", "/vendor", "/checkout"];
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -39,7 +42,31 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Expose a safe flag for future server-side route guards / UI only.
+  // Route guards. This is convenience only: every protected page ALSO verifies
+  // the session server-side, and data access is enforced by RLS regardless.
+  const { pathname } = request.nextUrl;
+  const isProtected = PROTECTED_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+
+  if (isProtected && !user) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.search = "";
+    url.searchParams.set(
+      "next",
+      `${pathname}${request.nextUrl.search || ""}`,
+    );
+
+    const redirectResponse = NextResponse.redirect(url);
+    // Carry any cookies refreshed above onto the redirect.
+    for (const cookie of supabaseResponse.cookies.getAll()) {
+      redirectResponse.cookies.set(cookie);
+    }
+    return redirectResponse;
+  }
+
+  // Expose a safe flag for server-side route guards / UI only.
   if (user) {
     supabaseResponse.headers.set("x-gifto-auth", "1");
   } else {
