@@ -12,19 +12,26 @@
 -- ---------------------------------------------------------------------------
 -- Seed (as superuser: bypasses RLS to create the fixtures)
 -- ---------------------------------------------------------------------------
-delete from auth.users where email like '%@gifto.test';  -- idempotent re-runs
+-- Idempotent re-runs. Deleting the auth users cascades to profiles.
+delete from public.vendors where id = 'aaaaaaaa-0000-0000-0000-000000000001';
+delete from auth.users where email like '%@gifto.test';
 
-insert into auth.users (id, email) values
-  ('11111111-1111-1111-1111-111111111111', 'admin@gifto.test'),
-  ('22222222-2222-2222-2222-222222222222', 'owner@gifto.test'),
-  ('33333333-3333-3333-3333-333333333333', 'member@gifto.test'),
-  ('44444444-4444-4444-4444-444444444444', 'outsider@gifto.test');
+-- Inserting into auth.users fires public.handle_new_user (migration 2), which
+-- auto-provisions the matching public.profiles row. We pass full_name via the
+-- user metadata instead of inserting profiles directly.
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('11111111-1111-1111-1111-111111111111', 'admin@gifto.test',    '{"full_name":"Platform Admin"}'::jsonb),
+  ('22222222-2222-2222-2222-222222222222', 'owner@gifto.test',    '{"full_name":"Vendor Owner"}'::jsonb),
+  ('33333333-3333-3333-3333-333333333333', 'member@gifto.test',   '{"full_name":"Vendor Staff"}'::jsonb),
+  ('44444444-4444-4444-4444-444444444444', 'outsider@gifto.test', '{"full_name":"Outsider"}'::jsonb);
 
-insert into public.profiles (id, email, full_name, is_platform_admin) values
-  ('11111111-1111-1111-1111-111111111111', 'admin@gifto.test',    'Platform Admin', true),
-  ('22222222-2222-2222-2222-222222222222', 'owner@gifto.test',    'Vendor Owner',   false),
-  ('33333333-3333-3333-3333-333333333333', 'member@gifto.test',   'Vendor Staff',   false),
-  ('44444444-4444-4444-4444-444444444444', 'outsider@gifto.test', 'Outsider',       false);
+-- Bootstrap the first platform admin. The self-elevation guard trigger blocks
+-- ordinary (and even non-admin) UPDATEs of is_platform_admin, so seeding the
+-- initial admin requires temporarily disabling that trigger as superuser.
+alter table public.profiles disable trigger profiles_protect_platform_admin;
+update public.profiles set is_platform_admin = true
+  where id = '11111111-1111-1111-1111-111111111111';
+alter table public.profiles enable trigger profiles_protect_platform_admin;
 
 insert into public.vendors (id, name, slug, status) values
   ('aaaaaaaa-0000-0000-0000-000000000001', 'Test Vendor', 'test-vendor', 'pending');
@@ -154,9 +161,9 @@ set request.jwt.claims = '{}';
 do $$
 declare c int;
 begin
-  select count(*) into c from public.vendors;
+  select count(*) into c from public.public_vendors;
   if c <> 0 then raise exception 'TEST H1 FAILED: anon saw % vendors', c; end if;
-  raise notice 'TEST H1 PASSED: anon sees no pending vendors';
+  raise notice 'TEST H1 PASSED: anon sees no pending vendors (via public view)';
 end $$;
 do $$
 begin
@@ -165,6 +172,17 @@ begin
     raise exception 'TEST H2 FAILED: anon read profiles';
   exception when insufficient_privilege then
     raise notice 'TEST H2 PASSED: anon has no profiles access';
+  end;
+end $$;
+-- anon must be denied direct access to the base vendors table (which would
+-- expose commission_rate / contact_* / delivery_coverage).
+do $$
+begin
+  begin
+    perform id from public.vendors limit 1;
+    raise exception 'TEST H3 FAILED: anon read the base vendors table';
+  exception when insufficient_privilege then
+    raise notice 'TEST H3 PASSED: anon cannot read base vendors table';
   end;
 end $$;
 
@@ -219,10 +237,10 @@ set request.jwt.claims = '{}';
 do $$
 declare c int;
 begin
-  select count(*) into c from public.vendors
+  select count(*) into c from public.public_vendors
     where id = 'aaaaaaaa-0000-0000-0000-000000000001';
   if c <> 1 then raise exception 'TEST J2 FAILED: anon saw % active vendors', c; end if;
-  raise notice 'TEST J2 PASSED: anon reads active vendor';
+  raise notice 'TEST J2 PASSED: anon reads active vendor (via public view)';
 end $$;
 
 -- ---------------------------------------------------------------------------
