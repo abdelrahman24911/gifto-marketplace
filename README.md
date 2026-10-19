@@ -37,12 +37,17 @@ npm run dev       # local dev server
 npm run build     # production build (webpack; --webpack works everywhere)
 npm run build:turbo  # production build via Turbopack (needs native SWC bindings)
 npm run lint      # eslint
+npm test          # vitest run — unit tests (money, cart, cart-store, slugify)
 ```
 
 On win32/x64 this machine cannot load the native SWC bindings, so Turbopack builds
 fail and `build` is pinned to `--webpack`.
 
 Type check: `npm run typecheck` (alias for `npx tsc --noEmit`, TypeScript strict mode).
+
+Unit tests live next to the modules they cover (`src/lib/*.test.ts`) and run in a
+plain Node environment via Vitest — no browser, no database. The RLS suites below
+cover the database side.
 
 ## Database / Migrations
 
@@ -318,8 +323,9 @@ Everything below was actually executed; nothing here is aspirational.
 |---|---|
 | `npm run lint` | 0 errors, 0 warnings |
 | `npm run typecheck` | clean |
+| `npm test` | 31 passing unit tests across 4 files |
 | `npm run build` | exit 0 (all 23 routes) |
-| DB suites in disposable container | 15 + 12 + 15 + 25 + 13 + 9 = 89 passing assertions across six suites, all pass, each on a fresh schema |
+| DB suites in disposable container | 23 + 12 + 15 + 25 + 13 + 9 + 10 = 107 passing assertions across seven suites, all pass, each on a fresh schema |
 | Page smoke test (`next start`) | `/`, `/categories`, `/shops`, `/cart` → 200; unknown paths → 404; `/checkout`, `/account`, `/account/orders`, `/vendor/orders`, `/admin` → 307 to login |
 | End-to-end render against hosted DB | seeded a temporary category/shop/product, confirmed all public pages rendered it (price formatted as `EGP 150.00`), then deleted the fixture |
 | Hosted migrations | migrations 1–7 applied and verified live (anon reads the public view/catalog, not `vendors`) |
