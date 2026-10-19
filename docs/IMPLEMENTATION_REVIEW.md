@@ -36,16 +36,18 @@
 
 | Task ID | Task | Status | Reviewer | Findings | Required Fixes | Approved? |
 |---------|------|--------|----------|----------|----------------|-----------|
-| 2.0 | Commit Phase 2a working-tree changes | Not started | — | — | — | — |
-| 2.1 | Minimal Vitest setup | Not started | — | — | — | — |
-| 2.2 | Data model documentation | Not started | — | — | — | — |
-| 2.3 | Decision log | Not started | — | — | — | — |
-| 2.4 | RLS policy design (document) | Not started | — | — | — | — |
-| 2.5 | `categories` table migration | Not started | — | — | — | — |
-| 2.6 | Parent order / suborder / order items | Blocked | — | Awaits D-01–D-05 approval | — | — |
-| 2.7 | Inventory + stock reservation | Blocked | — | Awaits D-05 approval | — | — |
-| 2.8 | Commission ledger + settlement | Blocked | — | Awaits D-01, D-02, D-08 approval | — | — |
+| 2.0 | Commit Phase 2a working-tree changes | Completed (`663ad4d`) | — | — | — | Yes |
+| 2.1 | Minimal Vitest setup | Completed (`347eda9`) | — | Pinned vitest@4 — v5 requires `@types/node` ≥22; project is on v20. 31 tests across money/cart/cart-store/slugify | — | Yes |
+| 2.2 | Data model documentation | Completed (`docs/DATA_MODEL.md`) | — | — | — | Yes |
+| 2.3 | Decision log | Completed (`docs/DECISIONS.md`) | — | D-01–D-06, D-08 decided; D-07 still blocked | — | Yes |
+| 2.4 | RLS policy design (document) | Completed | — | Implemented as migrations 3–7 + suites | — | Yes |
+| 2.5 | `categories` table migration | Completed (migration 4) | — | — | — | Yes |
+| 2.6 | Parent order / suborder / order items | Completed (migration 5) | — | D-01–D-05 approved before implementation | — | Yes |
+| 2.7 | Inventory + stock reservation | Completed (migrations 5, 7) | — | D-05 approved; audited `adjust_product_stock` door | — | Yes |
+| 2.8 | Commission ledger + settlement | Completed (migration 6) | — | D-01, D-02, D-08 approved; automation deferred | — | Yes |
 | 2.9 | Subscription model | Blocked | — | Awaits D-07 approval | — | — |
+| 8.1 | Security hardening (migration 8) | Completed (`d74098c`) | — | Storage-policy `name` qualification bug found and fixed during catalog-suite extension; DELETE assertions must check row counts (RLS filters, does not raise) | — | Yes |
+| 8.2 | Product image upload (migration 9 + UI) | Completed (`add89f5`) | — | Storage policies key off `objects.name` because `products.name` collides; storage stub must be applied as `supabase_admin` | — | Yes |
 
 ---
 
@@ -68,9 +70,9 @@
 
 ## Open Issues
 
-- Phase 2a changes are uncommitted; working tree is dirty.
-- No JS/TS test framework (blocks application-layer authorization tests).
-- Six security/architecture findings from Phase 0 audit are not yet addressed (see Baseline above).
-- All financial and customer-identity decisions (D-01 through D-08) are blocked pending owner approval.
+- Migrations 8–9 are container-verified but not yet applied to the hosted Gifto project (`supabase db push` pending).
+- Subscription model (2.9) remains blocked on D-07 owner approval.
+- Phase 0 findings 1–4 are resolved (migration 8 + `src/lib/supabase/service.ts`); findings 5–6 were business decision / framework items, both now closed.
+- Remaining blocked decisions: D-07 (subscriptions), D-06 fee model, D-08 settlement cadence.
 
 ---

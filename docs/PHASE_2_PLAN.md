@@ -1,8 +1,15 @@
 # Gifto Marketplace — Phase 2 Plan
 
+> **Superseded status (2026-10-19):** every task in this plan except 2.9
+> (subscription model, blocked on D-07) has been implemented and shipped
+> through Phases 3–8 — migrations 1–9, the full 23-route app surface, seven
+> RLS/storage suites (107 assertions), and Vitest unit tests (31). This
+> document is retained for historical planning context; the live backlog is
+> `docs/STATUS_REPORT.md`.
+
 **Source of truth:** This file is the shared plan between the Architect/Reviewer and the OpenCode implementation agent.  
 **Repository:** `C:\Users\bodyo\OneDrive\Desktop\gifto-marketplace`  
-**Branch:** `main` (clean at `origin/main`; uncommitted Phase 2a changes exist in working tree)
+**Branch:** `main` (Phase 2a changes committed in `663ad4d`)
 
 ---
 
@@ -39,15 +46,15 @@
 
 | ID | Task | Status | Risk | Depends On |
 |----|------|--------|------|------------|
-| 2.0 | Commit Phase 2a working-tree changes | `READY_FOR_IMPLEMENTATION` | Low | None |
-| 2.1 | Minimal Vitest setup (`package.json`, `vitest.config.ts`, `npm test` script) | `READY_FOR_IMPLEMENTATION` | Low | None |
-| 2.2 | Data model documentation | `READY_FOR_IMPLEMENTATION` | Low | None |
-| 2.3 | Decision log (`docs/DECISIONS.md`) — unresolved business/architecture decisions | `BLOCKED_PENDING_OWNER_APPROVAL` | N/A | None |
-| 2.4 | RLS policy design for order/vendor isolation (document only) | `READY_FOR_IMPLEMENTATION` | Low | 2.2 |
-| 2.5 | `categories` table migration + RLS + types + RLS test | `READY_FOR_IMPLEMENTATION` | Low | 2.2, 2.4 |
-| 2.6 | Parent order / vendor suborder / order items migration + RLS + types + RLS test | `BLOCKED_PENDING_OWNER_APPROVAL` | Medium | 2.2, 2.3 (commission rules), 2.4 |
-| 2.7 | Inventory table + stock reservation logic (document only) | `BLOCKED_PENDING_OWNER_APPROVAL` | Medium | 2.2 |
-| 2.8 | Commission ledger + settlement design (document only) | `BLOCKED_PENDING_OWNER_APPROVAL` | Medium | 2.3 |
+| 2.0 | Commit Phase 2a working-tree changes | `DONE` (`663ad4d`) | Low | None |
+| 2.1 | Minimal Vitest setup (`package.json`, `vitest.config.ts`, `npm test` script) | `DONE` (`347eda9`) | Low | None |
+| 2.2 | Data model documentation | `DONE` | Low | None |
+| 2.3 | Decision log (`docs/DECISIONS.md`) — unresolved business/architecture decisions | `DONE` (D-07 still owner-blocked) | N/A | None |
+| 2.4 | RLS policy design for order/vendor isolation (document only) | `DONE` | Low | 2.2 |
+| 2.5 | `categories` table migration + RLS + types + RLS test | `DONE` (migration 4) | Low | 2.2, 2.4 |
+| 2.6 | Parent order / vendor suborder / order items migration + RLS + types + RLS test | `DONE` (migration 5, after D-01–D-05 approval) | Medium | 2.2, 2.3, 2.4 |
+| 2.7 | Inventory table + stock reservation logic (document only) | `DONE` (migration 7) | Medium | 2.2 |
+| 2.8 | Commission ledger + settlement design (document only) | `DONE` (migration 6, after D-01/D-02/D-08) | Medium | 2.3 |
 | 2.9 | Subscription model design (document only) | `BLOCKED_PENDING_OWNER_APPROVAL` | Medium | 2.3 |
 
 ---
