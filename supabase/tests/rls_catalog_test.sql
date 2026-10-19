@@ -1,5 +1,8 @@
--- Gifto Phase 3 verification: catalog RLS (categories, products, product_images).
--- Runs after migrations 1–4 against a bare `supabase/postgres` container.
+-- Gifto Phase 3+ verification: catalog RLS (categories, products, product_images)
+-- plus the product-images storage policies (migration 9).
+-- Runs after all migrations against a bare `supabase/postgres` container with
+-- supabase/tests/storage_stub.sql applied first (the raw image has no storage
+-- schema; hosted projects already have one).
 -- Same request-context simulation as the other suites. Any failure RAISEs and,
 -- with `psql -v ON_ERROR_STOP=1`, aborts non-zero.
 
@@ -18,6 +21,9 @@ delete from public.vendors where id in (
   'e2000000-0000-0000-0000-0000000000bb'
 );
 delete from auth.users where email like '%@catalog.gifto.test';
+-- storage.objects survives the per-suite `drop schema public`; clear the
+-- bucket so re-runs do not collide on (bucket_id, name).
+delete from storage.objects where bucket_id = 'product-images';
 
 insert into auth.users (id, email) values
   ('a1000000-0000-0000-0000-00000000000a', 'manager-a@catalog.gifto.test'),
@@ -301,6 +307,134 @@ begin
     raise exception 'TEST 15 FAILED: newly added active category missing from public';
   end if;
   raise notice 'TEST 15 PASSED: deactivated category hidden, new active one visible';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 16: a manager uploads an object into their own vendor folder
+-- (requires the storage schema — apply supabase/tests/storage_stub.sql first
+-- in the local container workflow; hosted storage already exists.)
+-- ---------------------------------------------------------------------------
+set role authenticated;
+set request.jwt.claim.sub = 'a1000000-0000-0000-0000-00000000000a';
+set request.jwt.claims = '{"sub":"a1000000-0000-0000-0000-00000000000a"}';
+do $$
+declare n int;
+begin
+  insert into storage.objects (bucket_id, name, owner)
+  values ('product-images',
+          'e1000000-0000-0000-0000-0000000000aa/d1000000-0000-0000-0000-000000000001/img-upload.jpg',
+          auth.uid());
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'TEST 16 FAILED: inserted % rows', n; end if;
+  raise notice 'TEST 16 PASSED: manager uploaded into own vendor folder';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 17: staff, cross-vendor managers, and unknown products cannot upload
+-- ---------------------------------------------------------------------------
+set request.jwt.claim.sub = 'a2000000-0000-0000-0000-00000000000a';
+set request.jwt.claims = '{"sub":"a2000000-0000-0000-0000-00000000000a"}';
+do $$
+begin
+  begin
+    insert into storage.objects (bucket_id, name, owner)
+    values ('product-images',
+            'e1000000-0000-0000-0000-0000000000aa/d1000000-0000-0000-0000-000000000001/staff.jpg',
+            auth.uid());
+    raise exception 'TEST 17A FAILED: staff uploaded an object';
+  exception when insufficient_privilege then
+    raise notice 'TEST 17A PASSED: staff upload denied';
+  end;
+end $$;
+
+set request.jwt.claim.sub = 'b1000000-0000-0000-0000-00000000000b';
+set request.jwt.claims = '{"sub":"b1000000-0000-0000-0000-00000000000b"}';
+do $$
+begin
+  begin
+    insert into storage.objects (bucket_id, name, owner)
+    values ('product-images',
+            'e1000000-0000-0000-0000-0000000000aa/d1000000-0000-0000-0000-000000000001/hijack.jpg',
+            auth.uid());
+    raise exception 'TEST 17B FAILED: cross-vendor upload allowed';
+  exception when insufficient_privilege then
+    raise notice 'TEST 17B PASSED: cross-vendor upload denied';
+  end;
+end $$;
+
+set request.jwt.claim.sub = 'a1000000-0000-0000-0000-00000000000a';
+set request.jwt.claims = '{"sub":"a1000000-0000-0000-0000-00000000000a"}';
+do $$
+begin
+  begin
+    insert into storage.objects (bucket_id, name, owner)
+    values ('product-images',
+            'e1000000-0000-0000-0000-0000000000aa/00000000-0000-0000-0000-000000000000/ghost.jpg',
+            auth.uid());
+    raise exception 'TEST 17C FAILED: upload for unknown product allowed';
+  exception when insufficient_privilege then
+    raise notice 'TEST 17C PASSED: unknown-product upload denied';
+  end;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 18: anon cannot upload but can read the public bucket
+-- ---------------------------------------------------------------------------
+set role anon;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+begin
+  begin
+    insert into storage.objects (bucket_id, name)
+    values ('product-images', 'x/y/anon.jpg');
+    raise exception 'TEST 18A FAILED: anon uploaded an object';
+  exception when insufficient_privilege then
+    raise notice 'TEST 18A PASSED: anon upload denied';
+  end;
+end $$;
+do $$
+declare c int;
+begin
+  select count(*) into c from storage.objects where bucket_id = 'product-images';
+  if c < 1 then raise exception 'TEST 18B FAILED: anon saw % objects', c; end if;
+  raise notice 'TEST 18B PASSED: anon reads public bucket';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 19: deletes follow the same ownership rule
+-- ---------------------------------------------------------------------------
+set role authenticated;
+set request.jwt.claim.sub = 'b1000000-0000-0000-0000-00000000000b';
+set request.jwt.claims = '{"sub":"b1000000-0000-0000-0000-00000000000b"}';
+insert into storage.objects (bucket_id, name, owner)
+values ('product-images',
+        'e2000000-0000-0000-0000-0000000000bb/d3000000-0000-0000-0000-000000000003/b-shop.jpg',
+        auth.uid());
+do $$
+declare n int;
+begin
+  -- RLS filters delete candidates rather than raising, so assert on rows.
+  delete from storage.objects
+    where name = 'e1000000-0000-0000-0000-0000000000aa/d1000000-0000-0000-0000-000000000001/img-upload.jpg';
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'TEST 19A FAILED: cross-vendor delete removed % rows', n; end if;
+  if not exists (
+    select 1 from storage.objects
+      where name = 'e1000000-0000-0000-0000-0000000000aa/d1000000-0000-0000-0000-000000000001/img-upload.jpg'
+  ) then
+    raise exception 'TEST 19A FAILED: object disappeared';
+  end if;
+  raise notice 'TEST 19A PASSED: cross-vendor delete filtered by RLS';
+end $$;
+do $$
+declare n int;
+begin
+  delete from storage.objects
+    where name = 'e2000000-0000-0000-0000-0000000000bb/d3000000-0000-0000-0000-000000000003/b-shop.jpg';
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'TEST 19B FAILED: deleted % rows', n; end if;
+  raise notice 'TEST 19B PASSED: owner deletes own object';
 end $$;
 
 reset role;

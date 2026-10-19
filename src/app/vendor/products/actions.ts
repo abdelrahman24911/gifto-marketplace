@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { parseEgpToMinor } from "@/lib/money";
 import { requireVendorRole } from "@/lib/vendor";
 
+import { PRODUCT_IMAGES_BUCKET } from "@/lib/supabase/database.types";
 import type { ProductStatus } from "@/lib/supabase/database.types";
 
 const NAME_MAX = 120;
@@ -214,6 +215,14 @@ export async function deleteProduct(
     formData.get("vendor") as string | null,
   );
 
+  // Collect image paths first so the Storage objects can be cleaned up after
+  // the rows cascade away. Best-effort: a failed object removal leaves an
+  // orphaned file, never a broken product deletion.
+  const { data: images } = await supabase
+    .from("product_images")
+    .select("path")
+    .eq("product_id", productId);
+
   const { error } = await supabase
     .from("products")
     .delete()
@@ -221,6 +230,11 @@ export async function deleteProduct(
     .eq("vendor_id", access.vendorId);
 
   if (error) return { error: error.message, attempt };
+
+  const paths = (images ?? []).map((image) => image.path);
+  if (paths.length > 0) {
+    await supabase.storage.from(PRODUCT_IMAGES_BUCKET).remove(paths);
+  }
 
   revalidatePath("/vendor/products");
   revalidatePath("/shops");

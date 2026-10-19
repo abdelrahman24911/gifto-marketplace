@@ -6,6 +6,7 @@ import { requireVendorRole } from "@/lib/vendor";
 
 import { DeleteProductButton } from "../delete-product-button";
 import { ProductForm } from "../product-form";
+import { ProductImagesPanel } from "./images/product-images-panel";
 
 export const metadata = { title: "Edit product — Gifto" };
 
@@ -62,7 +63,13 @@ export default async function EditProductPage({
         </Link>
       </div>
 
-      {images.length > 0 ? (
+      {canManage ? (
+        <ProductImagesPanel
+          productId={product.id}
+          vendorId={access.vendorId}
+          images={images}
+        />
+      ) : images.length > 0 ? (
         <ul className="mt-5 flex flex-wrap gap-3">
           {images.map((image) => (
             <li key={image.path} className="text-xs text-zinc-500">

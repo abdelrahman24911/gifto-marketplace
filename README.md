@@ -94,7 +94,12 @@ Three details matter when running them:
 ```bash
 docker run -d --name gifto-rls-test -e POSTGRES_PASSWORD=postgres \
   -p 65432:5432 public.ecr.aws/supabase/postgres:17.11.0.003
-# wait for the init gate described above, then for each of the six suites:
+# wait for the init gate described above, then for each of the seven suites:
+docker exec gifto-rls-test psql -U postgres -c \
+  'drop schema public cascade; create schema public; grant usage on schema public to anon, authenticated, service_role;'
+docker cp supabase/tests/storage_stub.sql gifto-rls-test:/tmp/storage_stub.sql
+docker exec -e PGPASSWORD=postgres gifto-rls-test \
+  psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -f /tmp/storage_stub.sql
 for s in rls_foundation rls_onboarding rls_catalog rls_orders rls_commissions rls_inventory rls_hardening; do
   docker exec gifto-rls-test psql -U postgres -c \
     'drop schema public cascade; create schema public; grant usage on schema public to anon, authenticated, service_role;'
@@ -105,6 +110,16 @@ for s in rls_foundation rls_onboarding rls_catalog rls_orders rls_commissions rl
 done
 docker rm -f gifto-rls-test
 ```
+
+The storage stub is applied once before the loop, **as `supabase_admin`** (the
+raw image's `postgres` role is not a superuser and does not own the `storage`
+schema; the stub re-owns its tables to `postgres` so the migration runner can
+create policies). The raw image has no `storage` tables, and migration 9
+creates the `product-images` bucket plus its `storage.objects` policies.
+Hosted projects already have storage — never apply the stub there. The
+`storage.objects` table (and its policies) survive the per-suite
+`drop schema public`, and migration 9 re-creates its policies idempotently
+(`drop policy if exists`).
 
 
 ### Phase 1 schema (implemented)
@@ -255,10 +270,10 @@ Running it through the API requires platform-admin — it is a development conve
 - Money helpers in `src/lib/money.ts` (`parseEgpToMinor`, `formatEgp`) keep all arithmetic
   in integer piastres.
 
-**Not implemented yet:** image upload. `product_images.path` and the `product-images`
-bucket name are defined, and the UI (product card, cart, order pages) degrades to a
-typographic monogram placeholder, but there is no upload control and the bucket is not
-created.
+**Image upload (implemented):** the `product-images` bucket is public-read with
+owner/manager-scoped writes (`{vendor_id}/{product_id}/{uuid}.{ext}`), the edit
+product page has an upload/manage gallery panel, and public pages render real
+photos (the monogram panel remains as the graceful fallback).
 
 ### Status semantics (enforced by `place_order`)
 

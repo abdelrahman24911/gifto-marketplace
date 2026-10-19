@@ -7,9 +7,8 @@ import { PRODUCT_IMAGES_BUCKET } from "@/lib/supabase/database.types";
 
 /**
  * Renders a catalog image from its Storage path, falling back to a warm
- * typographic panel when there is no image yet or the file cannot load. The
- * bucket does not accept uploads yet, so the fallback is the normal case and is
- * designed to look intentional rather than broken.
+ * typographic panel when there is no image yet or the file cannot load, so a
+ * missing photo looks intentional rather than broken.
  */
 export function ProductImage({
   path,
