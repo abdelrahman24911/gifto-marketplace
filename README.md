@@ -62,7 +62,7 @@ live. Pushing requires a valid CLI login (`supabase login`) and the project data
 
 ### Verifying RLS locally
 
-Six suites exercise the policies against a disposable `supabase/postgres` container
+Seven suites exercise the policies against a disposable `supabase/postgres` container
 (which already ships the `auth` schema, `auth.users`, `auth.uid()`, and the
 `anon`/`authenticated`/`service_role` roles). They simulate Supabase request context the
 way PostgREST does and abort non-zero on any failure. Each test sets both
@@ -76,6 +76,7 @@ way PostgREST does and abort non-zero on any failure. Each test sets both
 | `supabase/tests/rls_orders_test.sql` | Phase 4: checkout split/pricing/stock, suborder transition rules, privacy (buyer, each shop, admin), cancellation and restock |
 | `supabase/tests/rls_commissions_test.sql` | Phase 6: commission earned on delivery (rate × subtotal), idempotent delivery, return reversal, admin-only settlements, vendor isolation |
 | `supabase/tests/rls_inventory_test.sql` | Phase 7: manual stock adjustments are audited and role-gated, no direct movement writes, validation and history isolation |
+| `supabase/tests/rls_hardening_test.sql` | Phase 8: admin self-provisioning INSERT guard, dropped `is_vendor_staff`, last-owner demotion/deletion guard, service-role bootstrap path |
 
 Three details matter when running them:
 
@@ -94,11 +95,11 @@ Three details matter when running them:
 docker run -d --name gifto-rls-test -e POSTGRES_PASSWORD=postgres \
   -p 65432:5432 public.ecr.aws/supabase/postgres:17.11.0.003
 # wait for the init gate described above, then for each of the six suites:
-for s in rls_foundation rls_onboarding rls_catalog rls_orders rls_commissions rls_inventory; do
+for s in rls_foundation rls_onboarding rls_catalog rls_orders rls_commissions rls_inventory rls_hardening; do
   docker exec gifto-rls-test psql -U postgres -c \
     'drop schema public cascade; create schema public; grant usage on schema public to anon, authenticated, service_role;'
   docker cp supabase/migrations gifto-rls-test:/tmp/migrations
-  docker cp "supabase/tests/$s_test.sql" gifto-rls-test:/tmp/$s.sql
+  docker cp "supabase/tests/${s}_test.sql" gifto-rls-test:/tmp/$s.sql
   docker exec gifto-rls-test sh -c 'for f in /tmp/migrations/*.sql; do psql -q -v ON_ERROR_STOP=1 -U postgres -f "$f"; done'
   docker exec gifto-rls-test psql -v ON_ERROR_STOP=1 -U postgres -f "/tmp/$s.sql"
 done
