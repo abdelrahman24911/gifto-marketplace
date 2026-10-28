@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
 
@@ -35,13 +36,26 @@ export default async function AccountPage() {
         "role, vendor:vendors(id, name, slug, status, city, governorate)",
       )
       .eq("profile_id", user.id)
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: true }),
   ]);
+
+  const isPlatformAdmin = profile?.is_platform_admin ?? false;
+  if (isPlatformAdmin) {
+    redirect("/admin");
+  }
 
   const shops = (memberships ?? []).filter(
     (m): m is typeof m & { vendor: NonNullable<typeof m.vendor> } =>
       Boolean(m.vendor),
   );
+
+  // Only send vendors with eligible active memberships to the vendor dashboard.
+  // Pending/suspended/rejected vendors must remain on the account page to see status.
+  const eligibleActiveShops = shops.filter((s) => s.vendor.status === "active");
+  if (eligibleActiveShops.length > 0) {
+    const preferred = eligibleActiveShops[0];
+    redirect(`/vendor/overview?vendor=${preferred.vendor.id}`);
+  }
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-10">

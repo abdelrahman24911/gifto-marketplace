@@ -13,12 +13,24 @@ import { SuborderActions } from "./suborder-actions";
 
 export const metadata = { title: "Shop orders — Gifto" };
 
+const FILTERS = [
+  { value: "all", label: "All" },
+  { value: "open", label: "Open" },
+  { value: "placed", label: "Placed" },
+  { value: "confirmed", label: "Confirmed" },
+  { value: "shipped", label: "Shipped" },
+  { value: "delivered", label: "Delivered" },
+  { value: "cancelled", label: "Cancelled" },
+  { value: "returned", label: "Returned" },
+  { value: "partially_completed", label: "Partially completed" },
+] as const;
+
 export default async function VendorOrdersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ vendor?: string }>;
+  searchParams: Promise<{ vendor?: string; status?: string }>;
 }) {
-  const { vendor } = await searchParams;
+  const { vendor, status: statusFilter } = await searchParams;
   const { supabase, access, shops, canManage } = await requireVendorRole(vendor);
 
   // RLS limits this to the caller's shop; the embedded parent order is
@@ -26,14 +38,24 @@ export default async function VendorOrdersPage({
   const { data } = await supabase
     .from("order_vendors")
     .select(
-      "id, status, subtotal_minor, created_at, order:orders(id, recipient_name, contact_phone, address_line, city, governorate, notes, created_at), order_items(id, product_name, quantity, unit_price_minor, line_total_minor)",
+      "id, status, subtotal_minor, created_at, order:orders(id, public_reference, recipient_name, contact_phone, address_line, city, governorate, notes, created_at), order_items(id, product_name, quantity, unit_price_minor, line_total_minor)",
     )
     .eq("vendor_id", access.vendorId)
     .order("created_at", { ascending: false });
 
-  const suborders = data ?? [];
-  const openCount = suborders.filter(
-    (s) => s.status !== "delivered" && s.status !== "cancelled",
+  let suborders = data ?? [];
+  const filter = statusFilter ?? "all";
+
+  if (filter === "open") {
+    suborders = suborders.filter(
+      (s) => s.status !== "delivered" && s.status !== "cancelled" && s.status !== "returned",
+    );
+  } else if (filter !== "all" && isOrderStatus(filter)) {
+    suborders = suborders.filter((s) => s.status === filter);
+  }
+
+  const openCount = (data ?? []).filter(
+    (s) => s.status !== "delivered" && s.status !== "cancelled" && s.status !== "returned",
   ).length;
 
   return (
@@ -48,12 +70,26 @@ export default async function VendorOrdersPage({
             each order line yourself
           </p>
         </div>
-        <Link
-          href={`/vendor/products?vendor=${access.vendorId}`}
-          className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50"
-        >
-          Manage products
-        </Link>
+        <nav className="flex flex-wrap items-center gap-2 text-sm">
+          <Link
+            href={`/vendor/overview?vendor=${access.vendorId}`}
+            className="rounded-full border border-zinc-300 px-3 py-1 text-zinc-700 hover:bg-zinc-50"
+          >
+            Overview
+          </Link>
+          <Link
+            href={`/vendor/orders?vendor=${access.vendorId}`}
+            className="rounded-full border border-zinc-900 bg-zinc-900 px-3 py-1 text-white"
+          >
+            Orders
+          </Link>
+          <Link
+            href={`/vendor/products?vendor=${access.vendorId}`}
+            className="rounded-full border border-zinc-300 px-3 py-1 text-zinc-700 hover:bg-zinc-50"
+          >
+            Products
+          </Link>
+        </nav>
       </div>
 
       {shops.length > 1 ? (
@@ -81,7 +117,27 @@ export default async function VendorOrdersPage({
         </p>
       ) : null}
 
-      <section className="mt-8">
+      <nav aria-label="Filter orders" className="mt-6 flex flex-wrap gap-2">
+        {FILTERS.map((f) => {
+          const href = `/vendor/orders?vendor=${access.vendorId}${f.value === "all" ? "" : `&status=${f.value}`}`;
+          const active = filter === f.value;
+          return (
+            <Link
+              key={f.value}
+              href={href}
+              className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                active
+                  ? "border-zinc-900 bg-zinc-900 text-white"
+                  : "border-zinc-300 text-zinc-700 hover:bg-zinc-50"
+              }`}
+            >
+              {f.label}
+            </Link>
+          );
+        })}
+      </nav>
+
+      <section className="mt-6">
         {suborders.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-10 text-center text-sm text-zinc-600">
             No orders yet.
@@ -102,7 +158,7 @@ export default async function VendorOrdersPage({
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="font-medium text-zinc-900">
-                        Order #{suborder.id.slice(0, 8)}
+                        {order?.public_reference ?? `Order #${suborder.id.slice(0, 8)}`}
                       </p>
                       <p className="mt-1 text-sm text-zinc-500">
                         {new Date(suborder.created_at).toLocaleString("en-GB", {

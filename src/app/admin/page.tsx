@@ -19,18 +19,30 @@ const STATUS_ORDER: VendorStatus[] = [
 export default async function AdminPage() {
   const { supabase } = await requirePlatformAdmin();
 
-  const { data: vendors } = await supabase
-    .from("vendors")
-    .select(
-      "id, name, slug, status, commission_rate, city, governorate, contact_email, contact_phone, created_at",
-    )
-    .order("created_at", { ascending: false });
-
-  const { data: categories } = await supabase
-    .from("categories")
-    .select("id, name, slug, position, is_active")
-    .order("position", { ascending: true })
-    .order("name", { ascending: true });
+  const [{ data: vendors }, { data: categories }, { data: attentionOrders }, { data: recentOrders }] = await Promise.all([
+    supabase
+      .from("vendors")
+      .select(
+        "id, name, slug, status, commission_rate, city, governorate, contact_email, contact_phone, created_at",
+      )
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("categories")
+      .select("id, name, slug, position, is_active")
+      .order("position", { ascending: true })
+      .order("name", { ascending: true }),
+    supabase
+      .from("orders")
+      .select("id, status")
+      .in("status", ["placed", "confirmed", "shipped"]),
+    supabase
+      .from("orders")
+      .select(
+        "id, public_reference, status, created_at, user_id, order_vendors(id, vendor:vendors(name))",
+      )
+      .order("created_at", { ascending: false })
+      .limit(15),
+  ]);
 
   const all = vendors ?? [];
   const counts = STATUS_ORDER.map((status) => ({
@@ -40,6 +52,13 @@ export default async function AdminPage() {
 
   const pending = all.filter((v) => v.status === "pending");
   const others = all.filter((v) => v.status !== "pending");
+
+  const needingAttentionCount = (attentionOrders ?? []).length;
+  const needingAttention = recentOrders ?? [];
+  const needingAttentionRecent = needingAttention.filter((o) => {
+    const s = o.status;
+    return s === "placed" || s === "confirmed" || s === "shipped";
+  });
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-10">
@@ -59,7 +78,7 @@ export default async function AdminPage() {
         </Link>
       </div>
 
-      <dl className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <dl className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
         {counts.map(({ status, count }) => (
           <div
             key={status}
@@ -71,7 +90,63 @@ export default async function AdminPage() {
             <dd className="text-2xl font-semibold text-zinc-900">{count}</dd>
           </div>
         ))}
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <dt className="text-xs uppercase tracking-wide text-amber-800">
+            Orders needing attention
+          </dt>
+          <dd className="text-2xl font-semibold text-amber-900">
+            {needingAttentionCount}
+          </dd>
+        </div>
       </dl>
+
+      <section className="mt-8">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-zinc-900">
+            Orders requiring attention
+          </h2>
+          <Link
+            href="/admin/orders"
+            className="text-sm font-medium text-zinc-900 underline"
+          >
+            View all orders
+          </Link>
+        </div>
+        {needingAttentionRecent.length === 0 ? (
+          <p className="mt-3 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-6 text-center text-sm text-zinc-600">
+            No orders currently need operational attention.
+          </p>
+        ) : (
+          <ul className="mt-3 flex flex-col divide-y divide-zinc-100 rounded-2xl border border-zinc-200 bg-white">
+            {needingAttentionRecent.map((order) => {
+              const ref = order.public_reference ?? `#${order.id.slice(0, 8)}`;
+              const vendors = ((order.order_vendors ?? []) as Array<{ vendor?: { name?: string } | null }>)
+                .map((ov) => ov.vendor?.name)
+                .filter(Boolean)
+                .join(", ");
+              return (
+                <li
+                  key={order.id}
+                  className="flex flex-wrap items-center justify-between gap-3 px-5 py-3"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-zinc-900">{ref}</p>
+                    <p className="text-sm text-zinc-500">
+                      {order.status} {vendors ? `· ${vendors}` : ""}
+                    </p>
+                  </div>
+                  <Link
+                    href="/admin/orders"
+                    className="text-sm font-medium text-zinc-900 underline"
+                  >
+                    Review
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
 
       <section className="mt-8">
         <h2 className="text-lg font-semibold text-zinc-900">

@@ -1,5 +1,5 @@
 -- Gifto Phase 4 verification: orders, checkout split, stock and fulfilment.
--- Runs after migrations 1–5 against a bare `supabase/postgres` container.
+-- Runs after migrations 1–13 against a bare `supabase/postgres` container.
 -- Any failure RAISEs and, with `psql -v ON_ERROR_STOP=1`, aborts non-zero.
 --
 -- The order id produced by `place_order` is carried between blocks in a session
@@ -724,6 +724,106 @@ begin
     raise exception 'TEST 15 FAILED: restock movement not recorded';
   end if;
   raise notice 'TEST 15 PASSED: cancellation logged a restock movement';
+end $$;
+
+reset role;
+
+-- ---------------------------------------------------------------------------
+-- TEST 16: a failed COD delivery after dispatch cancels and restocks
+-- ---------------------------------------------------------------------------
+set role authenticated;
+set request.jwt.claim.sub = '11100000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"11100000-0000-0000-0000-000000000001"}';
+do $$
+declare v_oid uuid;
+begin
+  v_oid := public.place_order(
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1},
+      {"product_id":"51100000-0000-0000-0000-000000000004","quantity":1}]'::jsonb,
+    'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria');
+  perform set_config('gifto_test.failed_delivery_order_id', v_oid::text, false);
+end $$;
+
+-- Shop A completes its line.
+set request.jwt.claim.sub = '21100000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"21100000-0000-0000-0000-000000000001"}';
+do $$
+declare v_oid uuid; v_ov uuid;
+begin
+  v_oid := current_setting('gifto_test.failed_delivery_order_id')::uuid;
+  select id into v_ov from public.order_vendors
+   where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000001';
+
+  update public.order_vendors set status = 'confirmed' where id = v_ov;
+  update public.order_vendors set status = 'shipped' where id = v_ov;
+  update public.order_vendors set status = 'delivered' where id = v_ov;
+end $$;
+
+-- Shop B dispatches, then the COD delivery fails.
+set request.jwt.claim.sub = '21100000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"21100000-0000-0000-0000-000000000003"}';
+do $$
+declare
+  v_oid          uuid;
+  v_ov           uuid;
+  v_stock_before int;
+  v_stock_after  int;
+  v_cancelled_at timestamptz;
+  v_parent       public.order_status;
+begin
+  v_oid := current_setting('gifto_test.failed_delivery_order_id')::uuid;
+  select id into v_ov from public.order_vendors
+   where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000002';
+
+  update public.order_vendors set status = 'confirmed' where id = v_ov;
+  update public.order_vendors set status = 'shipped' where id = v_ov;
+
+  select stock into v_stock_before from public.products
+   where id = '51100000-0000-0000-0000-000000000004';
+
+  update public.order_vendors set status = 'cancelled' where id = v_ov;
+
+  select stock into v_stock_after from public.products
+   where id = '51100000-0000-0000-0000-000000000004';
+  if v_stock_after <> v_stock_before + 1 then
+    raise exception 'TEST 16 FAILED: failed delivery did not restock (before %, after %)',
+      v_stock_before, v_stock_after;
+  end if;
+
+  select cancelled_at into v_cancelled_at from public.order_vendors where id = v_ov;
+  if v_cancelled_at is null then
+    raise exception 'TEST 16 FAILED: cancelled_at not stamped after dispatch';
+  end if;
+
+  select status into v_parent from public.orders where id = v_oid;
+  if v_parent <> 'partially_completed' then
+    raise exception 'TEST 16 FAILED: mixed parent status is % (expected partially_completed)', v_parent;
+  end if;
+
+  -- A repeated status write must not restock twice.
+  update public.order_vendors set status = 'cancelled' where id = v_ov;
+  select stock into v_stock_after from public.products
+   where id = '51100000-0000-0000-0000-000000000004';
+  if v_stock_after <> v_stock_before + 1 then
+    raise exception 'TEST 16 FAILED: repeated cancellation restocked twice (stock %)', v_stock_after;
+  end if;
+
+  raise notice 'TEST 16 PASSED: failed COD delivery cancelled, restocked once, parent partially_completed';
+end $$;
+
+reset role;
+do $$
+declare v_oid uuid;
+begin
+  v_oid := current_setting('gifto_test.failed_delivery_order_id')::uuid;
+  if (select count(*) from public.inventory_movements
+       where order_id = v_oid
+         and product_id = '51100000-0000-0000-0000-000000000004'
+         and delta = 1
+         and reason = 'order_cancelled') <> 1 then
+    raise exception 'TEST 16 FAILED: failed-delivery restock movement not recorded once';
+  end if;
+  raise notice 'TEST 16 PASSED: failed-delivery restock logged exactly one movement';
 end $$;
 
 reset role;

@@ -2,13 +2,16 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 
 import { useCart } from "@/components/cart-provider";
 import { toOrderItems, type CartItem } from "@/lib/cart";
+import { createGuestAttempt, type GuestAttempt } from "@/lib/guest-client";
 import { formatEgp } from "@/lib/money";
 
 import { placeOrder, type CheckoutState, type CheckoutValues } from "./actions";
+
+export type CheckoutDefaults = CheckoutValues;
 
 const inputClass =
   "w-full rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900";
@@ -32,6 +35,11 @@ export function CheckoutForm({ defaults }: { defaults: CheckoutValues }) {
     null,
   );
   const handled = useRef(false);
+  // One attempt id + access token per mounted checkout. Retries (double-click,
+  // network retry) resubmit the same values so the database can deduplicate.
+  // Generated lazily on first render; the values are secret so the server and
+  // client intentionally produce different ones (suppressed on the inputs).
+  const [attempt] = useState<GuestAttempt>(() => createGuestAttempt());
 
   const values = state && "values" in state ? state.values : defaults;
   const formKey =
@@ -41,7 +49,11 @@ export function CheckoutForm({ defaults }: { defaults: CheckoutValues }) {
     if (state && "orderId" in state && !handled.current) {
       handled.current = true;
       clear();
-      router.replace(`/account/orders/${state.orderId}`);
+      router.replace(
+        state.isGuest
+          ? `/orders/${state.orderId}`
+          : `/account/orders/${state.orderId}`,
+      );
     }
   }, [state, clear, router]);
 
@@ -78,6 +90,20 @@ export function CheckoutForm({ defaults }: { defaults: CheckoutValues }) {
           value={JSON.stringify(toOrderItems(items))}
           readOnly
         />
+        <input
+          type="hidden"
+          name="idempotency_key"
+          value={attempt.idempotencyKey}
+          suppressHydrationWarning
+          readOnly
+        />
+        <input
+          type="hidden"
+          name="guest_token"
+          value={attempt.token}
+          suppressHydrationWarning
+          readOnly
+        />
 
         <div>
           <h2 className="text-lg font-semibold text-zinc-900">
@@ -106,6 +132,7 @@ export function CheckoutForm({ defaults }: { defaults: CheckoutValues }) {
             required
             minLength={2}
             maxLength={120}
+            autoComplete="name"
             defaultValue={values.recipientName}
             placeholder="Who should receive the gift?"
             className={inputClass}
@@ -120,8 +147,24 @@ export function CheckoutForm({ defaults }: { defaults: CheckoutValues }) {
             required
             minLength={5}
             maxLength={30}
+            inputMode="tel"
+            autoComplete="tel"
             defaultValue={values.contactPhone}
             placeholder="01xxxxxxxxx"
+            className={inputClass}
+          />
+        </label>
+
+        <label className={labelClass}>
+          Email (optional)
+          <input
+            type="email"
+            name="contact_email"
+            maxLength={254}
+            inputMode="email"
+            autoComplete="email"
+            defaultValue={values.contactEmail}
+            placeholder="you@example.com"
             className={inputClass}
           />
         </label>
@@ -134,6 +177,7 @@ export function CheckoutForm({ defaults }: { defaults: CheckoutValues }) {
             required
             minLength={5}
             maxLength={300}
+            autoComplete="street-address"
             defaultValue={values.addressLine}
             placeholder="Street, building, floor, apartment"
             className={inputClass}
@@ -149,6 +193,7 @@ export function CheckoutForm({ defaults }: { defaults: CheckoutValues }) {
               required
               minLength={2}
               maxLength={80}
+              autoComplete="address-level2"
               defaultValue={values.city}
               placeholder="e.g. Cairo"
               className={inputClass}
@@ -163,6 +208,7 @@ export function CheckoutForm({ defaults }: { defaults: CheckoutValues }) {
               required
               minLength={2}
               maxLength={80}
+              autoComplete="address-level1"
               defaultValue={values.governorate}
               placeholder="e.g. Cairo Governorate"
               className={inputClass}

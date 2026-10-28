@@ -54,20 +54,59 @@ export async function SiteHeader() {
   } = await supabase.auth.getUser();
 
   let isPlatformAdmin = false;
+  let hasActiveVendor = false;
+  let activeVendorId: string | null = null;
   if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("is_platform_admin")
-      .eq("id", user.id)
-      .maybeSingle();
+    const [{ data: profile }, { data: memberships }] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("is_platform_admin")
+        .eq("id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("vendor_members")
+        .select("role, vendor:vendors(id, status)")
+        .eq("profile_id", user.id)
+        .order("created_at", { ascending: true }),
+    ]);
     isPlatformAdmin = profile?.is_platform_admin ?? false;
+    const active = (memberships ?? []).find(
+      (m): m is typeof m & { vendor: NonNullable<typeof m.vendor> } =>
+        Boolean(m.vendor) && m.vendor.status === "active",
+    );
+    if (active?.vendor?.id) {
+      hasActiveVendor = true;
+      activeVendorId = active.vendor.id;
+    }
   }
 
   const accountLinks = user
     ? [
         { href: "/account", label: "Account" },
-        { href: "/account/orders", label: "Orders" },
-        ...(isPlatformAdmin ? [{ href: "/admin", label: "Admin" }] : []),
+        { href: "/account/orders", label: "My orders" },
+        ...(isPlatformAdmin ? [{ href: "/admin", label: "Admin dashboard" }] : []),
+        ...(hasActiveVendor && !isPlatformAdmin
+          ? [
+              {
+                href: activeVendorId
+                  ? `/vendor/overview?vendor=${activeVendorId}`
+                  : "/vendor/overview",
+                label: "Vendor dashboard",
+              },
+              { href: "/vendor/orders", label: "Vendor orders" },
+              { href: "/vendor/products", label: "Vendor products" },
+            ]
+          : []),
+        ...(hasActiveVendor && isPlatformAdmin
+          ? [
+              {
+                href: activeVendorId
+                  ? `/vendor/overview?vendor=${activeVendorId}`
+                  : "/vendor/overview",
+                label: "Vendor dashboard",
+              },
+            ]
+          : []),
       ]
     : [
         { href: "/login", label: "Sign in" },

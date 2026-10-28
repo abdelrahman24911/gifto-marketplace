@@ -11,7 +11,10 @@ import { NextResponse, type NextRequest } from "next/server";
  * Level Security — UI/route hiding is never the security boundary.
  */
 
-const PROTECTED_PREFIXES = ["/account", "/admin", "/vendor", "/checkout"];
+// `/checkout` is intentionally public: guests can place COD orders without an
+// Auth account. Authenticated checkout still branches on the verified session
+// inside the page and Server Action.
+const PROTECTED_PREFIXES = ["/account", "/admin", "/vendor"];
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 

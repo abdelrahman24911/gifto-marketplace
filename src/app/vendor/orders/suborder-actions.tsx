@@ -46,6 +46,11 @@ export function SuborderActions({
               name="status"
               value={option.value}
               disabled={pending}
+              onClick={(event) => {
+                if (option.confirm && !window.confirm(option.confirm)) {
+                  event.preventDefault();
+                }
+              }}
               className={
                 option.value === "cancelled"
                   ? dangerClass

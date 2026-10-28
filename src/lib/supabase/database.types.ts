@@ -31,7 +31,8 @@ export type OrderStatus =
   | "shipped"
   | "delivered"
   | "cancelled"
-  | "returned";
+  | "returned"
+  | "partially_completed";
 export type CommissionStatus = "earned" | "reversed";
 export type SettlementStatus = "open" | "paid";
 
@@ -342,10 +343,14 @@ export type Database = {
           total_minor: number;
           recipient_name: string;
           contact_phone: string;
+          contact_email: string | null;
           address_line: string;
           city: string;
           governorate: string;
           notes: string | null;
+          guest_token_hash: string | null;
+          idempotency_key: string | null;
+          public_reference: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -360,10 +365,14 @@ export type Database = {
           total_minor: number;
           recipient_name: string;
           contact_phone: string;
+          contact_email?: string | null;
           address_line: string;
           city: string;
           governorate: string;
           notes?: string | null;
+          guest_token_hash?: string | null;
+          idempotency_key?: string | null;
+          public_reference?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -378,10 +387,14 @@ export type Database = {
           total_minor?: number;
           recipient_name?: string;
           contact_phone?: string;
+          contact_email?: string | null;
           address_line?: string;
           city?: string;
           governorate?: string;
           notes?: string | null;
+          guest_token_hash?: string | null;
+          idempotency_key?: string | null;
+          public_reference?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -756,6 +769,47 @@ export type Database = {
           p_notes?: string | null;
         };
         Returns: string;
+      };
+      place_order_with_idempotency: {
+        Args: {
+          p_items: Json;
+          p_recipient_name: string;
+          p_contact_phone: string;
+          p_contact_email: string | null;
+          p_address_line: string;
+          p_city: string;
+          p_governorate: string;
+          p_notes: string | null;
+          p_idempotency_key: string;
+        };
+        Returns: string;
+      };
+      place_guest_order: {
+        Args: {
+          p_items: Json;
+          p_recipient_name: string;
+          p_contact_phone: string;
+          p_contact_email: string | null;
+          p_address_line: string;
+          p_city: string;
+          p_governorate: string;
+          p_notes: string | null;
+          p_idempotency_key: string;
+          p_guest_token_hash: string;
+        };
+        Returns: string;
+      };
+      get_guest_order: {
+        Args: { p_order_id: string; p_token_hash: string };
+        Returns: Json | null;
+      };
+      consume_checkout_quota: {
+        Args: {
+          p_bucket: string;
+          p_limit: number;
+          p_window_seconds: number;
+        };
+        Returns: number;
       };
       cancel_order: {
         Args: { p_order_id: string };

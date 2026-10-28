@@ -14,6 +14,8 @@ const statusStyles: Record<ProductStatus, string> = {
   archived: "bg-zinc-100 text-zinc-600 border-zinc-300",
 };
 
+const LOW_STOCK_THRESHOLD = 5;
+
 export default async function VendorProductsPage({
   searchParams,
 }: {
@@ -43,14 +45,36 @@ export default async function VendorProductsPage({
             Your role: {access.role} · shop status: {access.vendorStatus}
           </p>
         </div>
-        {canManage ? (
-          <Link
-            href={`/vendor/products/new?vendor=${access.vendorId}`}
-            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
-          >
-            Add product
-          </Link>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          <nav className="flex flex-wrap items-center gap-2 text-sm">
+            <Link
+              href={`/vendor/overview?vendor=${access.vendorId}`}
+              className="rounded-full border border-zinc-300 px-3 py-1 text-zinc-700 hover:bg-zinc-50"
+            >
+              Overview
+            </Link>
+            <Link
+              href={`/vendor/orders?vendor=${access.vendorId}`}
+              className="rounded-full border border-zinc-300 px-3 py-1 text-zinc-700 hover:bg-zinc-50"
+            >
+              Orders
+            </Link>
+            <Link
+              href={`/vendor/products?vendor=${access.vendorId}`}
+              className="rounded-full border border-zinc-900 bg-zinc-900 px-3 py-1 text-white"
+            >
+              Products
+            </Link>
+          </nav>
+          {canManage ? (
+            <Link
+              href={`/vendor/products/new?vendor=${access.vendorId}`}
+              className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
+            >
+              Add product
+            </Link>
+          ) : null}
+        </div>
       </div>
 
       {shops.length > 1 ? (
@@ -115,6 +139,11 @@ export default async function VendorProductsPage({
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
+                    {product.status === "active" && product.stock <= LOW_STOCK_THRESHOLD ? (
+                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800">
+                        Low stock
+                      </span>
+                    ) : null}
                     <span
                       className={`rounded-full border px-3 py-1 text-xs font-medium ${statusStyles[product.status]}`}
                     >

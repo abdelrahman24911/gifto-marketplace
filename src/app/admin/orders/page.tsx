@@ -6,28 +6,54 @@ import {
   ORDER_STATUS_LABELS,
   ORDER_STATUS_STYLES,
   isOrderStatus,
+  isTerminalOrderStatus,
 } from "@/lib/orders";
 
 import type { OrderStatus } from "@/lib/supabase/database.types";
 
 export const metadata = { title: "Orders — Admin — Gifto" };
 
-export default async function AdminOrdersPage() {
+const ADMIN_FILTERS = [
+  { value: "all", label: "All" },
+  { value: "attention", label: "Needs attention" },
+  { value: "placed", label: "Placed" },
+  { value: "confirmed", label: "Confirmed" },
+  { value: "shipped", label: "Shipped" },
+  { value: "delivered", label: "Delivered" },
+  { value: "cancelled", label: "Cancelled" },
+  { value: "returned", label: "Returned" },
+  { value: "partially_completed", label: "Partially completed" },
+] as const;
+
+export default async function AdminOrdersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string }>;
+}) {
+  const { status: statusFilter } = await searchParams;
   const { supabase } = await requirePlatformAdmin();
 
   const { data } = await supabase
     .from("orders")
     .select(
-      "id, status, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, city, governorate, created_at, order_vendors(id, status, subtotal_minor, commission_rate, vendor:vendors(name, slug), order_items(product_name, quantity, line_total_minor), commission_entries(amount_minor, status))",
+      "id, public_reference, user_id, status, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, contact_email, city, governorate, created_at, order_vendors(id, status, subtotal_minor, commission_rate, vendor:vendors(name, slug), order_items(product_name, quantity, line_total_minor), commission_entries(amount_minor, status))",
     )
     .order("created_at", { ascending: false });
 
-  const orders = data ?? [];
-  const openCount = orders.filter(
-    (order) =>
-      order.status !== "delivered" &&
-      order.status !== "cancelled" &&
-      order.status !== "returned",
+  let orders = data ?? [];
+  const filter = statusFilter ?? "all";
+
+  if (filter === "attention") {
+    orders = orders.filter((order) => {
+      const s = order.status;
+      return s === "placed" || s === "confirmed" || s === "shipped";
+    });
+  } else if (filter !== "all" && isOrderStatus(filter)) {
+    orders = orders.filter((order) => order.status === filter);
+  }
+
+  const openCount = (data ?? []).filter(
+    (order) => !isTerminalOrderStatus(order.status),
   ).length;
 
   return (
@@ -50,6 +76,26 @@ export default async function AdminOrdersPage() {
         </div>
       </div>
 
+      <nav aria-label="Filter orders" className="mt-6 flex flex-wrap gap-2">
+        {ADMIN_FILTERS.map((f) => {
+          const href = `/admin/orders${f.value === "all" ? "" : `?status=${f.value}`}`;
+          const active = filter === f.value;
+          return (
+            <Link
+              key={f.value}
+              href={href}
+              className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                active
+                  ? "border-zinc-900 bg-zinc-900 text-white"
+                  : "border-zinc-300 text-zinc-700 hover:bg-zinc-50"
+              }`}
+            >
+              {f.label}
+            </Link>
+          );
+        })}
+      </nav>
+
       {orders.length === 0 ? (
         <p className="mt-8 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-12 text-center text-sm text-zinc-600">
           No orders have been placed yet.
@@ -68,8 +114,15 @@ export default async function AdminOrdersPage() {
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="font-medium text-zinc-900">
-                      Order #{order.id.slice(0, 8)}
+                    <p className="flex flex-wrap items-center gap-2 font-medium text-zinc-900">
+                      <span>
+                        {order.public_reference ?? `#${order.id.slice(0, 8)}`}
+                      </span>
+                      {order.user_id === null ? (
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                          Guest
+                        </span>
+                      ) : null}
                     </p>
                     <p className="mt-1 text-sm text-zinc-500">
                       {new Date(order.created_at).toLocaleString("en-GB", {
@@ -102,6 +155,12 @@ export default async function AdminOrdersPage() {
                     <dt className="text-zinc-500">Phone:</dt>
                     <dd className="text-zinc-800">{order.contact_phone}</dd>
                   </div>
+                  {order.contact_email ? (
+                    <div className="flex gap-1">
+                      <dt className="text-zinc-500">Email:</dt>
+                      <dd className="text-zinc-800">{order.contact_email}</dd>
+                    </div>
+                  ) : null}
                   <div className="flex gap-1 sm:col-span-2">
                     <dt className="text-zinc-500">Deliver to:</dt>
                     <dd className="text-zinc-800">
@@ -128,11 +187,13 @@ export default async function AdminOrdersPage() {
                           <p className="font-medium text-zinc-800">
                             {suborder.vendor?.name ?? "Unknown shop"}
                           </p>
-                          <span
-                            className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${ORDER_STATUS_STYLES[subStatus]}`}
-                          >
-                            {ORDER_STATUS_LABELS[subStatus]}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${ORDER_STATUS_STYLES[subStatus]}`}
+                            >
+                              {ORDER_STATUS_LABELS[subStatus]}
+                            </span>
+                          </div>
                         </div>
 
                         <ul className="mt-3 flex flex-col divide-y divide-zinc-200">

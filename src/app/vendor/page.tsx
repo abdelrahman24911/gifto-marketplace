@@ -1,9 +1,8 @@
 import { redirect } from "next/navigation";
 
-/**
- * The vendor area entry point. Which shop is shown is resolved from the
- * caller's memberships on the products page.
- */
+import { requireVendorRole } from "@/lib/vendor";
+
 export default async function VendorIndexPage() {
-  redirect("/vendor/products");
+  const { access } = await requireVendorRole();
+  redirect(`/vendor/overview?vendor=${access.vendorId}`);
 }

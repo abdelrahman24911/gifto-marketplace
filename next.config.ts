@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "30mb",
+    },
+  },
   /* config options here */
   // `cacheComponents` (experimental static-shell rendering) is disabled: this
   // app is fully dynamic — the root layout reads the auth session via cookies()
@@ -17,6 +22,21 @@ const nextConfig: NextConfig = {
         as: "*.css",
       },
     },
+  },
+  // Guest confirmation pages are token-gated: keep their URLs out of referrers,
+  // search indexes and shared caches. The token itself lives in an HttpOnly
+  // cookie, never in the address bar.
+  async headers() {
+    return [
+      {
+        source: "/orders/:path*",
+        headers: [
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "Cache-Control", value: "private, no-store, max-age=0" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+        ],
+      },
+    ];
   },
 };
 

@@ -37,7 +37,7 @@ npm run dev       # local dev server
 npm run build     # production build (webpack; --webpack works everywhere)
 npm run build:turbo  # production build via Turbopack (needs native SWC bindings)
 npm run lint      # eslint
-npm test          # vitest run — unit tests (money, cart, cart-store, slugify)
+npm test          # vitest run — unit tests (money, cart, cart-store, slugify, guest-order, orders)
 ```
 
 On win32/x64 this machine cannot load the native SWC bindings, so Turbopack builds
@@ -61,13 +61,15 @@ supabase migration list   # verify applied migrations
 
 Only ever apply migrations to the **Gifto** project. Do not link or push to the FL Tase3 project.
 
-Migrations 1–7 are applied to the hosted Gifto project (`hqusykdyjpruysxezsrn`) and verified
-live. Pushing requires a valid CLI login (`supabase login`) and the project database password for
+Migrations 1–13 are applied to the hosted Gifto project (`hqusykdyjpruysxezsrn`) and recorded in
+`supabase_migrations.schema_migrations`. Migration 11 adds guest COD checkout; migration 12
+hardens the order tables to least-privilege grants; migration 13 adds failed-COD-delivery handling
+and the parent-only `partially_completed` status. Pushing requires a valid CLI login (`supabase login`) and the project database password for
 `db push`.
 
 ### Verifying RLS locally
 
-Seven suites exercise the policies against a disposable `supabase/postgres` container
+Eight suites exercise the policies against a disposable `supabase/postgres` container
 (which already ships the `auth` schema, `auth.users`, `auth.uid()`, and the
 `anon`/`authenticated`/`service_role` roles). They simulate Supabase request context the
 way PostgREST does and abort non-zero on any failure. Each test sets both
@@ -82,6 +84,7 @@ way PostgREST does and abort non-zero on any failure. Each test sets both
 | `supabase/tests/rls_commissions_test.sql` | Phase 6: commission earned on delivery (rate × subtotal), idempotent delivery, return reversal, admin-only settlements, vendor isolation |
 | `supabase/tests/rls_inventory_test.sql` | Phase 7: manual stock adjustments are audited and role-gated, no direct movement writes, validation and history isolation |
 | `supabase/tests/rls_hardening_test.sql` | Phase 8: admin self-provisioning INSERT guard, dropped `is_vendor_staff`, last-owner demotion/deletion guard, service-role bootstrap path |
+| `supabase/tests/rls_guest_orders_test.sql` | Phase 11: guest COD checkout with no Auth user, service-role-only RPCs, catalog pricing, idempotent retries, token-gated confirmation, checkout quota, authenticated path unchanged |
 
 Three details matter when running them:
 
@@ -94,18 +97,18 @@ Three details matter when running them:
    first migration can fail intermittently.
 3. **Run each suite against a fresh schema.** Some assertions use exact row counts
    (`anon sees 1 vendor`), so fixtures from another suite would make them fail. Reset
-   `public` and re-apply migrations 1–7 before each suite.
+    `public` and re-apply migrations 1–13 before each suite.
 
 ```bash
 docker run -d --name gifto-rls-test -e POSTGRES_PASSWORD=postgres \
   -p 65432:5432 public.ecr.aws/supabase/postgres:17.11.0.003
-# wait for the init gate described above, then for each of the seven suites:
+# wait for the init gate described above, then for each of the eight suites:
 docker exec gifto-rls-test psql -U postgres -c \
   'drop schema public cascade; create schema public; grant usage on schema public to anon, authenticated, service_role;'
 docker cp supabase/tests/storage_stub.sql gifto-rls-test:/tmp/storage_stub.sql
 docker exec -e PGPASSWORD=postgres gifto-rls-test \
   psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -f /tmp/storage_stub.sql
-for s in rls_foundation rls_onboarding rls_catalog rls_orders rls_commissions rls_inventory rls_hardening; do
+for s in rls_foundation rls_onboarding rls_catalog rls_orders rls_commissions rls_inventory rls_hardening rls_guest_orders; do
   docker exec gifto-rls-test psql -U postgres -c \
     'drop schema public cascade; create schema public; grant usage on schema public to anon, authenticated, service_role;'
   docker cp supabase/migrations gifto-rls-test:/tmp/migrations
@@ -200,8 +203,9 @@ Running it through the API requires platform-admin — it is a development conve
 - `cancel_order(p_order_id)` — order owner or platform admin, only while the order is `placed`;
   cascades to the suborders and restocks them.
 - Triggers enforce the transition table (`placed → confirmed → shipped → delivered`, plus
-  `cancelled`/`returned`), stamp the stage timestamps, restock on cancellation, and keep the
-  parent order status derived from its suborders.
+  `cancelled`/`returned`), including `shipped → cancelled` for a failed COD delivery, stamp the
+  stage timestamps, restock on cancellation, and keep the parent order status derived from its
+  suborders. Mixed terminal outcomes become the parent-only `partially_completed` state.
 - RLS: customers read their own orders; vendors read (and may only update the status of) their own
   suborders, plus the delivery address of any parent order that holds one of their suborders
   (via the `SECURITY DEFINER` helper `is_order_shop_member` — a plain subquery would recurse,
@@ -218,15 +222,17 @@ Running it through the API requires platform-admin — it is a development conve
 - `Add to cart` on the product page (`src/components/add-to-cart-button.tsx`), replacing the
   old "ordering is not available" notice. Sold-out products show a disabled state.
 - `/cart` — grouped by shop, quantity edit, remove, free-delivery summary.
-- `/checkout` — delivery form (recipient, phone, address, city, governorate, notes) with a COD
-  notice. The server action calls `place_order`; on success it clears the cart and redirects to
-  the order page. `/checkout` is in the proxy `PROTECTED_PREFIXES`, and the action re-verifies
-  the session.
+- `/checkout` — delivery form (recipient, phone, email, address, city, governorate, notes) with a
+  COD notice. `/checkout` is public: signed-in customers call `place_order_with_idempotency`;
+  guests call the service-role-only `place_guest_order` with a browser-generated token and receive
+  an HttpOnly, order-scoped confirmation cookie. On success the cart is cleared and the customer
+  is redirected to the order page. Every price is recomputed in the database.
 - `/account/orders` and `/account/orders/[id]` — customer history and detail, with self-service
   cancellation while the order is still `placed` (`cancel_order`, which restocks).
 - `/vendor/orders` — the shop queue: delivery details, line items, and the lifecycle buttons
   (confirm / ship / deliver / cancel) allowed by `VENDOR_NEXT_STATUSES`. Only owners, managers
-  and admins see the buttons; staff get a read-only queue.
+  and admins see the buttons; staff get a read-only queue. After dispatch, a vendor can record a
+  failed COD delivery, which cancels the line, restocks it, and asks for confirmation first.
 - `docs/DECISIONS.md` D-06: delivery is free at launch (`delivery_fee_minor = 0`); a fee model is
   planned later and will be configured in Supabase.
 
@@ -261,11 +267,59 @@ Running it through the API requires platform-admin — it is a development conve
 - After creation, **stock is no longer editable through the product form** (an intentional change);
   the form only sets opening stock, and all later changes go through the inventory page.
 
+### Phase 11 guest checkout (implemented)
+
+`supabase/migrations/00000000000011_guest_checkout.sql` (business rule: `docs/DECISIONS.md` D-03,
+superseded on 2026-10-19):
+
+- Guests can place a COD order without an Auth account. `orders.contact_email`,
+  `orders.guest_token_hash`, `orders.idempotency_key` and `orders.public_reference` were added,
+  with unique partial indexes for idempotency keys and public references.
+- `place_guest_order(...)` is service-role-only and writes `user_id = NULL`. The browser generates
+  a random access token; only its SHA-256 hash reaches the database. `get_guest_order(...)` returns
+  an order only when the order id and token hash both match.
+- The raw token lives in an HttpOnly, `SameSite=Lax`, order-scoped cookie. The guest confirmation
+  page is `/orders/[id]`; authenticated history remains `/account/orders/[id]`.
+- `place_order_with_idempotency(...)` keeps the authenticated path idempotent without changing the
+  existing `place_order` signature or behaviour.
+- `checkout_rate_limits` and `consume_checkout_quota(...)` add a service-role-only hourly checkout
+  quota. RLS is enabled with no client policies by design.
+
+### Phase 12 order-table privileges (implemented)
+
+`supabase/migrations/00000000000012_order_table_privileges.sql` closes a default-ACL over-grant
+found during hosted verification:
+
+- `anon`, `authenticated` and `public` lose all privileges on `orders`, `order_vendors`,
+  `order_items` and `inventory_movements`.
+- `authenticated` keeps `SELECT` on `orders`, `order_items` and `inventory_movements`, and
+  `SELECT` plus column-level `UPDATE (status, updated_at)` on `order_vendors`.
+- Customers cannot update financial or identity columns such as `subtotal_minor`,
+  `commission_rate` or `order_id`; vendors can still run the guarded status workflow.
+- `service_role` keeps full access for the database RPCs and server-only guest checkout path.
+
+### Phase 9B failed COD delivery (implemented and verified)
+
+`supabase/migrations/00000000000013_failed_delivery.sql` (business rules: `docs/DECISIONS.md`
+D-04/D-05; return treatment is D-09):
+
+- A dispatched suborder can now move `shipped -> cancelled` when the COD delivery fails (customer
+  refuses or is unreachable). The existing cancellation path restocks every line and writes an
+  `order_cancelled` movement; `shipped_at` and `cancelled_at` preserve the fact that the failure
+  happened after dispatch. No commission is earned or reversed because the suborder never reached
+  `delivered`.
+- A parent order whose suborders all finish with mixed outcomes becomes the parent-only
+  `partially_completed` state (for example, one shop delivered and another cancelled). The
+  suborder transition trigger rejects `partially_completed`, so it cannot leak into fulfilment.
+- The vendor queue offers `Delivery failed - cancel and restock` after dispatch, with a browser
+  confirmation before the action is submitted.
+
 ### App surface (implemented)
 
 - Public: `/`, `/categories`, `/categories/[slug]`, `/shops`, `/shops/[slug]`,
   `/shops/[slug]/[productSlug]`.
-- Customer: `/cart`, `/checkout`, `/account/orders`, `/account/orders/[id]`.
+- Customer: `/cart`, `/checkout`, `/account/orders`, `/account/orders/[id]`, and the token-gated
+  guest confirmation page `/orders/[id]`.
 - Vendor: `/vendor/products` (list + shop switcher), `/vendor/products/new`,
   `/vendor/products/[id]` (edit, owner-only delete), `/vendor/products/[id]/inventory` (audited
   stock adjustments + movement history), `/vendor/orders` (fulfilment queue).
@@ -280,7 +334,7 @@ owner/manager-scoped writes (`{vendor_id}/{product_id}/{uuid}.{ext}`), the edit
 product page has an upload/manage gallery panel, and public pages render real
 photos (the monogram panel remains as the graceful fallback).
 
-### Status semantics (enforced by `place_order`)
+### Status semantics (enforced by `place_order` / `place_guest_order`)
 
 - `pending` — submitted, awaiting review; not public.
 - `active` — approved and selling; publicly visible.
@@ -291,10 +345,10 @@ photos (the monogram panel remains as the graceful fallback).
 ## Architecture notes (planned — not yet implemented)
 
 The catalog (Phase 3), the order/checkout backend (Phase 4), the checkout screens (Phase 5), the
-commission ledger and settlements (Phase 6) and audited inventory adjustments (Phase 7) are
-implemented. The following are documented for direction only:
+commission ledger and settlements (Phase 6), audited inventory adjustments (Phase 7), image upload,
+and guest COD checkout (Phase 11) are implemented. The following are documented for direction only:
 
-- **Catalog extras**: tags, options/variants, and image upload (Storage bucket + UI).
+- **Catalog extras**: tags and product options/variants.
 - **Settlement automation**: settlements are a manual admin batch today; the cadence and payout
   reconciliation are still open (`docs/DECISIONS.md` D-08).
 - **Delivery fee**: free at launch (D-06); a distance/zone fee model will be added later
@@ -314,31 +368,42 @@ implemented. The following are documented for direction only:
   admin-only `SECURITY DEFINER` RPCs, with no `INSERT`/`UPDATE`/`DELETE` grant. Manual stock changes
   go through `adjust_product_stock`, never a direct table write.
 - Privileged `SECURITY DEFINER` functions pin `search_path` and restrict `EXECUTE`.
+- Orders are written only by database RPCs. Migration 12 removed the default-ACL over-grant on the
+  four order tables: `anon` has no order-table privileges, and `authenticated` is read-only except
+  for the guarded `order_vendors.status` / `updated_at` columns.
+- **Residual risk:** Supabase's default privileges still grant ALL on *future* `public` tables to
+  `anon` and `authenticated`. New tables need explicit revokes/grants, or a future migration should
+  change the default ACL.
 
 ## Verification status
 
-Everything below was actually executed; nothing here is aspirational.
+Everything below was actually executed unless explicitly marked otherwise; nothing here is
+aspirational.
 
 | Check | Result |
 |---|---|
 | `npm run lint` | 0 errors, 0 warnings |
 | `npm run typecheck` | clean |
-| `npm test` | 31 passing unit tests across 4 files |
-| `npm run build` | exit 0 (all 23 routes) |
-| DB suites in disposable container | 23 + 12 + 15 + 25 + 13 + 9 + 10 = 107 passing assertions across seven suites, all pass, each on a fresh schema |
-| Page smoke test (`next start`) | `/`, `/categories`, `/shops`, `/cart` → 200; unknown paths → 404; `/checkout`, `/account`, `/account/orders`, `/vendor/orders`, `/admin` → 307 to login |
+| `npm test` | 55 passing unit tests across 6 files |
+| `npm run build` | exit 0 (all routes) |
+| DB suites in disposable container | All eight suites passed on fresh schemas after migrations 1-13, including `rls_guest_orders_test.sql` and the Phase 9B `rls_orders_test.sql` TEST 16 |
+| Browser E2E for failed COD delivery | 11/11 checks passed against the live app and hosted DB: two-shop guest checkout, mixed terminal outcomes, failed-delivery restock, ledger, commission, guest confirmation, repeated-cancel no-op, and fixture cleanup |
+| Page smoke test (`next start`, earlier) | `/`, `/categories`, `/shops`, `/cart` → 200; unknown paths → 404; `/account`, `/account/orders`, `/vendor/orders`, `/admin` → 307 to login. `/checkout` was protected then; it is now intentionally public for guests. |
 | End-to-end render against hosted DB | seeded a temporary category/shop/product, confirmed all public pages rendered it (price formatted as `EGP 150.00`), then deleted the fixture |
-| Hosted migrations | migrations 1–7 applied and verified live (anon reads the public view/catalog, not `vendors`) |
-| Hosted end-to-end (migrations 5–7) | seed temp shop/product → `place_order` → deliver → ledger earns `rate × subtotal` → `adjust_product_stock` records an audited movement → rolled back (no residue) |
+| Hosted migrations | migrations 1–13 applied and recorded; migration 11 schema/function ACLs and migration 12 grants verified live; migration 13 structure verified live |
+| Hosted guest checkout smoke test (rollback-only) | `place_guest_order` created the order, suborder, item and inventory movement; stock 25→24; repeated idempotency key returned the same order; wrong token and wrong-token replay rejected; order rolled back and stock restored |
+| Hosted authenticated checkout smoke test (rollback-only) | `place_order_with_idempotency` created the order; stock 15→14; vendor status update worked; `order_vendors.subtotal_minor` update blocked; anon `orders` select blocked; rolled back with zero residue |
+| Hosted privilege check | `anon` has no order-table privileges; `authenticated` has select-only on orders/items/movements plus `status`/`updated_at` update on suborders; `service_role` retains full access |
+| Hosted end-to-end (migrations 5–7, earlier) | seed temp shop/product → `place_order` → deliver → ledger earns `rate × subtotal` → `adjust_product_stock` records an audited movement → rolled back (no residue) |
 
 Three limits on the current verification:
 
-- **Vendor/admin/customer write paths are covered by the DB suites, not by browser tests.**
-  Server actions need an authenticated cookie session; the RLS suites exercise the same
-  insert/update/delete rules directly.
-- **Checkout is verified at the database level and by build/type checks**, not by a browser
-  click-through: the cart is client-only `localStorage`, and the checkout/fulfilment actions
-  were compiled but not exercised against a signed-in browser session.
+- **The browser E2E is a temporary harness, not a repo test suite.** It lives in
+  `C:\Users\bodyo\AppData\Local\Temp\opencode\gifto-e2e` and is not wired into `npm test` or CI.
+  Other vendor/admin/customer write paths remain covered by the DB suites rather than browser tests.
+- **Default database ACLs remain broad.** Migration 12 hardened the current order tables, but
+  Supabase still grants ALL on future `public` tables to `anon`/`authenticated`; every new table
+  needs explicit grants or a default-ACL migration.
 - **`supabase start` does not run on this machine** (the CLI produces no container), so
   there is no local PostgREST/GoTrue stack. Local verification uses the raw
   `supabase/postgres` container; end-to-end checks run against the hosted project. Use the

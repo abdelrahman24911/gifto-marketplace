@@ -35,6 +35,14 @@ export function AuthForm({ mode, initialError }: { mode: Mode; initialError?: st
     const password = String(form.get("password") ?? "");
     const fullName = String(form.get("full_name") ?? "").trim();
 
+    // The proxy appends ?next=<path> for protected routes; only allow same-site
+    // absolute paths so the parameter cannot be used as an open redirect.
+    const requestedNext = new URLSearchParams(window.location.search).get("next");
+    const redirectTo =
+      requestedNext && requestedNext.startsWith("/") && !requestedNext.startsWith("//")
+        ? requestedNext
+        : "/account";
+
     const supabase = createClient();
 
     try {
@@ -47,7 +55,7 @@ export function AuthForm({ mode, initialError }: { mode: Mode; initialError?: st
           setError(signInError.message);
           return;
         }
-        router.push("/account");
+        router.push(redirectTo);
         router.refresh();
       } else {
         const { data, error: signUpError } = await supabase.auth.signUp({
@@ -63,7 +71,7 @@ export function AuthForm({ mode, initialError }: { mode: Mode; initialError?: st
           return;
         }
         if (data.session) {
-          router.push("/account");
+          router.push(redirectTo);
           router.refresh();
         } else {
           setMessage("Check your email to confirm your account, then sign in.");

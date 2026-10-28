@@ -58,5 +58,11 @@ export async function setSuborderStatus(
   revalidatePath("/account/orders");
   revalidatePath(`/account/orders/${data.order_id}`);
 
-  return { success: `Marked as ${ORDER_STATUS_LABELS[next]}.`, attempt };
+  return {
+    success:
+      next === "cancelled"
+        ? "Order line cancelled and stock restored."
+        : `Marked as ${ORDER_STATUS_LABELS[next]}.`,
+    attempt,
+  };
 }
