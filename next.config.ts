@@ -15,14 +15,6 @@ const nextConfig: NextConfig = {
   cacheComponents: false,
   // `partialPrefetching` requires `cacheComponents`, so it is disabled alongside
   // it. Enable both only if this app ever gains meaningfully static routes.
-  turbopack: {
-    rules: {
-      "*.css": {
-        loaders: ["@tailwindcss/turbopack"],
-        as: "*.css",
-      },
-    },
-  },
   // Guest confirmation pages are token-gated: keep their URLs out of referrers,
   // search indexes and shared caches. The token itself lives in an HttpOnly
   // cookie, never in the address bar.
