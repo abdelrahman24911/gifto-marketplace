@@ -31,7 +31,7 @@ export default async function VendorOrdersPage({
   searchParams: Promise<{ vendor?: string; status?: string }>;
 }) {
   const { vendor, status: statusFilter } = await searchParams;
-  const { supabase, access, shops, canManage } = await requireVendorRole(vendor);
+  const { supabase, access, canManage } = await requireVendorRole(vendor);
 
   // RLS limits this to the caller's shop; the embedded parent order is
   // readable only because of the "orders: vendor read" policy.
@@ -59,56 +59,14 @@ export default async function VendorOrdersPage({
   ).length;
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 py-10">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
-            {access.vendorName} orders
-          </h1>
-          <p className="mt-1 text-sm text-zinc-600">
-            {openCount} open {openCount === 1 ? "order" : "orders"} · deliver
-            each order line yourself
-          </p>
-        </div>
-        <nav className="flex flex-wrap items-center gap-2 text-sm">
-          <Link
-            href={`/vendor/overview?vendor=${access.vendorId}`}
-            className="rounded-full border border-zinc-300 px-3 py-1 text-zinc-700 hover:bg-zinc-50"
-          >
-            Overview
-          </Link>
-          <Link
-            href={`/vendor/orders?vendor=${access.vendorId}`}
-            className="rounded-full border border-zinc-900 bg-zinc-900 px-3 py-1 text-white"
-          >
-            Orders
-          </Link>
-          <Link
-            href={`/vendor/products?vendor=${access.vendorId}`}
-            className="rounded-full border border-zinc-300 px-3 py-1 text-zinc-700 hover:bg-zinc-50"
-          >
-            Products
-          </Link>
-        </nav>
+    <div className="w-full">
+      <div>
+        <h1 className="font-display text-2xl text-ink">Orders</h1>
+        <p className="mt-1 text-sm text-ink-soft">
+          {openCount} open {openCount === 1 ? "order" : "orders"} · deliver each
+          order line yourself
+        </p>
       </div>
-
-      {shops.length > 1 ? (
-        <nav aria-label="Switch shop" className="mt-5 flex flex-wrap gap-2">
-          {shops.map((shop) => (
-            <Link
-              key={shop.vendorId}
-              href={`/vendor/orders?vendor=${shop.vendorId}`}
-              className={`rounded-full border px-3 py-1 text-sm ${
-                shop.vendorId === access.vendorId
-                  ? "border-zinc-900 bg-zinc-900 text-white"
-                  : "border-zinc-300 text-zinc-700 hover:bg-zinc-50"
-              }`}
-            >
-              {shop.vendorName}
-            </Link>
-          ))}
-        </nav>
-      ) : null}
 
       {!canManage ? (
         <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -127,8 +85,8 @@ export default async function VendorOrdersPage({
               href={href}
               className={`rounded-full border px-3 py-1 text-xs font-medium ${
                 active
-                  ? "border-zinc-900 bg-zinc-900 text-white"
-                  : "border-zinc-300 text-zinc-700 hover:bg-zinc-50"
+                  ? "border-berry bg-berry text-paper"
+                  : "border-line-strong text-ink-soft hover:bg-paper-deep"
               }`}
             >
               {f.label}
@@ -139,7 +97,7 @@ export default async function VendorOrdersPage({
 
       <section className="mt-6">
         {suborders.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-10 text-center text-sm text-zinc-600">
+          <p className="rounded-2xl border border-dashed border-line-strong bg-paper-soft px-4 py-10 text-center text-sm text-ink-soft">
             No orders yet.
           </p>
         ) : (
@@ -153,14 +111,14 @@ export default async function VendorOrdersPage({
               return (
                 <li
                   key={suborder.id}
-                  className="rounded-2xl border border-zinc-200 bg-white p-5"
+                  className="rounded-2xl border border-line bg-paper-soft p-5"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="font-medium text-zinc-900">
+                      <p className="font-medium text-ink">
                         {order?.public_reference ?? `Order #${suborder.id.slice(0, 8)}`}
                       </p>
-                      <p className="mt-1 text-sm text-zinc-500">
+                      <p className="mt-1 text-sm text-ink-mute">
                         {new Date(suborder.created_at).toLocaleString("en-GB", {
                           dateStyle: "medium",
                           timeStyle: "short",
@@ -175,29 +133,29 @@ export default async function VendorOrdersPage({
                   </div>
 
                   {order ? (
-                    <div className="mt-3 rounded-xl bg-zinc-50 px-4 py-3 text-sm">
-                      <p className="font-medium text-zinc-900">
+                    <div className="mt-3 rounded-xl bg-paper-soft px-4 py-3 text-sm">
+                      <p className="font-medium text-ink">
                         {order.recipient_name} · {order.contact_phone}
                       </p>
-                      <p className="text-zinc-600">
+                      <p className="text-ink-soft">
                         {order.address_line}, {order.city}, {order.governorate}
                       </p>
                       {order.notes ? (
-                        <p className="mt-1 text-zinc-500">
+                        <p className="mt-1 text-ink-mute">
                           Notes: {order.notes}
                         </p>
                       ) : null}
-                      <p className="mt-1 text-zinc-500">
+                      <p className="mt-1 text-ink-mute">
                         Cash on delivery — collect {formatEgp(suborder.subtotal_minor)}.
                       </p>
                     </div>
                   ) : (
-                    <p className="mt-3 text-sm text-zinc-500">
+                    <p className="mt-3 text-sm text-ink-mute">
                       Delivery details are not available.
                     </p>
                   )}
 
-                  <ul className="mt-4 flex flex-col divide-y divide-zinc-100">
+                  <ul className="mt-4 flex flex-col divide-y divide-line">
                     {(suborder.order_items ?? [])
                       .slice()
                       .sort((a, b) => a.id.localeCompare(b.id))
@@ -206,23 +164,23 @@ export default async function VendorOrdersPage({
                           key={item.id}
                           className="flex items-start justify-between gap-4 py-2 text-sm"
                         >
-                          <span className="text-zinc-800">
+                          <span className="text-ink">
                             {item.product_name}
-                            <span className="text-zinc-400">
+                            <span className="text-ink-mute">
                               {" "}
                               × {item.quantity}
                             </span>
                           </span>
-                          <span className="whitespace-nowrap font-medium text-zinc-900">
+                          <span className="whitespace-nowrap font-medium text-ink">
                             {formatEgp(item.line_total_minor)}
                           </span>
                         </li>
                       ))}
                   </ul>
 
-                  <p className="mt-2 text-right text-sm text-zinc-600">
+                  <p className="mt-2 text-right text-sm text-ink-soft">
                     Subtotal:{" "}
-                    <span className="font-medium text-zinc-900">
+                    <span className="font-medium text-ink">
                       {formatEgp(suborder.subtotal_minor)}
                     </span>
                   </p>

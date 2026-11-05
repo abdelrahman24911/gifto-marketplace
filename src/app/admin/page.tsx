@@ -4,6 +4,7 @@ import { requirePlatformAdmin } from "@/lib/auth";
 
 import { CategoryForm } from "./category-form";
 import { VendorControls } from "./vendor-controls";
+import { VendorForm } from "./vendor-form";
 
 import type { VendorStatus } from "@/lib/supabase/database.types";
 
@@ -66,7 +67,8 @@ export default async function AdminPage() {
         Platform administration
       </h1>
       <p className="mt-1 text-sm text-zinc-600">
-        Review shop applications, approve shops, and configure commission rates.
+        Add shops, notify owners, activate approved shops, and configure
+        commission rates.
       </p>
 
       <div className="mt-4 flex flex-wrap gap-2">
@@ -75,6 +77,12 @@ export default async function AdminPage() {
           className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50"
         >
           View all orders
+        </Link>
+        <Link
+          href="/admin/settlements"
+          className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50"
+        >
+          Shop settlements
         </Link>
       </div>
 
@@ -149,12 +157,19 @@ export default async function AdminPage() {
       </section>
 
       <section className="mt-8">
+        <h2 className="text-lg font-semibold text-zinc-900">Add a shop</h2>
+        <div className="mt-3 rounded-2xl border border-zinc-200 bg-white p-5">
+          <VendorForm />
+        </div>
+      </section>
+
+      <section className="mt-8">
         <h2 className="text-lg font-semibold text-zinc-900">
-          Pending review ({pending.length})
+          Pending activation ({pending.length})
         </h2>
         {pending.length === 0 ? (
           <p className="mt-3 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-6 text-center text-sm text-zinc-600">
-            No shop applications waiting for review.
+            No shops waiting for activation.
           </p>
         ) : (
           <div className="mt-3 flex flex-col gap-4 rounded-2xl border border-zinc-200 bg-white p-5">

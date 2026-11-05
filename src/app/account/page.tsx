@@ -3,8 +3,6 @@ import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
 
-import { OnboardingForm } from "./onboarding-form";
-
 export const metadata = { title: "Account — Gifto" };
 
 const statusStyles: Record<string, string> = {
@@ -15,10 +13,10 @@ const statusStyles: Record<string, string> = {
 };
 
 const statusHelp: Record<string, string> = {
-  pending: "Awaiting review by the platform team.",
+  pending: "Your shop is set up and waiting for the Gifto team to activate it.",
   active: "Approved and publicly visible in the shop directory.",
   suspended: "Suspended by the platform team. Contact support for details.",
-  rejected: "Application was declined.",
+  rejected: "This shop was not approved. Contact the Gifto team for help.",
 };
 
 export default async function AccountPage() {
@@ -70,14 +68,6 @@ export default async function AccountPage() {
         >
           Your orders
         </Link>
-        {shops.length > 0 ? (
-          <Link
-            href="/vendor/orders"
-            className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50"
-          >
-            Shop orders
-          </Link>
-        ) : null}
       </nav>
 
       <section className="mt-5 rounded-2xl border border-zinc-200 bg-white p-5">
@@ -116,9 +106,10 @@ export default async function AccountPage() {
         </h2>
 
         {shops.length === 0 ? (
-          <div className="mt-4">
-            <OnboardingForm />
-          </div>
+          <p className="mt-4 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-6 text-sm text-zinc-600">
+            Gifto creates and invites shops directly. If you were expecting shop
+            access, ask the platform team to check your invitation.
+          </p>
         ) : (
           <ul className="mt-4 flex flex-col gap-3">
             {shops.map(({ role, vendor }) => (
@@ -137,14 +128,11 @@ export default async function AccountPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <Link
-                    href={`/vendor/products?vendor=${vendor.id}`}
-                    className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50"
-                  >
-                    {role === "owner" || role === "manager"
-                      ? "Manage products"
-                      : "View products"}
-                  </Link>
+                  {vendor.status !== "active" ? (
+                    <span className="text-xs font-medium text-zinc-500">
+                      Dashboard locked until active
+                    </span>
+                  ) : null}
                   <span
                     className={`rounded-full border px-3 py-1 text-xs font-medium ${statusStyles[vendor.status] ?? "bg-zinc-100 text-zinc-700 border-zinc-300"}`}
                   >

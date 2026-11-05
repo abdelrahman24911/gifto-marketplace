@@ -8,6 +8,17 @@
 
 \set ON_ERROR_STOP on
 
+-- Safety: this suite is destructive. Require an explicitly disposable database
+-- and roll everything back even when the suite succeeds.
+do $$
+begin
+  if current_setting('gifto.rls_test_disposable', true) is distinct from 'yes' then
+    raise exception 'Refusing to run destructive RLS tests. Start a disposable database and SET gifto.rls_test_disposable = ''yes'' in the same psql session.';
+  end if;
+end $$;
+
+begin;
+
 -- ---------------------------------------------------------------------------
 -- Seed (as superuser; bypasses RLS to create fixtures)
 -- ---------------------------------------------------------------------------
@@ -153,19 +164,37 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- TEST 6: a manager can publish and edit their own product
+-- TEST 6: a manager can publish/edit their own product; stock is RPC-only
 -- ---------------------------------------------------------------------------
 do $$
-declare st public.product_status; p int; s int;
+declare st public.product_status; p int; s int; pid uuid;
 begin
+  if has_column_privilege('authenticated', 'public.products', 'vendor_id', 'update') then
+    raise exception 'TEST 6 FAILED: authenticated has table-wide products UPDATE';
+  end if;
+  if has_column_privilege('authenticated', 'public.products', 'stock', 'update') then
+    raise exception 'TEST 6 FAILED: authenticated may update products.stock';
+  end if;
+
   update public.products
-    set status = 'active', price_minor = 17500, stock = 6
+    set status = 'active', price_minor = 17500
     where slug = 'handmade-gift';
-  select status, price_minor, stock into st, p, s
+  select id, status, price_minor, stock into pid, st, p, s
     from public.products where slug = 'handmade-gift';
-  if st <> 'active' or p <> 17500 or s <> 6 then
+  if st <> 'active' or p <> 17500 or s <> 2 then
     raise exception 'TEST 6 FAILED: st=% p=% s=%', st, p, s; end if;
-  raise notice 'TEST 6 PASSED: manager published and edited own product';
+
+  begin
+    update public.products set stock = 6 where id = pid;
+    raise exception 'TEST 6 FAILED: direct stock update was allowed';
+  exception when insufficient_privilege then
+    null;
+  end;
+
+  perform public.adjust_product_stock(pid, 4, 'catalog test restock');
+  select stock into s from public.products where id = pid;
+  if s <> 6 then raise exception 'TEST 6 FAILED: stock after RPC=%', s; end if;
+  raise notice 'TEST 6 PASSED: manager edited product; stock only via audited RPC';
 end $$;
 
 -- ---------------------------------------------------------------------------
@@ -402,39 +431,107 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- TEST 19: deletes follow the same ownership rule
+-- TEST 19: pending owners cannot write/delete storage; active owners can delete
 -- ---------------------------------------------------------------------------
 set role authenticated;
 set request.jwt.claim.sub = 'b1000000-0000-0000-0000-00000000000b';
 set request.jwt.claims = '{"sub":"b1000000-0000-0000-0000-00000000000b"}';
-insert into storage.objects (bucket_id, name, owner)
-values ('product-images',
-        'e2000000-0000-0000-0000-0000000000bb/d3000000-0000-0000-0000-000000000003/b-shop.jpg',
-        auth.uid());
+do $$
+begin
+  begin
+    insert into storage.objects (bucket_id, name, owner)
+    values ('product-images',
+            'e2000000-0000-0000-0000-0000000000bb/d3000000-0000-0000-0000-000000000003/b-shop.jpg',
+            auth.uid());
+    raise exception 'TEST 19A FAILED: pending owner uploaded an object';
+  exception when insufficient_privilege then
+    raise notice 'TEST 19A PASSED: pending owner upload denied';
+  end;
+end $$;
 do $$
 declare n int;
 begin
-  -- RLS filters delete candidates rather than raising, so assert on rows.
   delete from storage.objects
     where name = 'e1000000-0000-0000-0000-0000000000aa/d1000000-0000-0000-0000-000000000001/img-upload.jpg';
   get diagnostics n = row_count;
-  if n <> 0 then raise exception 'TEST 19A FAILED: cross-vendor delete removed % rows', n; end if;
+  if n <> 0 then raise exception 'TEST 19B FAILED: cross-vendor delete removed % rows', n; end if;
   if not exists (
     select 1 from storage.objects
       where name = 'e1000000-0000-0000-0000-0000000000aa/d1000000-0000-0000-0000-000000000001/img-upload.jpg'
   ) then
-    raise exception 'TEST 19A FAILED: object disappeared';
+    raise exception 'TEST 19B FAILED: object disappeared';
   end if;
-  raise notice 'TEST 19A PASSED: cross-vendor delete filtered by RLS';
+  raise notice 'TEST 19B PASSED: pending/cross-vendor delete filtered by RLS';
 end $$;
+
+set request.jwt.claim.sub = 'a1000000-0000-0000-0000-00000000000a';
+set request.jwt.claims = '{"sub":"a1000000-0000-0000-0000-00000000000a"}';
 do $$
 declare n int;
 begin
   delete from storage.objects
-    where name = 'e2000000-0000-0000-0000-0000000000bb/d3000000-0000-0000-0000-000000000003/b-shop.jpg';
+    where name = 'e1000000-0000-0000-0000-0000000000aa/d1000000-0000-0000-0000-000000000001/img-upload.jpg';
   get diagnostics n = row_count;
-  if n <> 1 then raise exception 'TEST 19B FAILED: deleted % rows', n; end if;
-  raise notice 'TEST 19B PASSED: owner deletes own object';
+  if n <> 1 then raise exception 'TEST 19C FAILED: active owner deleted % rows', n; end if;
+  raise notice 'TEST 19C PASSED: active owner deletes own object';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 20: pending owners cannot delete catalog rows; active owners can
+-- ---------------------------------------------------------------------------
+set request.jwt.claim.sub = 'b1000000-0000-0000-0000-00000000000b';
+set request.jwt.claims = '{"sub":"b1000000-0000-0000-0000-00000000000b"}';
+do $$
+declare n int; pname text;
+begin
+  update public.products set name = 'Pending Rename'
+    where id = 'd4000000-0000-0000-0000-000000000004';
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'TEST 20A FAILED: pending owner updated % products', n; end if;
+  select name into pname from public.products
+    where id = 'd4000000-0000-0000-0000-000000000004';
+  if pname <> 'B Secret Draft' then
+    raise exception 'TEST 20A FAILED: pending owner changed name to %', pname;
+  end if;
+
+  delete from public.products
+    where id = 'd4000000-0000-0000-0000-000000000004';
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'TEST 20A FAILED: pending owner deleted % products', n; end if;
+  if not exists (
+    select 1 from public.products
+      where id = 'd4000000-0000-0000-0000-000000000004'
+  ) then
+    raise exception 'TEST 20A FAILED: pending owner product disappeared';
+  end if;
+
+  delete from public.product_images
+    where product_id = 'd3000000-0000-0000-0000-000000000003';
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'TEST 20A FAILED: pending owner deleted % images', n; end if;
+
+  begin
+    perform public.adjust_product_stock(
+      'd3000000-0000-0000-0000-000000000003', -1, null);
+    raise exception 'TEST 20A FAILED: pending owner adjusted stock';
+  exception when insufficient_privilege then
+    null;
+  end;
+  raise notice 'TEST 20A PASSED: pending owner product/image/stock writes denied';
+end $$;
+
+set request.jwt.claim.sub = 'a1000000-0000-0000-0000-00000000000a';
+set request.jwt.claims = '{"sub":"a1000000-0000-0000-0000-00000000000a"}';
+do $$
+declare n int;
+begin
+  delete from public.products
+    where id = 'd2000000-0000-0000-0000-000000000002';
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'TEST 20B FAILED: active owner deleted % products', n; end if;
+  raise notice 'TEST 20B PASSED: active owner deletes own product';
 end $$;
 
 reset role;
+
+rollback;

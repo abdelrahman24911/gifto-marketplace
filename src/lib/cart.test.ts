@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   addToCart,
@@ -29,6 +29,107 @@ function item(overrides: Partial<CartItem> = {}): CartItem {
     ...overrides,
   };
 }
+
+function withStoredCart(raw: string): void {
+  vi.stubGlobal("window", {
+    localStorage: {
+      getItem: (key: string) => (key === CART_STORAGE_KEY ? raw : null),
+      setItem: () => {},
+    },
+    addEventListener: () => {},
+  });
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("readStoredCart validation", () => {
+  it("keeps valid items without changing quantities or prices", () => {
+    const valid = [
+      item({
+        priceMinor: 0,
+        stock: 0,
+        quantity: MAX_LINE_QUANTITY,
+        imagePath: "products/a.jpg",
+      }),
+      item({ productId: "p2", priceMinor: 17550, quantity: 2 }),
+    ];
+
+    withStoredCart(JSON.stringify(valid));
+
+    expect(readStoredCart()).toEqual(valid);
+  });
+
+  it("drops entries with missing or invalid product and vendor strings", () => {
+    const valid = item();
+    const malformed = [
+      { ...valid, productId: "" },
+      { ...valid, vendorId: 42 },
+      { ...valid, vendorName: "   " },
+      { ...valid, vendorSlug: null },
+      { ...valid, name: "" },
+      { ...valid, slug: false },
+      { ...valid, imagePath: 42 },
+    ];
+
+    withStoredCart(JSON.stringify([valid, ...malformed]));
+
+    expect(readStoredCart()).toEqual([valid]);
+  });
+
+  it("drops entries with negative, fractional, or out-of-range numbers", () => {
+    const valid = item();
+    const malformed = [
+      item({ productId: "p2", priceMinor: -1 }),
+      item({ productId: "p3", priceMinor: 1.5 }),
+      item({ productId: "p4", quantity: 0 }),
+      item({ productId: "p5", quantity: 1.5 }),
+      item({ productId: "p6", quantity: MAX_LINE_QUANTITY + 1 }),
+      item({ productId: "p7", stock: -1 }),
+      item({ productId: "p8", stock: 1.5 }),
+    ];
+
+    withStoredCart(JSON.stringify([valid, ...malformed]));
+
+    expect(readStoredCart()).toEqual([valid]);
+  });
+
+  it("drops entries with non-finite numbers", () => {
+    const valid = item();
+    const raw = `[${JSON.stringify(valid)},${JSON.stringify({
+      ...valid,
+      productId: "p2",
+    }).replace('"priceMinor":15000', '"priceMinor":1e999')}]`;
+
+    withStoredCart(raw);
+
+    expect(readStoredCart()).toEqual([valid]);
+  });
+
+  it("returns an empty cart for malformed or non-array storage", () => {
+    withStoredCart("not-json");
+    expect(readStoredCart()).toEqual([]);
+
+    withStoredCart(JSON.stringify({ items: [] }));
+    expect(readStoredCart()).toEqual([]);
+  });
+
+  it("deduplicates product ids and caps stored lines", () => {
+    const first = item({ productId: "p1", priceMinor: 100 });
+    const duplicate = item({ productId: "p1", priceMinor: 999 });
+    const extras = Array.from({ length: MAX_CART_LINES + 5 }, (_, index) =>
+      item({ productId: `extra-${index}` }),
+    );
+
+    withStoredCart(JSON.stringify([first, duplicate, ...extras]));
+
+    const stored = readStoredCart();
+    expect(stored).toHaveLength(MAX_CART_LINES);
+    expect(stored[0]).toEqual(first);
+    expect(stored.filter((i) => i.productId === "p1")).toHaveLength(1);
+  });
+});
 
 describe("addToCart", () => {
   it("appends a new line", () => {

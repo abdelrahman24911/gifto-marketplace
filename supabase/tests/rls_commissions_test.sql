@@ -1,10 +1,21 @@
 -- Gifto Phase 6 verification: commission ledger, reversals and settlements.
--- Runs after migrations 1–6 against a bare `supabase/postgres` container.
+-- Runs after all migrations (1–18) against a bare `supabase/postgres` container.
 -- Any failure RAISEs and, with `psql -v ON_ERROR_STOP=1`, aborts non-zero.
 --
 -- Order ids are carried between blocks in session GUCs so they survive SET ROLE.
 
 \set ON_ERROR_STOP on
+
+-- Safety: this suite is destructive. Require an explicitly disposable database
+-- and roll everything back even when the suite succeeds.
+do $$
+begin
+  if current_setting('gifto.rls_test_disposable', true) is distinct from 'yes' then
+    raise exception 'Refusing to run destructive RLS tests. Start a disposable database and SET gifto.rls_test_disposable = ''yes'' in the same psql session.';
+  end if;
+end $$;
+
+begin;
 
 -- ---------------------------------------------------------------------------
 -- Seed (as superuser; bypasses RLS)
@@ -56,7 +67,8 @@ begin
      or has_table_privilege('anon', 'public.settlements', 'select')
      or has_table_privilege('anon', 'public.settlement_lines', 'select')
      or has_function_privilege('anon', 'public.create_settlement(uuid,text)', 'execute')
-     or has_function_privilege('anon', 'public.mark_settlement_paid(uuid)', 'execute') then
+     or has_function_privilege('anon', 'public.mark_settlement_paid(uuid)', 'execute')
+     or has_function_privilege('anon', 'public.void_settlement(uuid,text)', 'execute') then
     raise exception 'TEST 1 FAILED: anon holds privileges on the commission group';
   end if;
 
@@ -65,7 +77,10 @@ begin
      or has_table_privilege('authenticated', 'public.commission_entries', 'delete')
      or has_table_privilege('authenticated', 'public.settlements', 'insert')
      or has_table_privilege('authenticated', 'public.settlements', 'update')
-     or has_table_privilege('authenticated', 'public.settlement_lines', 'insert') then
+     or has_table_privilege('authenticated', 'public.settlements', 'delete')
+     or has_table_privilege('authenticated', 'public.settlement_lines', 'insert')
+     or has_table_privilege('authenticated', 'public.settlement_lines', 'update')
+     or has_table_privilege('authenticated', 'public.settlement_lines', 'delete') then
     raise exception 'TEST 1 FAILED: authenticated can write the ledger directly';
   end if;
 
@@ -326,7 +341,13 @@ end $$;
 set request.jwt.claim.sub = 'c3110000-0000-0000-0000-000000000001';
 set request.jwt.claims = '{"sub":"c3110000-0000-0000-0000-000000000001"}';
 do $$
-declare v_sid uuid; v_total int; v_lines int; v_paid_at timestamptz;
+declare
+  v_sid        uuid;
+  v_total      int;
+  v_lines      int;
+  v_paid_at    timestamptz;
+  v_created_by uuid;
+  v_paid_by    uuid;
 begin
   -- shop A has only a reversed entry -> nothing to settle
   begin
@@ -339,12 +360,17 @@ begin
   v_sid := public.create_settlement('41100000-0000-0000-0000-000000000002');
   perform set_config('gifto_test.comm_settlement_id', v_sid::text, false);
 
-  select total_minor into v_total from public.settlements where id = v_sid;
+  select total_minor, created_by into v_total, v_created_by
+    from public.settlements where id = v_sid;
   select count(*), coalesce(sum(amount_minor), 0) into v_lines, v_total
     from public.settlement_lines where settlement_id = v_sid;
 
   if v_lines <> 1 or v_total <> 1125 then
     raise exception 'TEST 8 FAILED: % lines, total %', v_lines, v_total;
+  end if;
+
+  if v_created_by is distinct from 'c3110000-0000-0000-0000-000000000001' then
+    raise exception 'TEST 8 FAILED: created_by was not stamped';
   end if;
 
   begin
@@ -353,11 +379,15 @@ begin
     raise exception 'TEST 8 FAILED: admin could not mark paid: %', sqlerrm;
   end;
 
-  select paid_at into v_paid_at from public.settlements where id = v_sid;
+  select paid_at, paid_by into v_paid_at, v_paid_by
+    from public.settlements where id = v_sid;
   if v_paid_at is null then
     raise exception 'TEST 8 FAILED: paid_at not stamped';
   end if;
-  raise notice 'TEST 8 PASSED: admin settled a shop''s earned commission and paid it';
+  if v_paid_by is distinct from 'c3110000-0000-0000-0000-000000000001' then
+    raise exception 'TEST 8 FAILED: paid_by was not stamped';
+  end if;
+  raise notice 'TEST 8 PASSED: admin settled a shop''s earned commission, with audit actors';
 end $$;
 
 -- ---------------------------------------------------------------------------
@@ -463,4 +493,269 @@ begin
   end;
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST 12: suspending a vendor removes commission/settlement read access
+-- ---------------------------------------------------------------------------
+set role authenticated;
+set request.jwt.claim.sub = 'c3110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c3110000-0000-0000-0000-000000000001"}';
+update public.vendors set status = 'suspended'
+  where id = '41100000-0000-0000-0000-000000000002';
+
+set request.jwt.claim.sub = 'c2110000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"c2110000-0000-0000-0000-000000000003"}';
+do $$
+declare v_n int;
+begin
+  select count(*) into v_n from public.commission_entries;
+  if v_n <> 0 then
+    raise exception 'TEST 12 FAILED: suspended vendor sees % commission rows', v_n;
+  end if;
+  select count(*) into v_n from public.settlements;
+  if v_n <> 0 then
+    raise exception 'TEST 12 FAILED: suspended vendor sees % settlements', v_n;
+  end if;
+  select count(*) into v_n from public.settlement_lines;
+  if v_n <> 0 then
+    raise exception 'TEST 12 FAILED: suspended vendor sees % settlement lines', v_n;
+  end if;
+  if public.is_vendor_active_member('41100000-0000-0000-0000-000000000002') then
+    raise exception 'TEST 12 FAILED: suspended vendor is an active member';
+  end if;
+  raise notice 'TEST 12 PASSED: suspended vendor commission/settlement reads denied';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 13: a shop cannot have two open settlements at once
+-- ---------------------------------------------------------------------------
+set role authenticated;
+set request.jwt.claim.sub = 'c3110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c3110000-0000-0000-0000-000000000001"}';
+do $$
+begin
+  if not exists (
+    select 1 from pg_indexes
+     where schemaname = 'public'
+       and indexname = 'settlements_one_open_per_vendor'
+  ) then
+    raise exception 'TEST 13 FAILED: one-open settlement index is missing';
+  end if;
+
+  begin
+    perform public.create_settlement('41100000-0000-0000-0000-000000000002');
+    raise exception 'TEST 13 FAILED: opened a second settlement for one shop';
+  exception when check_violation then
+    raise notice 'TEST 13 PASSED: one open settlement per shop is enforced';
+  end;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 14: voiding keeps history, requires a reason and preserves allocation
+-- ---------------------------------------------------------------------------
+set role authenticated;
+set request.jwt.claim.sub = 'c2110000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"c2110000-0000-0000-0000-000000000003"}';
+do $$
+declare v_sid uuid;
+begin
+  v_sid := current_setting('gifto_test.comm_settlement3_id')::uuid;
+  begin
+    perform public.void_settlement(v_sid, 'Vendor should not be able to void');
+    raise exception 'TEST 14 FAILED: a vendor voided a settlement';
+  exception when insufficient_privilege then
+    null;
+  end;
+end $$;
+
+set request.jwt.claim.sub = 'c3110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c3110000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_sid            uuid;
+  v_paid_sid       uuid;
+  v_new_sid        uuid;
+  v_original_total int;
+  v_original_lines int;
+  v_line_id        uuid;
+  v_released_entry uuid;
+  v_status         public.settlement_status;
+  v_voided         timestamptz;
+  v_voided_by      uuid;
+  v_void_reason    text;
+  v_active         int;
+  v_released       int;
+begin
+  v_sid := current_setting('gifto_test.comm_settlement3_id')::uuid;
+  v_paid_sid := current_setting('gifto_test.comm_settlement_id')::uuid;
+
+  begin
+    perform public.void_settlement(v_sid, '   ');
+    raise exception 'TEST 14 FAILED: a blank void reason was accepted';
+  exception when invalid_parameter_value then
+    null;
+  end;
+
+  begin
+    perform public.void_settlement(v_paid_sid, 'Paid batches are immutable');
+    raise exception 'TEST 14 FAILED: a paid settlement was voided';
+  exception when check_violation then
+    null;
+  end;
+
+  select total_minor into v_original_total
+    from public.settlements where id = v_sid;
+  select count(*) into v_original_lines
+    from public.settlement_lines where settlement_id = v_sid;
+  select id, commission_entry_id into v_line_id, v_released_entry
+    from public.settlement_lines where settlement_id = v_sid
+   order by id limit 1;
+
+  if v_original_lines <> 1 then
+    raise exception 'TEST 14 FAILED: expected one pre-void line, found %', v_original_lines;
+  end if;
+
+  perform public.void_settlement(v_sid, '  Wrong payout week  ');
+
+  select status, voided_at, voided_by, void_reason
+    into v_status, v_voided, v_voided_by, v_void_reason
+    from public.settlements where id = v_sid;
+
+  if v_status <> 'voided' then
+    raise exception 'TEST 14 FAILED: status=% after void', v_status;
+  end if;
+  if v_voided is null or v_voided_by is distinct from 'c3110000-0000-0000-0000-000000000001' then
+    raise exception 'TEST 14 FAILED: void actor/timestamp was not stamped';
+  end if;
+  if v_void_reason <> 'Wrong payout week' then
+    raise exception 'TEST 14 FAILED: void reason was not trimmed/stored: %', v_void_reason;
+  end if;
+
+  if (select total_minor from public.settlements where id = v_sid) <> v_original_total then
+    raise exception 'TEST 14 FAILED: void changed the original settlement total';
+  end if;
+
+  select count(*) filter (where released_at is null),
+         count(*) filter (where released_at is not null)
+    into v_active, v_released
+    from public.settlement_lines
+   where settlement_id = v_sid;
+
+  if v_active <> 0 or v_released <> 1 then
+    raise exception 'TEST 14 FAILED: void active=% released=% (expected 0/1)', v_active, v_released;
+  end if;
+
+  if not exists (
+    select 1 from public.settlement_lines
+     where id = v_line_id
+       and settlement_id = v_sid
+       and released_by = 'c3110000-0000-0000-0000-000000000001'
+       and release_reason = 'Wrong payout week'
+  ) then
+    raise exception 'TEST 14 FAILED: released line audit/history was not preserved';
+  end if;
+
+  begin
+    perform public.mark_settlement_paid(v_sid);
+    raise exception 'TEST 14 FAILED: a voided settlement was marked paid';
+  exception when check_violation then
+    null;
+  end;
+
+  begin
+    perform public.void_settlement(v_sid, 'Voided twice');
+    raise exception 'TEST 14 FAILED: voided the same settlement twice';
+  exception when check_violation then
+    null;
+  end;
+
+  -- The released allocation no longer blocks the entry, so it can be batched
+  -- again while the original released line remains in history.
+  v_new_sid := public.create_settlement('41100000-0000-0000-0000-000000000002');
+  perform set_config('gifto_test.comm_settlement4_id', v_new_sid::text, false);
+
+  if v_new_sid = v_sid then
+    raise exception 'TEST 14 FAILED: re-settlement reused the voided batch';
+  end if;
+
+  select count(*) filter (where released_at is null),
+         count(*) filter (where released_at is not null)
+    into v_active, v_released
+    from public.settlement_lines
+   where commission_entry_id = v_released_entry;
+
+  if v_active <> 1 or v_released <> 1 then
+    raise exception 'TEST 14 FAILED: re-settle active=% released=% (expected 1/1)', v_active, v_released;
+  end if;
+
+  if (select count(*) from public.settlement_lines where settlement_id = v_sid) <> v_original_lines then
+    raise exception 'TEST 14 FAILED: voided batch lost its preserved lines';
+  end if;
+
+  raise notice 'TEST 14 PASSED: void preserves lines, requires a reason and allows one replacement allocation';
+end $$;
+
 reset role;
+do $$
+declare
+  v_sid   uuid;
+  v_entry uuid;
+begin
+  v_sid := current_setting('gifto_test.comm_settlement3_id')::uuid;
+  select commission_entry_id into v_entry
+    from public.settlement_lines where settlement_id = v_sid;
+
+  begin
+    insert into public.settlement_lines (settlement_id, commission_entry_id, amount_minor)
+    values (v_sid, v_entry, 1125);
+    raise exception 'TEST 14 FAILED: two active allocations were accepted for one entry';
+  exception when unique_violation then
+    raise notice 'TEST 14 PASSED: partial unique index blocks duplicate active allocations';
+  end;
+end $$;
+
+set role authenticated;
+set request.jwt.claim.sub = 'c3110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c3110000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_sid    uuid;
+  v_ov     uuid;
+  v_entry  uuid;
+  v_status public.commission_status;
+begin
+  v_sid := current_setting('gifto_test.comm_settlement4_id')::uuid;
+  perform public.void_settlement(v_sid, 'Replacement batch opened by mistake');
+
+  select ov.id into v_ov
+    from public.order_vendors ov
+   where ov.order_id = current_setting('gifto_test.comm_order3_id')::uuid
+     and ov.vendor_id = '41100000-0000-0000-0000-000000000002';
+  select ce.id into v_entry
+    from public.commission_entries ce
+   where ce.order_vendor_id = v_ov;
+
+  update public.order_vendors set status = 'returned' where id = v_ov;
+
+  select status into v_status
+    from public.commission_entries where id = v_entry;
+
+  if v_status <> 'reversed' then
+    raise exception 'TEST 15 FAILED: released commission was not reversed (status=%)', v_status;
+  end if;
+
+  if exists (
+    select 1 from public.settlement_lines
+     where commission_entry_id = v_entry and released_at is null
+  ) then
+    raise exception 'TEST 15 FAILED: a returned entry still has an active allocation';
+  end if;
+
+  if (select count(*) from public.settlement_lines
+       where commission_entry_id = v_entry and released_at is not null) <> 2 then
+    raise exception 'TEST 15 FAILED: released-line history was not preserved across re-settlement';
+  end if;
+
+  raise notice 'TEST 15 PASSED: fully released commissions can still be reversed on return';
+end $$;
+
+rollback;

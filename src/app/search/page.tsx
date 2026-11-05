@@ -4,6 +4,7 @@ import { ProductCard } from "@/components/product-card";
 import { SearchForm } from "@/components/search-form";
 import { Container, EmptyState, Eyebrow } from "@/components/ui/section";
 import { getCategories, searchProducts } from "@/lib/catalog";
+import { parseEgpToMinor } from "@/lib/money";
 
 export const metadata = {
   title: "Search gifts",
@@ -25,20 +26,12 @@ const PRICE_FILTERS = [
   { label: "EGP 500 and up", min: "500", max: null },
 ] as const;
 
-/** Parse an EGP amount from the URL into integer piastres, or null if invalid. */
-function parseEgpToMinor(value?: string): number | null {
-  if (!value) return null;
-  const amount = Number(value);
-  if (!Number.isFinite(amount) || amount < 0) return null;
-  return Math.round(amount * 100);
-}
-
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const params = await searchParams;
   const q = params.q?.trim() ?? "";
   const categorySlug = params.category?.trim() || undefined;
-  const minMinor = parseEgpToMinor(params.min);
-  const maxMinor = parseEgpToMinor(params.max);
+  const minMinor = parseEgpToMinor(params.min ?? "");
+  const maxMinor = parseEgpToMinor(params.max ?? "");
 
   const [categories, result] = await Promise.all([
     getCategories(),

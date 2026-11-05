@@ -2,17 +2,21 @@
  * Hand-written type definitions for the Gifto schema.
  *
  * Phase 1 tables: profiles, vendors, vendor_members, vendor_status_history.
- * Phase 2 RPC: apply_as_vendor (vendor self-onboarding); view: public_vendors.
+ * Phase 2 view: public_vendors.
  * Phase 3 tables: categories, products, product_images; helper: is_public_vendor.
  * Phase 4 tables: orders, order_vendors, order_items, inventory_movements;
  *                 RPCs: place_order, cancel_order.
  * Phase 6 tables: commission_entries, settlements, settlement_lines;
  *                 RPCs: create_settlement, mark_settlement_paid.
+ * Phase 14: managed vendor onboarding; self-onboarding RPC removed.
+ * Phase 15: active-only policies, stock-column grants, create_vendor_for_owner.
+ * Phase 16: settlement audit actors, voiding and one-open-per-vendor uniqueness.
+ * Phase 17/18: explicit void state, preserved/released settlement lines.
  *
  * Regenerate from the live database once the Gifto project exists:
  *   supabase gen types typescript --project-id <ref> > src/lib/supabase/database.types.ts
- * (Keeps this file and the real schema in sync; the placeholders below are
- * intentionally minimal and only cover Phases 1–6.)
+ * (Keeps this file and the real schema in sync; the placeholders below cover
+ * Phases 1–18.)
  */
 export type Json =
   | string
@@ -34,7 +38,7 @@ export type OrderStatus =
   | "returned"
   | "partially_completed";
 export type CommissionStatus = "earned" | "reversed";
-export type SettlementStatus = "open" | "paid";
+export type SettlementStatus = "open" | "paid" | "voided";
 
 /** The Storage bucket reserved for catalog media (upload arrives later). */
 export const PRODUCT_IMAGES_BUCKET = "product-images";
@@ -651,6 +655,11 @@ export type Database = {
           created_at: string;
           updated_at: string;
           paid_at: string | null;
+          created_by: string | null;
+          paid_by: string | null;
+          voided_by: string | null;
+          voided_at: string | null;
+          void_reason: string | null;
         };
         Insert: {
           id?: string;
@@ -662,6 +671,11 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
           paid_at?: string | null;
+          created_by?: string | null;
+          paid_by?: string | null;
+          voided_by?: string | null;
+          voided_at?: string | null;
+          void_reason?: string | null;
         };
         Update: {
           id?: string;
@@ -673,6 +687,11 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
           paid_at?: string | null;
+          created_by?: string | null;
+          paid_by?: string | null;
+          voided_by?: string | null;
+          voided_at?: string | null;
+          void_reason?: string | null;
         };
         Relationships: [
           {
@@ -680,6 +699,27 @@ export type Database = {
             columns: ["vendor_id"];
             isOneToOne: false;
             referencedRelation: "vendors";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "settlements_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "settlements_paid_by_fkey";
+            columns: ["paid_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "settlements_voided_by_fkey";
+            columns: ["voided_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
         ];
@@ -692,6 +732,9 @@ export type Database = {
           amount_minor: number;
           currency: string;
           created_at: string;
+          released_at: string | null;
+          released_by: string | null;
+          release_reason: string | null;
         };
         Insert: {
           id?: string;
@@ -700,6 +743,9 @@ export type Database = {
           amount_minor: number;
           currency?: string;
           created_at?: string;
+          released_at?: string | null;
+          released_by?: string | null;
+          release_reason?: string | null;
         };
         Update: {
           id?: string;
@@ -708,6 +754,9 @@ export type Database = {
           amount_minor?: number;
           currency?: string;
           created_at?: string;
+          released_at?: string | null;
+          released_by?: string | null;
+          release_reason?: string | null;
         };
         Relationships: [
           {
@@ -720,8 +769,15 @@ export type Database = {
           {
             foreignKeyName: "settlement_lines_commission_entry_id_fkey";
             columns: ["commission_entry_id"];
-            isOneToOne: true;
+            isOneToOne: false;
             referencedRelation: "commission_entries";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "settlement_lines_released_by_fkey";
+            columns: ["released_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
         ];
@@ -743,17 +799,6 @@ export type Database = {
       };
     };
     Functions: {
-      apply_as_vendor: {
-        Args: {
-          p_name: string;
-          p_description?: string | null;
-          p_city?: string | null;
-          p_governorate?: string | null;
-          p_phone?: string | null;
-          p_email?: string | null;
-        };
-        Returns: string;
-      };
       is_public_vendor: {
         Args: { p_vendor_id: string };
         Returns: boolean;
@@ -819,8 +864,25 @@ export type Database = {
         Args: { p_vendor_id: string; p_note?: string | null };
         Returns: string;
       };
+      create_vendor_for_owner: {
+        Args: {
+          p_name: string;
+          p_description: string | null;
+          p_city: string | null;
+          p_governorate: string | null;
+          p_contact_phone: string | null;
+          p_contact_email: string;
+          p_commission_rate: number;
+          p_profile_id: string;
+        };
+        Returns: string;
+      };
       mark_settlement_paid: {
         Args: { p_settlement_id: string };
+        Returns: undefined;
+      };
+      void_settlement: {
+        Args: { p_settlement_id: string; p_reason: string };
         Returns: undefined;
       };
       adjust_product_stock: {

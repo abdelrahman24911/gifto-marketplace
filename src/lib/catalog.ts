@@ -9,8 +9,6 @@ import { createClient } from "@/lib/supabase/server";
  * empty result and the UI renders an empty state.
  */
 
-type Supabase = Awaited<ReturnType<typeof createClient>>;
-
 export type CatalogProduct = {
   id: string;
   name: string;
@@ -43,6 +41,8 @@ export type CatalogShop = {
 
 type ImageRow = { path: string; alt: string | null; position: number };
 
+type VendorRow = { name: string; slug: string };
+
 type ProductRow = {
   id: string;
   name: string;
@@ -50,44 +50,22 @@ type ProductRow = {
   price_minor: number;
   stock: number;
   vendor_id: string;
+  vendor?: VendorRow | VendorRow[] | null;
   category?: { name: string; slug: string } | { name: string; slug: string }[] | null;
   product_images: ImageRow[] | null;
 };
 
 const PRODUCT_SELECT =
-  "id, name, slug, price_minor, stock, vendor_id, category:categories(name, slug), product_images(path, alt, position)";
+  "id, name, slug, price_minor, stock, vendor_id, vendor:public_vendors!inner(name, slug), category:categories(name, slug), product_images(path, alt, position)";
 
 function firstOrSelf<T>(value: T | T[] | null | undefined): T | null {
   if (Array.isArray(value)) return value[0] ?? null;
   return value ?? null;
 }
 
-async function vendorsById(
-  supabase: Supabase,
-  ids: string[],
-): Promise<Map<string, { name: string; slug: string }>> {
-  const unique = [...new Set(ids)];
-  if (unique.length === 0) return new Map();
-
-  const { data } = await supabase
-    .from("public_vendors")
-    .select("id, name, slug")
-    .in("id", unique);
-
-  return new Map((data ?? []).map((v) => [v.id, { name: v.name, slug: v.slug }]));
-}
-
-async function toCatalogProducts(
-  supabase: Supabase,
-  rows: ProductRow[],
-): Promise<CatalogProduct[]> {
-  const vendors = await vendorsById(
-    supabase,
-    rows.map((row) => row.vendor_id),
-  );
-
+function toCatalogProducts(rows: ProductRow[]): CatalogProduct[] {
   return rows.flatMap((row) => {
-    const vendor = vendors.get(row.vendor_id);
+    const vendor = firstOrSelf(row.vendor);
     if (!vendor) return [];
 
     const images = [...(row.product_images ?? [])].sort(
@@ -160,10 +138,11 @@ export async function loadProductsByCategory(
     .eq("category_id", categoryId)
     .eq("status", "active")
     .order("created_at", { ascending: false })
-    .limit(limit);
+    .limit(limit)
+    .returns<ProductRow[]>();
 
   if (error) return { ok: false };
-  return { ok: true, data: await toCatalogProducts(supabase, data ?? []) };
+  return { ok: true, data: toCatalogProducts(data ?? []) };
 }
 
 export async function getCategories(): Promise<CatalogCategory[]> {
@@ -211,10 +190,11 @@ export async function loadProductsByShop(
     .eq("vendor_id", vendorId)
     .eq("status", "active")
     .order("created_at", { ascending: false })
-    .limit(limit);
+    .limit(limit)
+    .returns<ProductRow[]>();
 
   if (error) return { ok: false };
-  return { ok: true, data: await toCatalogProducts(supabase, data ?? []) };
+  return { ok: true, data: toCatalogProducts(data ?? []) };
 }
 
 export async function getShops(limit?: number): Promise<CatalogShop[]> {
@@ -230,9 +210,10 @@ export async function getNewArrivals(limit = 8): Promise<CatalogProduct[]> {
     .select(PRODUCT_SELECT)
     .eq("status", "active")
     .order("created_at", { ascending: false })
-    .limit(limit);
+    .limit(limit)
+    .returns<ProductRow[]>();
 
-  return toCatalogProducts(supabase, data ?? []);
+  return toCatalogProducts(data ?? []);
 }
 
 /** Active products within a price band (integer piastres). */
@@ -252,8 +233,8 @@ export async function getProductsByBudget(
   if (minMinor !== null) query = query.gte("price_minor", minMinor);
   if (maxMinor !== null) query = query.lte("price_minor", maxMinor);
 
-  const { data } = await query;
-  return toCatalogProducts(supabase, data ?? []);
+  const { data } = await query.returns<ProductRow[]>();
+  return toCatalogProducts(data ?? []);
 }
 
 export type SearchParams = {
@@ -295,7 +276,7 @@ export async function searchProducts({
     .select(PRODUCT_SELECT)
     .eq("status", "active")
     .order("created_at", { ascending: false })
-    .limit(limit ?? 48);
+    .limit(limit);
 
   const term = q?.trim();
   if (term) query = query.ilike("name", `%${term}%`);
@@ -303,8 +284,8 @@ export async function searchProducts({
   if (typeof minMinor === "number") query = query.gte("price_minor", minMinor);
   if (typeof maxMinor === "number") query = query.lte("price_minor", maxMinor);
 
-  const { data, error } = await query;
+  const { data, error } = await query.returns<ProductRow[]>();
   if (error) return { ok: false };
 
-  return { ok: true, products: await toCatalogProducts(supabase, data ?? []) };
+  return { ok: true, products: toCatalogProducts(data ?? []) };
 }

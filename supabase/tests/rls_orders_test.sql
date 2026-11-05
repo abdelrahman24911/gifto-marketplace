@@ -1,11 +1,22 @@
 -- Gifto Phase 4 verification: orders, checkout split, stock and fulfilment.
--- Runs after migrations 1–13 against a bare `supabase/postgres` container.
+-- Runs after all migrations (1–18) against a bare `supabase/postgres` container.
 -- Any failure RAISEs and, with `psql -v ON_ERROR_STOP=1`, aborts non-zero.
 --
 -- The order id produced by `place_order` is carried between blocks in a session
 -- GUC so it survives SET ROLE.
 
 \set ON_ERROR_STOP on
+
+-- Safety: this suite is destructive. Require an explicitly disposable database
+-- and roll everything back even when the suite succeeds.
+do $$
+begin
+  if current_setting('gifto.rls_test_disposable', true) is distinct from 'yes' then
+    raise exception 'Refusing to run destructive RLS tests. Start a disposable database and SET gifto.rls_test_disposable = ''yes'' in the same psql session.';
+  end if;
+end $$;
+
+begin;
 
 -- ---------------------------------------------------------------------------
 -- Seed (as superuser; bypasses RLS)
@@ -29,6 +40,7 @@ insert into auth.users (id, email) values
   ('21100000-0000-0000-0000-000000000001', 'owner-a@orders.gifto.test'),
   ('21100000-0000-0000-0000-000000000002', 'staff-a@orders.gifto.test'),
   ('21100000-0000-0000-0000-000000000003', 'owner-b@orders.gifto.test'),
+  ('21100000-0000-0000-0000-000000000004', 'owner-p@orders.gifto.test'),
   ('31100000-0000-0000-0000-000000000001', 'admin@orders.gifto.test');
 
 alter table public.profiles disable trigger profiles_protect_platform_admin;
@@ -46,7 +58,8 @@ insert into public.vendors (id, name, slug, status, commission_rate) values
 insert into public.vendor_members (vendor_id, profile_id, role) values
   ('41100000-0000-0000-0000-000000000001', '21100000-0000-0000-0000-000000000001', 'owner'),
   ('41100000-0000-0000-0000-000000000001', '21100000-0000-0000-0000-000000000002', 'staff'),
-  ('41100000-0000-0000-0000-000000000002', '21100000-0000-0000-0000-000000000003', 'owner');
+  ('41100000-0000-0000-0000-000000000002', '21100000-0000-0000-0000-000000000003', 'owner'),
+  ('41100000-0000-0000-0000-000000000003', '21100000-0000-0000-0000-000000000004', 'owner');
 
 insert into public.products (id, vendor_id, name, slug, price_minor, stock, status) values
   ('51100000-0000-0000-0000-000000000001', '41100000-0000-0000-0000-000000000001',
@@ -293,7 +306,7 @@ end $$;
 -- ---------------------------------------------------------------------------
 reset role;
 do $$
-declare v_ov uuid;
+declare v_ov uuid; v_ov_p uuid;
 begin
   insert into public.orders (
     id, user_id, status, subtotal_minor, total_minor,
@@ -321,9 +334,48 @@ begin
     v_ov, '51100000-0000-0000-0000-000000000004', 'B One', 'b-one', 7500, 1, 7500
   );
 
+  -- A pending shop's historical order. The shop must not read its PII.
+  insert into public.orders (
+    id, user_id, status, subtotal_minor, total_minor,
+    recipient_name, contact_phone, address_line, city, governorate
+  ) values (
+    '61100000-0000-0000-0000-000000000002',
+    '11100000-0000-0000-0000-000000000002',
+    'placed', 5000, 5000,
+    'Pending Buyer', '01007776655', '5 Pending Street', 'Giza', 'Giza'
+  );
+
+  insert into public.order_vendors (
+    order_id, vendor_id, status, subtotal_minor, commission_rate
+  ) values (
+    '61100000-0000-0000-0000-000000000002',
+    '41100000-0000-0000-0000-000000000003',
+    'placed', 5000, 0.1200
+  )
+  returning id into v_ov_p;
+
+  insert into public.order_items (
+    order_vendor_id, product_id, product_name, product_slug,
+    unit_price_minor, quantity, line_total_minor
+  ) values (
+    v_ov_p, '51100000-0000-0000-0000-000000000005', 'P One', 'p-one', 5000, 1, 5000
+  );
+
+  insert into public.inventory_movements (
+    product_id, delta, reason, order_id
+  ) values (
+    '51100000-0000-0000-0000-000000000005', -1, 'order_placed',
+    '61100000-0000-0000-0000-000000000002'
+  );
+
   perform set_config(
     'gifto_test.other_order_id',
     '61100000-0000-0000-0000-000000000001',
+    false
+  );
+  perform set_config(
+    'gifto_test.pending_order_id',
+    '61100000-0000-0000-0000-000000000002',
     false
   );
 end $$;
@@ -369,6 +421,39 @@ begin
   end if;
   raise notice 'TEST 6b PASSED: shop B reads every order that holds its suborders';
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 6c: a pending shop cannot read order, suborder, item, stock or PII data
+-- ---------------------------------------------------------------------------
+set request.jwt.claim.sub = '21100000-0000-0000-0000-000000000004';
+set request.jwt.claims = '{"sub":"21100000-0000-0000-0000-000000000004"}';
+do $$
+declare v_oid uuid; v_seen int;
+begin
+  v_oid := current_setting('gifto_test.pending_order_id')::uuid;
+
+  select count(*) into v_seen from public.orders where id = v_oid;
+  if v_seen <> 0 then raise exception 'TEST 6c FAILED: pending shop saw % orders', v_seen; end if;
+
+  select count(*) into v_seen from public.order_vendors where order_id = v_oid;
+  if v_seen <> 0 then raise exception 'TEST 6c FAILED: pending shop saw % suborders', v_seen; end if;
+
+  select count(*) into v_seen from public.order_items i
+    join public.order_vendors ov on ov.id = i.order_vendor_id
+   where ov.order_id = v_oid;
+  if v_seen <> 0 then raise exception 'TEST 6c FAILED: pending shop saw % items', v_seen; end if;
+
+  select count(*) into v_seen from public.inventory_movements where order_id = v_oid;
+  if v_seen <> 0 then raise exception 'TEST 6c FAILED: pending shop saw % movements', v_seen; end if;
+
+  if public.is_vendor_active_member('41100000-0000-0000-0000-000000000003') then
+    raise exception 'TEST 6c FAILED: pending shop is an active member';
+  end if;
+  raise notice 'TEST 6c PASSED: pending shop order/PII/stock reads denied';
+end $$;
+
+set request.jwt.claim.sub = '21100000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"21100000-0000-0000-0000-000000000003"}';
 
 -- ---------------------------------------------------------------------------
 -- TEST 7: a vendor confirms its suborder; the parent order follows
@@ -827,3 +912,5 @@ begin
 end $$;
 
 reset role;
+
+rollback;

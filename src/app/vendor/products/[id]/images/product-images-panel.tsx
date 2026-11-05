@@ -12,7 +12,7 @@ import {
 type ImageRow = { path: string; alt: string | null; position: number };
 
 const buttonClass =
-  "rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60";
+  "rounded-md bg-berry px-4 py-2 text-sm font-medium text-paper transition-colors hover:bg-berry-deep disabled:cursor-not-allowed disabled:opacity-60";
 
 export function ProductImagesPanel({
   productId,
@@ -40,11 +40,11 @@ export function ProductImagesPanel({
       : "upload-pristine";
 
   return (
-    <section className="mt-8 rounded-2xl border border-zinc-200 p-5">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+    <section className="mt-8 rounded-2xl border border-line p-5">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-mute">
         Photos
       </h2>
-      <p className="mt-1 text-sm text-zinc-600">
+      <p className="mt-1 text-sm text-ink-soft">
         Up to 8 photos, 5 MB each. The first photo is shown on cards and in
         search. JPEG, PNG, WebP or AVIF.
       </p>
@@ -54,9 +54,9 @@ export function ProductImagesPanel({
           {sorted.map((image, index) => (
             <li
               key={image.path}
-              className="flex flex-col gap-2 rounded-xl border border-zinc-200 p-2"
+              className="flex flex-col gap-2 rounded-xl border border-line p-2"
             >
-              <div className="relative aspect-square overflow-hidden rounded-lg bg-zinc-100">
+              <div className="relative aspect-square overflow-hidden rounded-lg bg-paper-deep">
                 {baseUrl ? (
                   <Image
                     src={`${baseUrl}/storage/v1/object/public/product-images/${image.path}`}
@@ -67,9 +67,9 @@ export function ProductImagesPanel({
                   />
                 ) : null}
               </div>
-              <p className="truncate text-xs text-zinc-500">
+              <p className="truncate text-xs text-ink-mute">
                 {index === 0 ? (
-                  <span className="font-medium text-zinc-700">Primary</span>
+                  <span className="font-medium text-ink-soft">Primary</span>
                 ) : (
                   (image.alt ?? `Photo ${index + 1}`)
                 )}
@@ -90,7 +90,7 @@ export function ProductImagesPanel({
           ))}
         </ul>
       ) : (
-        <p className="mt-4 rounded-lg border border-dashed border-zinc-300 px-4 py-6 text-center text-sm text-zinc-500">
+        <p className="mt-4 rounded-lg border border-dashed border-line-strong px-4 py-6 text-center text-sm text-ink-mute">
           No photos yet — products with photos sell better.
         </p>
       )}
@@ -113,7 +113,7 @@ export function ProductImagesPanel({
           accept="image/jpeg,image/png,image/webp,image/avif"
           multiple
           required
-          className="block w-full text-sm text-zinc-700 file:mr-3 file:rounded-md file:border file:border-zinc-300 file:bg-white file:px-3 file:py-2 file:text-sm file:font-medium file:text-zinc-900 hover:file:bg-zinc-50"
+          className="block w-full text-sm text-ink-soft file:mr-3 file:rounded-md file:border file:border-line-strong file:bg-paper-soft file:px-3 file:py-2 file:text-sm file:font-medium file:text-ink hover:file:bg-paper-soft"
         />
         {uploadState && "error" in uploadState ? (
           <p

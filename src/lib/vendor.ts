@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
 
-import { requireUser } from "@/lib/auth";
+import { getRequestContext } from "@/lib/auth";
 
 import type { VendorRole, VendorStatus } from "@/lib/supabase/database.types";
 
-type ServerClient = Awaited<ReturnType<typeof requireUser>>["supabase"];
+type ServerClient = Awaited<ReturnType<typeof getRequestContext>>["supabase"];
 
 export type VendorAccess = {
   vendorId: string;
@@ -34,36 +34,26 @@ export type VendorSession = {
 export async function requireVendorRole(
   preferredVendorId?: string | null,
 ): Promise<VendorSession> {
-  const { supabase, user } = await requireUser();
+  const { supabase, user, memberships, isPlatformAdmin } =
+    await getRequestContext();
 
-  const [{ data: memberships }, { data: profile }] = await Promise.all([
-    supabase
-      .from("vendor_members")
-      .select("role, vendor:vendors(id, name, slug, status)")
-      .eq("profile_id", user.id)
-      .order("created_at", { ascending: true }),
-    supabase
-      .from("profiles")
-      .select("is_platform_admin")
-      .eq("id", user.id)
-      .maybeSingle(),
-  ]);
+  if (!user) redirect("/login");
 
-  const isPlatformAdmin = profile?.is_platform_admin ?? false;
-
-  const shops: VendorAccess[] = (memberships ?? []).flatMap((m) =>
-    m.vendor
-      ? [
-          {
-            vendorId: m.vendor.id,
-            vendorName: m.vendor.name,
-            vendorSlug: m.vendor.slug,
-            vendorStatus: m.vendor.status,
-            role: m.role,
-          },
-        ]
-      : [],
-  );
+  const shops: VendorAccess[] = memberships
+    .flatMap((m) =>
+      m.vendor
+        ? [
+            {
+              vendorId: m.vendor.id,
+              vendorName: m.vendor.name,
+              vendorSlug: m.vendor.slug,
+              vendorStatus: m.vendor.status,
+              role: m.role,
+            },
+          ]
+        : [],
+    )
+    .filter((shop) => shop.vendorStatus === "active");
 
   if (shops.length === 0) redirect("/account");
 

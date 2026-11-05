@@ -37,7 +37,7 @@ npm run dev       # local dev server
 npm run build     # production build (webpack; --webpack works everywhere)
 npm run build:turbo  # production build via Turbopack (needs native SWC bindings)
 npm run lint      # eslint
-npm test          # vitest run — unit tests (money, cart, cart-store, slugify, guest-order, orders)
+npm test          # vitest run — unit tests (money, cart, catalog, cart-store, slugify, site-url, guest-order, orders)
 ```
 
 On win32/x64 this machine cannot load the native SWC bindings, so Turbopack builds
@@ -61,11 +61,24 @@ supabase migration list   # verify applied migrations
 
 Only ever apply migrations to the **Gifto** project. Do not link or push to the FL Tase3 project.
 
-Migrations 1–13 are applied to the hosted Gifto project (`hqusykdyjpruysxezsrn`) and recorded in
-`supabase_migrations.schema_migrations`. Migration 11 adds guest COD checkout; migration 12
-hardens the order tables to least-privilege grants; migration 13 adds failed-COD-delivery handling
-and the parent-only `partially_completed` status. Pushing requires a valid CLI login (`supabase login`) and the project database password for
-`db push`.
+Migrations 1–19 are the verified hosted state for the Gifto project
+(`hqusykdyjpruysxezsrn`) and are recorded in `supabase_migrations.schema_migrations`. Migration 11
+adds guest COD checkout; migration 12 hardens the order tables to least-privilege grants; migration
+13 adds failed-COD-delivery handling and the parent-only `partially_completed` status. Migration 14
+adds managed vendor onboarding; 15 adds active-vendor hardening, stock-column grants, normalized
+email uniqueness and the atomic vendor-creation RPC; 16 adds settlement audit actors and
+one-open-per-vendor uniqueness; 17 adds the `voided` status and release/void metadata; 18 adds the
+append-only void lifecycle, active-allocation uniqueness and the reason-required void RPC; 19
+removes Supabase's default-ACL write grants from the `public_vendors` view so it stays read-only for
+API roles. Apply 14 through 19 in order. Pushing requires a valid CLI login (`supabase login`) and
+the project database password for `db push`.
+
+See `docs/PHASE_2A_MANAGED_VENDOR_ONBOARDING.md` for the managed onboarding setup, Supabase Auth
+redirect requirements, verification steps and rollback notes. Executable rollback files for
+migrations 14–18 live in `supabase/rollbacks/`; roll back 18 before 17, then 16, 15 and 14. Rollback
+18 and 17 refuse when void/release audit history exists, and rollback 16 refuses once the newer
+columns or void history exist. Migration 19 deliberately has no executable rollback: restoring the
+pre-19 broad write grants on the security-definer view would reopen the exposure.
 
 ### Verifying RLS locally
 
@@ -75,14 +88,18 @@ Eight suites exercise the policies against a disposable `supabase/postgres` cont
 way PostgREST does and abort non-zero on any failure. Each test sets both
 `request.jwt.claim.sub` and `request.jwt.claims`.
 
+The suites are destructive, so they refuse to run unless
+`gifto.rls_test_disposable = 'yes'` is set in the same psql session. Each suite opens a
+transaction and ends with `rollback`, even on success.
+
 | Suite | Coverage |
 |---|---|
 | `supabase/tests/rls_foundation_test.sql` | Phase 1: vendor privacy, membership, self-elevation guard, status history, `public_vendors` view |
-| `supabase/tests/rls_onboarding_test.sql` | Phase 2: profile provisioning, `apply_as_vendor`, approval, pending invisibility |
-| `supabase/tests/rls_catalog_test.sql` | Phase 3: categories, products, product images, slug derivation, vendor isolation |
-| `supabase/tests/rls_orders_test.sql` | Phase 4: checkout split/pricing/stock, suborder transition rules, privacy (buyer, each shop, admin), cancellation and restock |
-| `supabase/tests/rls_commissions_test.sql` | Phase 6: commission earned on delivery (rate × subtotal), idempotent delivery, return reversal, admin-only settlements, vendor isolation |
-| `supabase/tests/rls_inventory_test.sql` | Phase 7: manual stock adjustments are audited and role-gated, no direct movement writes, validation and history isolation |
+| `supabase/tests/rls_onboarding_test.sql` | Phase 2/14/15: profile provisioning, managed-only onboarding, active-vendor authorization, pending/suspended profile+roster denial, atomic service-role vendor creation, approval, pending invisibility |
+| `supabase/tests/rls_catalog_test.sql` | Phase 3/15: categories, products, product images, slug derivation, vendor isolation, stock-column denial, audited stock RPC, inactive catalog delete denial |
+| `supabase/tests/rls_orders_test.sql` | Phase 4/15: checkout split/pricing/stock, suborder transition rules, privacy (buyer, each shop, admin), pending-shop PII denial, cancellation and restock |
+| `supabase/tests/rls_commissions_test.sql` | Phase 6/15: commission earned on delivery (rate × subtotal), idempotent delivery, return reversal, admin-only settlements, vendor isolation, suspended-vendor denial |
+| `supabase/tests/rls_inventory_test.sql` | Phase 7/15: manual stock adjustments are audited and role-gated, no direct movement or stock-column writes, validation and history isolation |
 | `supabase/tests/rls_hardening_test.sql` | Phase 8: admin self-provisioning INSERT guard, dropped `is_vendor_staff`, last-owner demotion/deletion guard, service-role bootstrap path |
 | `supabase/tests/rls_guest_orders_test.sql` | Phase 11: guest COD checkout with no Auth user, service-role-only RPCs, catalog pricing, idempotent retries, token-gated confirmation, checkout quota, authenticated path unchanged |
 
@@ -97,7 +114,7 @@ Three details matter when running them:
    first migration can fail intermittently.
 3. **Run each suite against a fresh schema.** Some assertions use exact row counts
    (`anon sees 1 vendor`), so fixtures from another suite would make them fail. Reset
-    `public` and re-apply migrations 1–13 before each suite.
+    `public` and re-apply migrations 1–19 before each suite.
 
 ```bash
 docker run -d --name gifto-rls-test -e POSTGRES_PASSWORD=postgres \
@@ -114,7 +131,8 @@ for s in rls_foundation rls_onboarding rls_catalog rls_orders rls_commissions rl
   docker cp supabase/migrations gifto-rls-test:/tmp/migrations
   docker cp "supabase/tests/${s}_test.sql" gifto-rls-test:/tmp/$s.sql
   docker exec gifto-rls-test sh -c 'for f in /tmp/migrations/*.sql; do psql -q -v ON_ERROR_STOP=1 -U postgres -f "$f"; done'
-  docker exec gifto-rls-test psql -v ON_ERROR_STOP=1 -U postgres -f "/tmp/$s.sql"
+  docker exec gifto-rls-test psql -v ON_ERROR_STOP=1 -U postgres \
+    -c "set gifto.rls_test_disposable = 'yes';" -f "/tmp/$s.sql"
 done
 docker rm -f gifto-rls-test
 ```
@@ -147,20 +165,21 @@ Hosted projects already have storage — never apply the stub there. The
 `supabase/config.toml` uses non-default local ports (64320–64329, inspector 8183) so a
 local Gifto stack can run alongside other Supabase projects on the same machine.
 
-### Phase 2a schema (implemented — backend only)
+### Phase 2a schema (profile provisioning; managed onboarding in migration 14)
 
 - `public.handle_new_user()` + `on_auth_user_created` trigger on `auth.users` —
   auto-provisions a `public.profiles` row on signup (idempotent; never grants
   `is_platform_admin`).
-- `public.apply_as_vendor(p_name, p_description?, p_city?, p_governorate?, p_phone?, p_email?)`
-  — `SECURITY DEFINER` RPC, executable by `authenticated` only. Creates a `pending`
-  vendor (server-derived unique `slug`) and its `owner` membership in one transaction,
-  and relies on the status-history trigger for an audit row. It cannot set `status` or
-  `commission_rate`; the existing finance-field guard still covers later direct updates.
+- Migration 14 replaces self-service vendor applications with admin-managed onboarding.
+  It drops `public.apply_as_vendor(...)`, keeps `is_vendor_manager(uuid)` but restricts
+  it to `active` vendors, and leaves the existing membership/status-history/RLS model
+  intact. The invited owner is created via Supabase Auth and linked by an admin-created
+  `pending` vendor plus owner membership. The shop becomes operational only after a
+  platform admin activates it.
 
-Wired into the app: `/signup`, `/account` (application form), `/admin` (approval), and
-`/auth/callback`. A signup-triggered profile row is required for this to work, which is
-why `handle_new_user` ships in the same migration.
+Wired into the app: `/signup`, `/account` (shop status), `/admin` (create + invite +
+activate), `/auth/accept-invite`, and `/auth/callback`. A signup-triggered profile row is
+required for this to work, which is why `handle_new_user` ships with migration 2.
 
 Note when seeding a first platform admin: the trigger auto-creates the profile, so the
 row must be inserted through `auth.users` and the self-elevation guard temporarily
@@ -245,13 +264,21 @@ Running it through the API requires platform-admin — it is a development conve
   `amount_minor`, with a `CHECK (amount_minor = round(base_minor * rate))` so the ledger cannot be
   inconsistent. `status` is `earned` or `reversed`.
 - `settlements` / `settlement_lines` — a manual, admin-driven payout batch: an `open` settlement
-  collects a shop's `earned`, unsettled entries (one line each), then `mark_settlement_paid` records
-  the payout. An entry belongs to at most one settlement.
+  collects a shop's `earned`, unsettled entries, then `mark_settlement_paid` records the payout.
+  Entries can have historical lines in multiple settlements, but the partial unique index
+  `settlement_lines_one_active_per_entry` allows only one active (`released_at is null`) line.
+- Migration 16 adds `created_by`, `paid_by`, `voided_by` and `voided_at`, plus the one-open-settlement
+  unique index. Migrations 17-18 add the explicit `voided` status, `void_reason`, release metadata
+  (`released_at`, `released_by`, `release_reason`) and the append-only void lifecycle. Voiding keeps
+  the settlement and every line, releases the commission for a later batch, and requires an
+  administrator plus a 1-500 character reason. Paid settlements cannot be voided.
 - Triggers on `order_vendors.status`: `record_commission_on_delivery` earns commission on the
-  transition into `delivered` (D-08); `reverse_commission_on_return` reverses an unsettled entry on a
-  return, and raises `23514` if the entry is already part of a settlement.
-- RPCs `create_settlement(p_vendor_id, p_note?)` and `mark_settlement_paid(p_settlement_id)` —
-  platform-admin only (`42501`), `SECURITY DEFINER` with a pinned `search_path`.
+  transition into `delivered` (D-08); `reverse_commission_on_return` reverses an entry with no active
+  settlement line on a return, and raises `23514` while an active allocation exists. Fully released
+  history does not block a return reversal.
+- RPCs `create_settlement(p_vendor_id, p_note?)`, `mark_settlement_paid(p_settlement_id)` and
+  `void_settlement(p_settlement_id, p_reason)` — platform-admin only (`42501`), `SECURITY DEFINER`
+  with a pinned `search_path`.
 - RLS: vendor members read only their own entries/settlements/lines; platform admins read everything;
   there is **no** `INSERT`/`UPDATE`/`DELETE` grant — the ledger is written only by the triggers and RPCs.
 
@@ -371,6 +398,9 @@ and guest COD checkout (Phase 11) are implemented. The following are documented 
 - Orders are written only by database RPCs. Migration 12 removed the default-ACL over-grant on the
   four order tables: `anon` has no order-table privileges, and `authenticated` is read-only except
   for the guarded `order_vendors.status` / `updated_at` columns.
+- Migration 19 removed the default-ACL write grants from the auto-updatable `public_vendors` view;
+  `anon` and `authenticated` have `SELECT` only. The view remains intentionally `SECURITY DEFINER`
+  and is still reported by the security advisor.
 - **Residual risk:** Supabase's default privileges still grant ALL on *future* `public` tables to
   `anon` and `authenticated`. New tables need explicit revokes/grants, or a future migration should
   change the default ACL.
@@ -384,13 +414,16 @@ aspirational.
 |---|---|
 | `npm run lint` | 0 errors, 0 warnings |
 | `npm run typecheck` | clean |
-| `npm test` | 55 passing unit tests across 6 files |
-| `npm run build` | exit 0 (all routes) |
-| DB suites in disposable container | All eight suites passed on fresh schemas after migrations 1-13, including `rls_guest_orders_test.sql` and the Phase 9B `rls_orders_test.sql` TEST 16 |
+| `npm test` | 75 passing unit tests across 9 files |
+| `npm run build` | exit 0 (all routes), including Tailwind CSS verification |
+| DB suites in disposable container | All eight suites passed on fresh schemas after migrations 1-19, including `rls_guest_orders_test.sql`, the Phase 9B `rls_orders_test.sql` TEST 16 and foundation TEST H4 (view is read-only for API roles) |
+| Migrations 14-15 local apply + suites | `supabase start` applied migrations 1-15 and `seed.sql` successfully; all eight guarded suites then passed against the local Supabase CLI stack |
+| Migrations 16-18 local apply + commissions suite | `supabase db reset --local` applied migrations 1-18 and `seed.sql`; updated `rls_commissions_test.sql` passed all 15 tests in the disposable container, including preserved lines, required reasons, active-allocation uniqueness, re-settlement and reversal after release |
+| Phase 2B app checks | vendor finance and admin settlement list/detail/create/paid/void actions typecheck, lint, pass unit tests and build |
 | Browser E2E for failed COD delivery | 11/11 checks passed against the live app and hosted DB: two-shop guest checkout, mixed terminal outcomes, failed-delivery restock, ledger, commission, guest confirmation, repeated-cancel no-op, and fixture cleanup |
 | Page smoke test (`next start`, earlier) | `/`, `/categories`, `/shops`, `/cart` → 200; unknown paths → 404; `/account`, `/account/orders`, `/vendor/orders`, `/admin` → 307 to login. `/checkout` was protected then; it is now intentionally public for guests. |
 | End-to-end render against hosted DB | seeded a temporary category/shop/product, confirmed all public pages rendered it (price formatted as `EGP 150.00`), then deleted the fixture |
-| Hosted migrations | migrations 1–13 applied and recorded; migration 11 schema/function ACLs and migration 12 grants verified live; migration 13 structure verified live |
+| Hosted migrations | migrations 1–19 applied and recorded; migration 11 schema/function ACLs, migration 12 grants, migrations 14–18 settlement/vendor changes and migration 19 view privileges verified live |
 | Hosted guest checkout smoke test (rollback-only) | `place_guest_order` created the order, suborder, item and inventory movement; stock 25→24; repeated idempotency key returned the same order; wrong token and wrong-token replay rejected; order rolled back and stock restored |
 | Hosted authenticated checkout smoke test (rollback-only) | `place_order_with_idempotency` created the order; stock 15→14; vendor status update worked; `order_vendors.subtotal_minor` update blocked; anon `orders` select blocked; rolled back with zero residue |
 | Hosted privilege check | `anon` has no order-table privileges; `authenticated` has select-only on orders/items/movements plus `status`/`updated_at` update on suborders; `service_role` retains full access |
@@ -404,9 +437,10 @@ Three limits on the current verification:
 - **Default database ACLs remain broad.** Migration 12 hardened the current order tables, but
   Supabase still grants ALL on future `public` tables to `anon`/`authenticated`; every new table
   needs explicit grants or a default-ACL migration.
-- **`supabase start` does not run on this machine** (the CLI produces no container), so
-  there is no local PostgREST/GoTrue stack. Local verification uses the raw
-  `supabase/postgres` container; end-to-end checks run against the hosted project. Use the
-  image tag `public.ecr.aws/supabase/postgres:17.11.0.003` for these suites — the older
-  `17.6.1.106` tag crashes its backend when a role is denied `EXECUTE` on a function, which
-  aborts the orders suite.
+- **Local Supabase CLI verification needs one storage adjustment.** `supabase start` works,
+  but local `storage.objects` has a `protect_objects_delete` trigger that the raw test image
+  does not. For a disposable local run, disable that trigger as `supabase_admin` before the
+  catalog suite, or use the raw-container workflow above. Never disable it on a hosted project.
+- **Raw-container image pin matters.** For the raw-container workflow, use
+  `public.ecr.aws/supabase/postgres:17.11.0.003`; the older `17.6.1.106` tag crashes its
+  backend when a role is denied `EXECUTE` on a function, which aborts the orders suite.

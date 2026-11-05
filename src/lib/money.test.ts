@@ -53,11 +53,19 @@ describe("parseEgpToMinor", () => {
     expect(parseEgpToMinor("1e3")).toBeNull();
   });
 
-  it("rejects amounts above the sanity bound", () => {
-    // 7-digit whole parts are the hard limit; the 10M EGP bound is unreachable.
-    expect(parseEgpToMinor("9999999.99")).toBe(999999999);
-    expect(parseEgpToMinor("10000000")).toBeNull();
+  it("rejects ambiguous decimal-comma input", () => {
+    expect(parseEgpToMinor("250,50")).toBeNull();
+    expect(parseEgpToMinor("1,25")).toBeNull();
+    expect(parseEgpToMinor("1,250,50")).toBeNull();
+    expect(parseEgpToMinor("0,50")).toBeNull();
+  });
+
+  it("accepts the maximum amount and rejects anything above it", () => {
+    expect(parseEgpToMinor("9999999.99")).toBe(999_999_999);
+    expect(parseEgpToMinor("10000000")).toBe(1_000_000_000);
+    expect(parseEgpToMinor("10,000,000.00")).toBe(1_000_000_000);
     expect(parseEgpToMinor("10000000.01")).toBeNull();
+    expect(parseEgpToMinor("10,000,000.01")).toBeNull();
   });
 });
 

@@ -1,5 +1,5 @@
 -- Gifto Phase 8 RLS/security verification: hardening guards.
--- Runs against a bare `supabase/postgres` container after migrations 1–8.
+-- Runs against a bare `supabase/postgres` container after all migrations (1–18).
 --
 -- Covers:
 --   A. is_vendor_staff helper is gone.
@@ -11,6 +11,17 @@
 --   G. the last owner of a vendor cannot be deleted.
 
 \set ON_ERROR_STOP on
+
+-- Safety: this suite is destructive. Require an explicitly disposable database
+-- and roll everything back even when the suite succeeds.
+do $$
+begin
+  if current_setting('gifto.rls_test_disposable', true) is distinct from 'yes' then
+    raise exception 'Refusing to run destructive RLS tests. Start a disposable database and SET gifto.rls_test_disposable = ''yes'' in the same psql session.';
+  end if;
+end $$;
+
+begin;
 
 -- ---------------------------------------------------------------------------
 -- Seed (as superuser: bypasses RLS to create the fixtures)
@@ -240,3 +251,5 @@ begin
 end $$;
 
 reset role;
+
+rollback;

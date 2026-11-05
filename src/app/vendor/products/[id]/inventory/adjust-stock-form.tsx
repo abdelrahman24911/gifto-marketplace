@@ -5,8 +5,8 @@ import { useActionState } from "react";
 import { adjustStock, type AdjustStockState } from "./actions";
 
 const inputClass =
-  "rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900";
-const labelClass = "flex flex-col gap-1 text-sm font-medium text-zinc-700";
+  "rounded-md border border-line-strong px-3 py-2 text-sm text-ink focus:border-berry focus:outline-none focus:ring-1 focus:ring-berry";
+const labelClass = "flex flex-col gap-1 text-sm font-medium text-ink-soft";
 
 export function AdjustStockForm({
   productId,
@@ -58,7 +58,7 @@ export function AdjustStockForm({
             placeholder="e.g. 10 or -3"
             className={inputClass}
           />
-          <span className="text-xs font-normal text-zinc-500">
+          <span className="text-xs font-normal text-ink-mute">
             Use a negative number to remove stock
           </span>
         </label>
@@ -79,7 +79,7 @@ export function AdjustStockForm({
         <button
           type="submit"
           disabled={pending}
-          className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-md bg-berry px-4 py-2 text-sm font-medium text-paper transition-colors hover:bg-berry-deep disabled:cursor-not-allowed disabled:opacity-60"
         >
           {pending ? "Updating…" : "Update stock"}
         </button>

@@ -19,7 +19,7 @@ export default async function VendorOverviewPage({
   searchParams: Promise<{ vendor?: string }>;
 }) {
   const { vendor } = await searchParams;
-  const { supabase, access, shops, canManage } = await requireVendorRole(vendor);
+  const { supabase, access, canManage } = await requireVendorRole(vendor);
 
   const [{ data: allSubordersData }, { data: recentSuborders }, { data: products }] = await Promise.all([
     supabase
@@ -74,55 +74,13 @@ export default async function VendorOverviewPage({
   );
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-10">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
-            {access.vendorName} — Overview
-          </h1>
-          <p className="mt-1 text-sm text-zinc-600">
-            Your role: {access.role} · shop status: {access.vendorStatus}
-          </p>
-        </div>
-        <nav className="flex flex-wrap items-center gap-2 text-sm">
-          <Link
-            href={`/vendor/overview?vendor=${access.vendorId}`}
-            className="rounded-full border border-zinc-900 bg-zinc-900 px-3 py-1 text-white"
-          >
-            Overview
-          </Link>
-          <Link
-            href={`/vendor/orders?vendor=${access.vendorId}`}
-            className="rounded-full border border-zinc-300 px-3 py-1 text-zinc-700 hover:bg-zinc-50"
-          >
-            Orders
-          </Link>
-          <Link
-            href={`/vendor/products?vendor=${access.vendorId}`}
-            className="rounded-full border border-zinc-300 px-3 py-1 text-zinc-700 hover:bg-zinc-50"
-          >
-            Products
-          </Link>
-        </nav>
+    <div className="w-full">
+      <div>
+        <h1 className="font-display text-2xl text-ink">Overview</h1>
+        <p className="mt-1 text-sm text-ink-soft">
+          Your role: {access.role} · shop status: {access.vendorStatus}
+        </p>
       </div>
-
-      {shops.length > 1 ? (
-        <nav aria-label="Switch shop" className="mt-5 flex flex-wrap gap-2">
-          {shops.map((shop) => (
-            <Link
-              key={shop.vendorId}
-              href={`/vendor/overview?vendor=${shop.vendorId}`}
-              className={`rounded-full border px-3 py-1 text-sm ${
-                shop.vendorId === access.vendorId
-                  ? "border-zinc-900 bg-zinc-900 text-white"
-                  : "border-zinc-300 text-zinc-700 hover:bg-zinc-50"
-              }`}
-            >
-              {shop.vendorName}
-            </Link>
-          ))}
-        </nav>
-      ) : null}
 
       {!canManage ? (
         <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -131,39 +89,39 @@ export default async function VendorOverviewPage({
       ) : null}
 
       <section className="mt-8">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-mute">
           Actionable orders
         </h2>
         <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
-            <dt className="text-xs uppercase tracking-wide text-zinc-500">
+          <div className="rounded-xl border border-line bg-paper-soft px-4 py-3">
+            <dt className="text-xs uppercase tracking-wide text-ink-mute">
               Need action
             </dt>
-            <dd className="text-2xl font-semibold text-zinc-900">
+            <dd className="text-2xl font-semibold text-ink">
               {actionable}
             </dd>
           </div>
-          <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
-            <dt className="text-xs uppercase tracking-wide text-zinc-500">
+          <div className="rounded-xl border border-line bg-paper-soft px-4 py-3">
+            <dt className="text-xs uppercase tracking-wide text-ink-mute">
               Placed
             </dt>
-            <dd className="text-2xl font-semibold text-zinc-900">
+            <dd className="text-2xl font-semibold text-ink">
               {counts.placed}
             </dd>
           </div>
-          <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
-            <dt className="text-xs uppercase tracking-wide text-zinc-500">
+          <div className="rounded-xl border border-line bg-paper-soft px-4 py-3">
+            <dt className="text-xs uppercase tracking-wide text-ink-mute">
               Confirmed
             </dt>
-            <dd className="text-2xl font-semibold text-zinc-900">
+            <dd className="text-2xl font-semibold text-ink">
               {counts.confirmed}
             </dd>
           </div>
-          <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
-            <dt className="text-xs uppercase tracking-wide text-zinc-500">
+          <div className="rounded-xl border border-line bg-paper-soft px-4 py-3">
+            <dt className="text-xs uppercase tracking-wide text-ink-mute">
               Shipped
             </dt>
-            <dd className="text-2xl font-semibold text-zinc-900">
+            <dd className="text-2xl font-semibold text-ink">
               {counts.shipped}
             </dd>
           </div>
@@ -173,18 +131,18 @@ export default async function VendorOverviewPage({
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
         <section>
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-mute">
               Recent orders
             </h2>
             <Link
               href={`/vendor/orders?vendor=${access.vendorId}`}
-              className="text-sm font-medium text-zinc-900 underline"
+              className="text-sm font-medium text-ink underline"
             >
               View all
             </Link>
           </div>
           {recent.length === 0 ? (
-            <p className="mt-3 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-8 text-center text-sm text-zinc-600">
+            <p className="mt-3 rounded-2xl border border-dashed border-line-strong bg-paper-soft px-4 py-8 text-center text-sm text-ink-soft">
               No orders yet.
             </p>
           ) : (
@@ -201,12 +159,12 @@ export default async function VendorOverviewPage({
                 return (
                   <li
                     key={suborder.id}
-                    className="rounded-2xl border border-zinc-200 bg-white p-4"
+                    className="rounded-2xl border border-line bg-paper-soft p-4"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
-                        <p className="font-medium text-zinc-900">{ref}</p>
-                        <p className="text-xs text-zinc-500">
+                        <p className="font-medium text-ink">{ref}</p>
+                        <p className="text-xs text-ink-mute">
                           {new Date(suborder.created_at).toLocaleString(
                             "en-GB",
                             { dateStyle: "medium", timeStyle: "short" },
@@ -220,15 +178,15 @@ export default async function VendorOverviewPage({
                       </span>
                     </div>
                     <div className="mt-2 flex items-center justify-between text-sm">
-                      <span className="text-zinc-600">
+                      <span className="text-ink-soft">
                         Subtotal:{" "}
-                        <span className="font-medium text-zinc-900">
+                        <span className="font-medium text-ink">
                           {formatEgp(suborder.subtotal_minor)}
                         </span>
                       </span>
                       <Link
                         href={`/vendor/orders?vendor=${access.vendorId}`}
-                        className="font-medium text-zinc-900 underline"
+                        className="font-medium text-ink underline"
                       >
                         Manage
                       </Link>
@@ -241,32 +199,32 @@ export default async function VendorOverviewPage({
         </section>
         <section>
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-mute">
               Low stock (active, ≤ {LOW_STOCK_THRESHOLD})
             </h2>
             <Link
               href={`/vendor/products?vendor=${access.vendorId}`}
-              className="text-sm font-medium text-zinc-900 underline"
+              className="text-sm font-medium text-ink underline"
             >
               View products
             </Link>
           </div>
           {lowStock.length === 0 ? (
-            <p className="mt-3 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-8 text-center text-sm text-zinc-600">
+            <p className="mt-3 rounded-2xl border border-dashed border-line-strong bg-paper-soft px-4 py-8 text-center text-sm text-ink-soft">
               No active products are low in stock.
             </p>
           ) : (
-            <ul className="mt-3 flex flex-col divide-y divide-zinc-100 rounded-2xl border border-zinc-200 bg-white">
+            <ul className="mt-3 flex flex-col divide-y divide-line rounded-2xl border border-line bg-paper-soft">
               {lowStock.slice(0, 10).map((product) => (
                 <li
                   key={product.id}
                   className="flex items-center justify-between gap-3 px-4 py-3"
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-zinc-900">
+                    <p className="truncate text-sm font-medium text-ink">
                       {product.name}
                     </p>
-                    <p className="text-xs text-zinc-500">
+                    <p className="text-xs text-ink-mute">
                       Status: {product.status}
                     </p>
                   </div>
@@ -277,7 +235,7 @@ export default async function VendorOverviewPage({
                     {canManage ? (
                       <Link
                         href={`/vendor/products/${product.id}?vendor=${access.vendorId}`}
-                        className="text-sm font-medium text-zinc-900 underline"
+                        className="text-sm font-medium text-ink underline"
                       >
                         Manage
                       </Link>

@@ -6,7 +6,7 @@ import { MobileNav } from "@/components/mobile-nav";
 import { SearchForm } from "@/components/search-form";
 import { SignOutButton } from "@/components/sign-out-button";
 import { Container } from "@/components/ui/section";
-import { createClient } from "@/lib/supabase/server";
+import { getRequestContext } from "@/lib/auth";
 
 const NAV = [
   { href: "/categories", label: "Categories" },
@@ -48,36 +48,14 @@ function AnnouncementBar() {
  * never this header.
  */
 export async function SiteHeader() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, memberships, isPlatformAdmin } = await getRequestContext();
 
-  let isPlatformAdmin = false;
   let hasActiveVendor = false;
   let activeVendorId: string | null = null;
-  if (user) {
-    const [{ data: profile }, { data: memberships }] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("is_platform_admin")
-        .eq("id", user.id)
-        .maybeSingle(),
-      supabase
-        .from("vendor_members")
-        .select("role, vendor:vendors(id, status)")
-        .eq("profile_id", user.id)
-        .order("created_at", { ascending: true }),
-    ]);
-    isPlatformAdmin = profile?.is_platform_admin ?? false;
-    const active = (memberships ?? []).find(
-      (m): m is typeof m & { vendor: NonNullable<typeof m.vendor> } =>
-        Boolean(m.vendor) && m.vendor.status === "active",
-    );
-    if (active?.vendor?.id) {
-      hasActiveVendor = true;
-      activeVendorId = active.vendor.id;
-    }
+  const active = memberships.find((m) => m.vendor?.status === "active");
+  if (active?.vendor?.id) {
+    hasActiveVendor = true;
+    activeVendorId = active.vendor.id;
   }
 
   const accountLinks = user

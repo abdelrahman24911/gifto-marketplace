@@ -21,15 +21,18 @@ export function formatEgp(minor: number): string {
 
 /**
  * Parses human EGP input ("1,250.50", "1250", "EGP 99") into integer piastres.
- * Returns null for anything that is not a plain non-negative amount with at
- * most two decimals — never silently rounds or guesses.
+ * Accepts English thousands separators only; decimal commas are rejected
+ * rather than guessed. Returns null for anything that is not a plain
+ * non-negative amount with at most two decimals.
  */
 export function parseEgpToMinor(input: string): number | null {
-  const cleaned = input.trim().replace(/,/g, "").replace(/EGP/gi, "").trim();
+  const cleaned = input.replace(/EGP/gi, "").trim();
 
-  if (!/^\d{1,7}(\.\d{1,2})?$/.test(cleaned)) return null;
+  if (!/^(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?$/.test(cleaned)) {
+    return null;
+  }
 
-  const [whole, fraction = ""] = cleaned.split(".");
+  const [whole, fraction = ""] = cleaned.replace(/,/g, "").split(".");
   const minor = Number(whole) * 100 + Number((fraction + "00").slice(0, 2));
 
   if (!Number.isSafeInteger(minor) || minor > MAX_MINOR) return null;

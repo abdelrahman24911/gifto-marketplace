@@ -1,5 +1,5 @@
 -- Gifto Phase 11 verification: guest checkout.
--- Runs after migrations 1–11 against a bare `supabase/postgres` container.
+-- Runs after all migrations (1–18) against a bare `supabase/postgres` container.
 -- Any failure RAISEs and, with `psql -v ON_ERROR_STOP=1`, aborts non-zero.
 --
 -- The service role is the only caller allowed to reach `place_guest_order`,
@@ -8,6 +8,17 @@
 -- assert that no weaker role can execute those functions.
 
 \set ON_ERROR_STOP on
+
+-- Safety: this suite is destructive. Require an explicitly disposable database
+-- and roll everything back even when the suite succeeds.
+do $$
+begin
+  if current_setting('gifto.rls_test_disposable', true) is distinct from 'yes' then
+    raise exception 'Refusing to run destructive RLS tests. Start a disposable database and SET gifto.rls_test_disposable = ''yes'' in the same psql session.';
+  end if;
+end $$;
+
+begin;
 
 -- ---------------------------------------------------------------------------
 -- Seed (as superuser; bypasses RLS)
@@ -589,3 +600,5 @@ begin
 end $$;
 
 reset role;
+
+rollback;

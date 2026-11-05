@@ -351,10 +351,10 @@ export default async function HomePage() {
                 Browse shops
               </Link>
               <Link
-                href="/signup"
+                href="/search"
                 className="inline-flex h-12 items-center rounded-full border border-paper/40 px-6 text-sm font-semibold text-paper transition-colors hover:bg-paper/10"
               >
-                Sell on Gifto
+                Browse all gifts
               </Link>
             </div>
           </div>

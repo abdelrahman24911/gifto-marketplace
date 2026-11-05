@@ -9,6 +9,17 @@
 
 \set ON_ERROR_STOP on
 
+-- Safety: this suite is destructive. Require an explicitly disposable database
+-- and roll everything back even when the suite succeeds.
+do $$
+begin
+  if current_setting('gifto.rls_test_disposable', true) is distinct from 'yes' then
+    raise exception 'Refusing to run destructive RLS tests. Start a disposable database and SET gifto.rls_test_disposable = ''yes'' in the same psql session.';
+  end if;
+end $$;
+
+begin;
+
 -- ---------------------------------------------------------------------------
 -- Seed (as superuser: bypasses RLS to create the fixtures)
 -- ---------------------------------------------------------------------------
@@ -37,7 +48,8 @@ insert into public.vendors (id, name, slug, status) values
   ('aaaaaaaa-0000-0000-0000-000000000001', 'Test Vendor', 'test-vendor', 'pending');
 
 insert into public.vendor_members (vendor_id, profile_id, role) values
-  ('aaaaaaaa-0000-0000-0000-000000000001', '22222222-2222-2222-2222-222222222222', 'owner');
+  ('aaaaaaaa-0000-0000-0000-000000000001', '22222222-2222-2222-2222-222222222222', 'owner'),
+  ('aaaaaaaa-0000-0000-0000-000000000001', '33333333-3333-3333-3333-333333333333', 'staff');
 
 -- ---------------------------------------------------------------------------
 -- TEST A: outsider cannot see a pending vendor
@@ -84,19 +96,26 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- TEST D: owner can add a member
+-- TEST D: a pending owner cannot manage the roster
 -- ---------------------------------------------------------------------------
 set request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';
 set request.jwt.claims = '{"sub":"22222222-2222-2222-2222-222222222222"}';
 do $$
 declare n int;
 begin
-  insert into public.vendor_members (vendor_id, profile_id, role)
-  values ('aaaaaaaa-0000-0000-0000-000000000001',
-          '33333333-3333-3333-3333-333333333333', 'staff');
-  get diagnostics n = row_count;
-  if n <> 1 then raise exception 'TEST D FAILED: inserted % rows', n; end if;
-  raise notice 'TEST D PASSED: owner added a staff member';
+  begin
+    insert into public.vendor_members (vendor_id, profile_id, role)
+    values ('aaaaaaaa-0000-0000-0000-000000000001',
+            '44444444-4444-4444-4444-444444444444', 'staff');
+    raise exception 'TEST D FAILED: pending owner added a member';
+  exception when insufficient_privilege then
+    null;
+  end;
+  select count(*) into n from public.vendor_members
+    where vendor_id = 'aaaaaaaa-0000-0000-0000-000000000001'
+      and profile_id = '44444444-4444-4444-4444-444444444444';
+  if n <> 0 then raise exception 'TEST D FAILED: membership count=%', n; end if;
+  raise notice 'TEST D PASSED: pending owner roster management denied';
 end $$;
 
 -- ---------------------------------------------------------------------------
@@ -119,18 +138,21 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- TEST F: owner may edit descriptive fields
+-- TEST F: a pending owner cannot edit the vendor profile directly
 -- ---------------------------------------------------------------------------
 set request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';
 set request.jwt.claims = '{"sub":"22222222-2222-2222-2222-222222222222"}';
 do $$
-declare n int;
+declare n int; d text;
 begin
-  update public.vendors set description = 'updated by owner'
+  update public.vendors set description = 'updated by pending owner'
     where id = 'aaaaaaaa-0000-0000-0000-000000000001';
   get diagnostics n = row_count;
-  if n <> 1 then raise exception 'TEST F FAILED: updated % rows', n; end if;
-  raise notice 'TEST F PASSED: owner edited descriptive field';
+  if n <> 0 then raise exception 'TEST F FAILED: updated % rows', n; end if;
+  select description into d from public.vendors
+    where id = 'aaaaaaaa-0000-0000-0000-000000000001';
+  if d is not null then raise exception 'TEST F FAILED: description=%', d; end if;
+  raise notice 'TEST F PASSED: pending owner cannot edit vendor profile';
 end $$;
 
 -- ---------------------------------------------------------------------------
@@ -184,6 +206,23 @@ begin
   exception when insufficient_privilege then
     raise notice 'TEST H3 PASSED: anon cannot read base vendors table';
   end;
+end $$;
+do $$
+begin
+  if not has_table_privilege('anon', 'public.public_vendors', 'SELECT') then
+    raise exception 'TEST H4 FAILED: anon cannot read the public vendor view';
+  end if;
+  if has_table_privilege('anon', 'public.public_vendors', 'INSERT')
+     or has_table_privilege('anon', 'public.public_vendors', 'UPDATE')
+     or has_table_privilege('anon', 'public.public_vendors', 'DELETE') then
+    raise exception 'TEST H4 FAILED: anon has write privileges on the public vendor view';
+  end if;
+  if has_table_privilege('authenticated', 'public.public_vendors', 'INSERT')
+     or has_table_privilege('authenticated', 'public.public_vendors', 'UPDATE')
+     or has_table_privilege('authenticated', 'public.public_vendors', 'DELETE') then
+    raise exception 'TEST H4 FAILED: authenticated has write privileges on the public vendor view';
+  end if;
+  raise notice 'TEST H4 PASSED: public vendor view is read-only for API roles';
 end $$;
 
 -- ---------------------------------------------------------------------------
@@ -244,6 +283,28 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- TEST J3: an active owner may edit the profile and manage the roster
+-- ---------------------------------------------------------------------------
+set role authenticated;
+set request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';
+set request.jwt.claims = '{"sub":"22222222-2222-2222-2222-222222222222"}';
+do $$
+declare n int;
+begin
+  update public.vendors set description = 'updated by active owner'
+    where id = 'aaaaaaaa-0000-0000-0000-000000000001';
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'TEST J3 FAILED: updated % rows', n; end if;
+
+  insert into public.vendor_members (vendor_id, profile_id, role)
+  values ('aaaaaaaa-0000-0000-0000-000000000001',
+          '44444444-4444-4444-4444-444444444444', 'staff');
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'TEST J3 FAILED: inserted % members', n; end if;
+  raise notice 'TEST J3 PASSED: active owner edits profile and manages roster';
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- TEST K: status transition was logged (audit trail)
 -- ---------------------------------------------------------------------------
 set role authenticated;
@@ -260,3 +321,5 @@ begin
 end $$;
 
 reset role;
+
+rollback;

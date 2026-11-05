@@ -11,7 +11,7 @@ export const metadata = { title: "Manage products — Gifto" };
 const statusStyles: Record<ProductStatus, string> = {
   draft: "bg-amber-50 text-amber-800 border-amber-200",
   active: "bg-emerald-50 text-emerald-800 border-emerald-200",
-  archived: "bg-zinc-100 text-zinc-600 border-zinc-300",
+  archived: "bg-paper-deep text-ink-soft border-line-strong",
 };
 
 const LOW_STOCK_THRESHOLD = 5;
@@ -22,7 +22,7 @@ export default async function VendorProductsPage({
   searchParams: Promise<{ vendor?: string }>;
 }) {
   const { vendor } = await searchParams;
-  const { supabase, access, shops, canManage } = await requireVendorRole(vendor);
+  const { supabase, access, canManage } = await requireVendorRole(vendor);
 
   const { data: products } = await supabase
     .from("products")
@@ -35,65 +35,23 @@ export default async function VendorProductsPage({
   const rows = products ?? [];
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 py-10">
+    <div className="w-full">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
-            {access.vendorName}
-          </h1>
-          <p className="mt-1 text-sm text-zinc-600">
+          <h1 className="font-display text-2xl text-ink">Products</h1>
+          <p className="mt-1 text-sm text-ink-soft">
             Your role: {access.role} · shop status: {access.vendorStatus}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <nav className="flex flex-wrap items-center gap-2 text-sm">
-            <Link
-              href={`/vendor/overview?vendor=${access.vendorId}`}
-              className="rounded-full border border-zinc-300 px-3 py-1 text-zinc-700 hover:bg-zinc-50"
-            >
-              Overview
-            </Link>
-            <Link
-              href={`/vendor/orders?vendor=${access.vendorId}`}
-              className="rounded-full border border-zinc-300 px-3 py-1 text-zinc-700 hover:bg-zinc-50"
-            >
-              Orders
-            </Link>
-            <Link
-              href={`/vendor/products?vendor=${access.vendorId}`}
-              className="rounded-full border border-zinc-900 bg-zinc-900 px-3 py-1 text-white"
-            >
-              Products
-            </Link>
-          </nav>
-          {canManage ? (
-            <Link
-              href={`/vendor/products/new?vendor=${access.vendorId}`}
-              className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
-            >
-              Add product
-            </Link>
-          ) : null}
-        </div>
+        {canManage ? (
+          <Link
+            href={`/vendor/products/new?vendor=${access.vendorId}`}
+            className="rounded-full bg-berry px-4 py-2 text-sm font-medium text-paper transition-colors hover:bg-berry-deep"
+          >
+            Add product
+          </Link>
+        ) : null}
       </div>
-
-      {shops.length > 1 ? (
-        <nav aria-label="Switch shop" className="mt-5 flex flex-wrap gap-2">
-          {shops.map((shop) => (
-            <Link
-              key={shop.vendorId}
-              href={`/vendor/products?vendor=${shop.vendorId}`}
-              className={`rounded-full border px-3 py-1 text-sm ${
-                shop.vendorId === access.vendorId
-                  ? "border-zinc-900 bg-zinc-900 text-white"
-                  : "border-zinc-300 text-zinc-700 hover:bg-zinc-50"
-              }`}
-            >
-              {shop.vendorName}
-            </Link>
-          ))}
-        </nav>
-      ) : null}
 
       {!canManage ? (
         <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -104,7 +62,7 @@ export default async function VendorProductsPage({
 
       <section className="mt-8">
         {rows.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-10 text-center text-sm text-zinc-600">
+          <p className="rounded-2xl border border-dashed border-line-strong bg-paper-soft px-4 py-10 text-center text-sm text-ink-soft">
             No products yet.
             {canManage ? " Add your first product to start selling." : ""}
           </p>
@@ -121,7 +79,7 @@ export default async function VendorProductsPage({
               return (
                 <li
                   key={product.id}
-                  className="flex flex-wrap items-center gap-4 rounded-2xl border border-zinc-200 bg-white p-4"
+                  className="flex flex-wrap items-center gap-4 rounded-2xl border border-line bg-paper-soft p-4"
                 >
                   <ProductImage
                     path={images[0]?.path ?? null}
@@ -130,10 +88,10 @@ export default async function VendorProductsPage({
                     className="h-16 w-16"
                   />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium text-zinc-900">
+                    <p className="truncate font-medium text-ink">
                       {product.name}
                     </p>
-                    <p className="truncate text-sm text-zinc-500">
+                    <p className="truncate text-sm text-ink-mute">
                       {category ? `${category.name} · ` : ""}
                       {formatEgp(product.price_minor)} · stock {product.stock}
                     </p>
@@ -152,7 +110,7 @@ export default async function VendorProductsPage({
                     {canManage ? (
                       <Link
                         href={`/vendor/products/${product.id}?vendor=${access.vendorId}`}
-                        className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50"
+                        className="rounded-md border border-line-strong px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-paper-deep"
                       >
                         Edit
                       </Link>

@@ -38,17 +38,39 @@ function clampQuantity(quantity: number, stock: number): number {
   return Math.min(Math.floor(quantity), ceiling || 1);
 }
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isNonNegativeSafeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isStoredQuantity(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value >= 1 &&
+    value <= MAX_LINE_QUANTITY
+  );
+}
+
 function isCartItem(value: unknown): value is CartItem {
-  if (typeof value !== "object" || value === null) return false;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
   const item = value as Record<string, unknown>;
   return (
-    typeof item.productId === "string" &&
-    typeof item.vendorId === "string" &&
-    typeof item.vendorSlug === "string" &&
-    typeof item.name === "string" &&
-    typeof item.slug === "string" &&
-    typeof item.priceMinor === "number" &&
-    typeof item.quantity === "number"
+    isNonEmptyString(item.productId) &&
+    isNonEmptyString(item.vendorId) &&
+    isNonEmptyString(item.vendorName) &&
+    isNonEmptyString(item.vendorSlug) &&
+    isNonEmptyString(item.name) &&
+    isNonEmptyString(item.slug) &&
+    (item.imagePath === null || typeof item.imagePath === "string") &&
+    isNonNegativeSafeInteger(item.priceMinor) &&
+    isStoredQuantity(item.quantity) &&
+    isNonNegativeSafeInteger(item.stock)
   );
 }
 
@@ -115,7 +137,16 @@ export function readStoredCart(): CartItem[] {
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isCartItem);
+
+    const items: CartItem[] = [];
+    const seenProductIds = new Set<string>();
+    for (const value of parsed) {
+      if (!isCartItem(value) || seenProductIds.has(value.productId)) continue;
+      seenProductIds.add(value.productId);
+      items.push(value);
+      if (items.length >= MAX_CART_LINES) break;
+    }
+    return items;
   } catch {
     return [];
   }

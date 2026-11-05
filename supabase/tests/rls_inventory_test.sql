@@ -1,8 +1,19 @@
 -- Gifto Phase 7 verification: manual stock adjustments.
--- Runs after migrations 1–7 against a bare `supabase/postgres` container.
+-- Runs after all migrations (1–18) against a bare `supabase/postgres` container.
 -- Any failure RAISEs and, with `psql -v ON_ERROR_STOP=1`, aborts non-zero.
 
 \set ON_ERROR_STOP on
+
+-- Safety: this suite is destructive. Require an explicitly disposable database
+-- and roll everything back even when the suite succeeds.
+do $$
+begin
+  if current_setting('gifto.rls_test_disposable', true) is distinct from 'yes' then
+    raise exception 'Refusing to run destructive RLS tests. Start a disposable database and SET gifto.rls_test_disposable = ''yes'' in the same psql session.';
+  end if;
+end $$;
+
+begin;
 
 -- ---------------------------------------------------------------------------
 -- Seed (as superuser; bypasses RLS)
@@ -51,6 +62,11 @@ begin
     raise exception 'TEST 1 FAILED: authenticated can write inventory_movements directly';
   end if;
 
+  if has_column_privilege('authenticated', 'public.products', 'vendor_id', 'update')
+     or has_column_privilege('authenticated', 'public.products', 'stock', 'update') then
+    raise exception 'TEST 1 FAILED: authenticated can update products.stock directly';
+  end if;
+
   raise notice 'TEST 1 PASSED: stock moves only through the audited function';
 end $$;
 
@@ -63,6 +79,14 @@ set request.jwt.claims = '{"sub":"d1110000-0000-0000-0000-000000000002"}';
 do $$
 declare v_new integer;
 begin
+  begin
+    update public.products set stock = 99
+      where id = '61100000-0000-0000-0000-000000000001';
+    raise exception 'TEST 2 FAILED: direct stock update was allowed';
+  exception when insufficient_privilege then
+    null;
+  end;
+
   v_new := public.adjust_product_stock(
     '61100000-0000-0000-0000-000000000001', 5, 'Restock from supplier');
   if v_new <> 15 then
@@ -217,3 +241,7 @@ begin
   end if;
   raise notice 'TEST 6 PASSED: an outsider cannot read the movement history';
 end $$;
+
+reset role;
+
+rollback;

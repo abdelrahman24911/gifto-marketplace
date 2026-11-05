@@ -46,18 +46,18 @@ export default async function EditProductPage({
   );
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 py-10">
-      <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
+    <div className="w-full max-w-2xl">
+      <h1 className="text-2xl font-semibold tracking-tight text-ink">
         {product.name}
       </h1>
-      <p className="mt-1 text-sm text-zinc-600">
+      <p className="mt-1 text-sm text-ink-soft">
         {canManage ? "Editing" : "Viewing"} · /{product.slug}
       </p>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <Link
           href={`/vendor/products/${product.id}/inventory?vendor=${access.vendorId}`}
-          className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50"
+          className="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-paper-deep"
         >
           Inventory · {product.stock} in stock
         </Link>
@@ -72,7 +72,7 @@ export default async function EditProductPage({
       ) : images.length > 0 ? (
         <ul className="mt-5 flex flex-wrap gap-3">
           {images.map((image) => (
-            <li key={image.path} className="text-xs text-zinc-500">
+            <li key={image.path} className="text-xs text-ink-mute">
               {image.path}
             </li>
           ))}
@@ -96,11 +96,11 @@ export default async function EditProductPage({
       </div>
 
       {canManage && (access.role === "owner" || isPlatformAdmin) ? (
-        <div className="mt-10 border-t border-zinc-200 pt-6">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+        <div className="mt-10 border-t border-line pt-6">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-mute">
             Danger zone
           </h2>
-          <p className="mt-2 text-sm text-zinc-600">
+          <p className="mt-2 text-sm text-ink-soft">
             Deleting a product removes it from Gifto permanently.
           </p>
           <div className="mt-3">

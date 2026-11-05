@@ -22,13 +22,39 @@ const fraunces = Fraunces({
   subsets: ["latin"],
 });
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+
+const title = "Gifto — Gifts in Egypt, wrapped properly";
+const description =
+  "Discover gifts from independent gift shops across Egypt. Browse by occasion, find the right gift, and order with cash on delivery.";
+const ogImage = {
+  url: "/og-image.png",
+  width: 1200,
+  height: 630,
+  alt: "Gifto — gifts from independent gift shops across Egypt",
+};
+
 export const metadata: Metadata = {
+  metadataBase: siteUrl ? new URL(siteUrl) : undefined,
   title: {
-    default: "Gifto — Gifts in Egypt, wrapped properly",
+    default: title,
     template: "%s — Gifto",
   },
-  description:
-    "Discover gifts from independent gift shops across Egypt. Browse by occasion, find the right gift, and order with cash on delivery.",
+  description,
+  openGraph: {
+    type: "website",
+    siteName: "Gifto",
+    locale: "en_EG",
+    title,
+    description,
+    images: [ogImage],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title,
+    description,
+    images: [{ url: ogImage.url, alt: ogImage.alt }],
+  },
 };
 
 // Every route here reads the auth session and/or the database, so nothing is

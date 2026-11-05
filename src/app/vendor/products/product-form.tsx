@@ -14,8 +14,8 @@ import type { ProductStatus } from "@/lib/supabase/database.types";
 type Category = { id: string; name: string };
 
 const inputClass =
-  "w-full rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900";
-const labelClass = "flex flex-col gap-1 text-sm font-medium text-zinc-700";
+  "w-full rounded-md border border-line-strong px-3 py-2 text-sm text-ink placeholder:text-ink-mute focus:border-berry focus:outline-none focus:ring-1 focus:ring-berry";
+const labelClass = "flex flex-col gap-1 text-sm font-medium text-ink-soft";
 
 const STATUS_HELP: Record<ProductStatus, string> = {
   draft: "Only your shop can see drafts.",
@@ -56,13 +56,13 @@ export function ProductForm({
         <div className="flex flex-wrap gap-3">
           <Link
             href={`/vendor/products/${state.productId}?vendor=${vendorId}`}
-            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
+            className="rounded-md bg-berry px-4 py-2 text-sm font-medium text-paper transition-colors hover:bg-berry-deep"
           >
             Edit product
           </Link>
           <Link
             href={`/vendor/products?vendor=${vendorId}`}
-            className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50"
+            className="rounded-md border border-line-strong bg-paper-soft px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-paper-deep"
           >
             Back to products
           </Link>
@@ -125,20 +125,20 @@ export function ProductForm({
             placeholder="150.00"
             className={inputClass}
           />
-          <span className="text-xs font-normal text-zinc-500">
+          <span className="text-xs font-normal text-ink-mute">
             Up to two decimals, e.g. 149.50
           </span>
         </label>
 
         {productId ? (
-          <div className="flex flex-col gap-1 text-sm font-medium text-zinc-700">
+          <div className="flex flex-col gap-1 text-sm font-medium text-ink-soft">
             Stock
-            <p className="py-2 text-lg font-semibold text-zinc-900">
+            <p className="py-2 text-lg font-semibold text-ink">
               {values.stock}
             </p>
             <Link
               href={`/vendor/products/${productId}/inventory?vendor=${vendorId}`}
-              className="text-xs font-normal text-zinc-600 underline hover:text-zinc-900"
+              className="text-xs font-normal text-ink-soft underline hover:text-ink"
             >
               Adjust stock and view history
             </Link>
@@ -155,7 +155,7 @@ export function ProductForm({
               defaultValue={values.stock}
               className={inputClass}
             />
-            <span className="text-xs font-normal text-zinc-500">
+            <span className="text-xs font-normal text-ink-mute">
               Set once when the product is created
             </span>
           </label>
@@ -189,7 +189,7 @@ export function ProductForm({
           <option value="active">Active — visible on Gifto</option>
           <option value="archived">Archived — retired, hidden everywhere</option>
         </select>
-        <span className="text-xs font-normal text-zinc-500">
+        <span className="text-xs font-normal text-ink-mute">
           {STATUS_HELP[values.status]}
         </span>
       </label>
@@ -198,13 +198,13 @@ export function ProductForm({
         <button
           type="submit"
           disabled={pending}
-          className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-md bg-berry px-4 py-2 text-sm font-medium text-paper transition-colors hover:bg-berry-deep disabled:cursor-not-allowed disabled:opacity-60"
         >
           {pending ? "Saving…" : "Save product"}
         </button>
         <Link
           href={`/vendor/products?vendor=${vendorId}`}
-          className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50"
+          className="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-paper-deep"
         >
           Cancel
         </Link>

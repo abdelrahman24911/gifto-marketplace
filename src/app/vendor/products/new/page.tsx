@@ -24,11 +24,11 @@ export default async function NewProductPage({
     .order("name", { ascending: true });
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 py-10">
-      <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
+    <div className="w-full max-w-2xl">
+      <h1 className="text-2xl font-semibold tracking-tight text-ink">
         Add a product to {access.vendorName}
       </h1>
-      <p className="mt-1 text-sm text-zinc-600">
+      <p className="mt-1 text-sm text-ink-soft">
         The web address (slug) is generated from the name and stays fixed
         afterwards.
       </p>

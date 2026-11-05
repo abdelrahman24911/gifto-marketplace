@@ -7,11 +7,11 @@ import { VENDOR_NEXT_STATUSES, type OrderStatus } from "@/lib/orders";
 import { setSuborderStatus, type SuborderState } from "./actions";
 
 const primaryClass =
-  "rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60";
+  "rounded-md bg-berry px-3 py-1.5 text-sm font-medium text-paper transition-colors hover:bg-berry-deep disabled:cursor-not-allowed disabled:opacity-60";
 const secondaryClass =
-  "rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60";
+  "rounded-md border border-line-strong bg-paper-soft px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-paper-deep disabled:cursor-not-allowed disabled:opacity-60";
 const dangerClass =
-  "rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60";
+  "rounded-md border border-red-300 bg-paper-soft px-3 py-1.5 text-sm font-medium text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60";
 
 export function SuborderActions({
   suborderId,
@@ -32,7 +32,7 @@ export function SuborderActions({
   return (
     <div className="mt-3">
       {options.length === 0 ? (
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-ink-mute">
           No further action — this order line is closed.
         </p>
       ) : (

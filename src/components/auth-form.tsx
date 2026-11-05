@@ -92,8 +92,8 @@ export function AuthForm({ mode, initialError }: { mode: Mode; initialError?: st
         </h1>
         <p className="mt-1 text-sm text-zinc-600">
           {mode === "login"
-            ? "Sign in to manage your shop and orders."
-            : "Create an account to apply to sell on Gifto."}
+            ? "Sign in to track orders and manage your account."
+            : "Create an account to track orders and save your details."}
         </p>
       </div>
 
