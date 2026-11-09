@@ -23,7 +23,7 @@ export async function cancelOrder(
 
   if (!orderId) return { error: "Missing order id.", attempt };
 
-  const { supabase } = await requireUser();
+  const { supabase } = await requireUser({ verifyWithAuthServer: true });
 
   const { error } = await supabase.rpc("cancel_order", {
     p_order_id: orderId,

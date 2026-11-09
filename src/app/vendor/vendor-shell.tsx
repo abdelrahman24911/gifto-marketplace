@@ -11,19 +11,13 @@ const NAV_ITEMS = [
   { label: "Products", href: "/vendor/products" },
   { label: "Inventory", href: "/vendor/inventory" },
   { label: "Finance", href: "/vendor/finance" },
-] as const;
-
-const FUTURE_ITEMS = [
-  "Analytics",
-  "Store settings",
-  "Help & support",
+  { label: "Analytics", href: "/vendor/analytics" },
+  { label: "Store settings", href: "/vendor/settings" },
+  { label: "Help & support", href: "/vendor/support" },
 ] as const;
 
 function isActive(pathname: string, href: string) {
-  if (href === "/vendor/products") {
-    return pathname === href || pathname.startsWith(`${href}/`);
-  }
-  return pathname === href;
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 export function VendorShell({
@@ -79,11 +73,17 @@ export function VendorShell({
                   Shop
                   <select
                     value={currentShop.vendorId}
-                    onChange={(event) =>
-                      router.push(
-                        `/vendor/overview?vendor=${event.target.value}`,
-                      )
-                    }
+                    onChange={(event) => {
+                      const params = new URLSearchParams(
+                        searchParams.toString(),
+                      );
+                      params.set("vendor", event.target.value);
+                      params.delete("page");
+                      const path = pathname.startsWith("/vendor/products/")
+                        ? "/vendor/products"
+                        : pathname;
+                      router.push(`${path}?${params.toString()}`);
+                    }}
                     className="rounded-full border border-line-strong bg-paper px-3 py-1.5 text-sm font-medium text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-berry/40"
                   >
                     {shops.map((shop) => (
@@ -130,24 +130,13 @@ export function VendorShell({
                 </Link>
               );
             })}
-            {FUTURE_ITEMS.map((label) => (
-              <span
-                key={label}
-                aria-disabled="true"
-                title="Coming soon"
-                className="inline-flex shrink-0 cursor-not-allowed items-center rounded-full px-3 py-1.5 text-sm font-medium text-ink-mute/60"
-              >
-                {label}
-                <span className="sr-only"> (coming soon)</span>
-              </span>
-            ))}
           </nav>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl px-4 py-8 sm:py-10">
+      <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:py-10">
         {children}
-      </main>
+      </div>
     </div>
   );
 }

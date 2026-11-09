@@ -24,8 +24,8 @@ const db = vi.hoisted(() => ({
   queries: [] as QueryRecord[],
 }));
 
-vi.mock("@/lib/supabase/server", () => ({
-  createClient: async () => ({
+function fakeClient() {
+  return {
     from(table: string) {
       const record: QueryRecord = { table, filters: [], orders: [] };
       db.queries.push(record);
@@ -65,7 +65,23 @@ vi.mock("@/lib/supabase/server", () => ({
 
       return chain;
     },
-  }),
+  };
+}
+
+vi.mock("@/lib/supabase/server", () => ({
+  createClient: async () => fakeClient(),
+}));
+
+vi.mock("@/lib/supabase/public", () => ({
+  createPublicClient: () => fakeClient(),
+}));
+
+// unstable_cache needs Next's runtime; here it must just call through so the
+// tests exercise the query shape. Caching behaviour is covered in
+// catalog-cache.test.ts.
+vi.mock("next/cache", () => ({
+  unstable_cache: <T extends (...args: never[]) => unknown>(fn: T) => fn,
+  updateTag: () => {},
 }));
 
 import {

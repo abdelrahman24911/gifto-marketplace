@@ -87,6 +87,7 @@ export function CartView() {
                           alt={item.name}
                           name={item.name}
                           className="h-16 w-16"
+                          sizes="64px"
                         />
                         <div className="min-w-0 flex-1">
                           <Link

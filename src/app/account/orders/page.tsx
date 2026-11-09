@@ -1,7 +1,13 @@
 import Link from "next/link";
 
 import { requireUser } from "@/lib/auth";
+import {
+  resolveAccountOrders,
+  scopeOrdersToUser,
+} from "@/lib/account-orders";
 import { formatEgp } from "@/lib/money";
+import { orderShopsLabel } from "@/lib/order-vendors";
+import { loadOrderVendorProfiles } from "@/lib/order-vendors.server";
 import {
   ORDER_STATUS_LABELS,
   ORDER_STATUS_STYLES,
@@ -11,16 +17,26 @@ import {
 export const metadata = { title: "Your orders — Gifto" };
 
 export default async function AccountOrdersPage() {
-  const { supabase } = await requireUser();
+  const { supabase, user } = await requireUser();
 
-  const { data } = await supabase
+  const { data, error } = await scopeOrdersToUser(
+    supabase
     .from("orders")
     .select(
-      "id, status, total_minor, created_at, order_vendors(id, status, vendor:vendors(name, slug))",
+      "id, status, total_minor, created_at, order_vendors(id, status, vendor_id)",
     )
+    ,
+    user.id,
+  )
     .order("created_at", { ascending: false });
 
-  const orders = data ?? [];
+  const ordersResult = resolveAccountOrders(data, error);
+  const orders = ordersResult.kind === "loaded" ? ordersResult.orders : [];
+  const vendorProfiles = ordersResult.kind === "error"
+    ? new Map()
+    : await loadOrderVendorProfiles(
+        orders.flatMap((order) => order.order_vendors ?? []),
+      );
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-10">
@@ -28,7 +44,14 @@ export default async function AccountOrdersPage() {
         Your orders
       </h1>
 
-      {orders.length === 0 ? (
+      {ordersResult.kind === "error" ? (
+        <p
+          role="alert"
+          className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+        >
+          Your orders could not be loaded. Refresh the page to try again.
+        </p>
+      ) : orders.length === 0 ? (
         <div className="mt-6 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-12 text-center">
           <p className="text-sm text-zinc-600">You have no orders yet.</p>
           <Link
@@ -60,7 +83,10 @@ export default async function AccountOrdersPage() {
                         month: "short",
                         day: "numeric",
                       })}
-                      {shopsLabel(order.order_vendors ?? [])}
+                      {orderShopsLabel(
+                        order.order_vendors ?? [],
+                        vendorProfiles,
+                      )}
                     </p>
                   </div>
 
@@ -90,13 +116,4 @@ export default async function AccountOrdersPage() {
       )}
     </div>
   );
-}
-
-function shopsLabel(
-  suborders: { vendor: { name: string } | null }[],
-): string {
-  const names = [
-    ...new Set(suborders.flatMap((s) => (s.vendor ? [s.vendor.name] : []))),
-  ];
-  return names.length > 0 ? ` · ${names.join(", ")}` : "";
 }

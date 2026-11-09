@@ -1,12 +1,27 @@
 import { cache } from "react";
 
+import {
+  CATALOG_TAGS,
+  cachedCatalogRead,
+  type CatalogRead,
+} from "@/lib/catalog-cache";
+import { createPublicClient } from "@/lib/supabase/public";
 import { createClient } from "@/lib/supabase/server";
+import type { Json } from "@/lib/supabase/database.types";
+import {
+  workingHoursFromJson,
+  type WorkingHours,
+} from "@/lib/vendor-settings";
 
 /**
  * Read helpers for the public storefront. Every page and section goes through
  * these so queries, ordering, and the product view-model stay consistent and
  * stay server-side (anon key + RLS). No mock data — an empty result is a real
  * empty result and the UI renders an empty state.
+ *
+ * List and directory reads use the cookie-less anon client and a shared,
+ * tag-invalidated cache (`catalog-cache.ts`): they show the public view and
+ * never depend on who is signed in. Free-text search is not cached.
  */
 
 export type CatalogProduct = {
@@ -37,7 +52,45 @@ export type CatalogShop = {
   description: string | null;
   city: string | null;
   governorate: string | null;
+  logoPath: string | null;
+  coverPath: string | null;
+  workingHours: WorkingHours;
+  prepTimeMinDays: number | null;
+  prepTimeMaxDays: number | null;
+  isAcceptingOrders: boolean;
 };
+
+type ShopRow = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  city: string | null;
+  governorate: string | null;
+  logo_path: string | null;
+  cover_path: string | null;
+  working_hours: Json;
+  prep_time_min_days: number | null;
+  prep_time_max_days: number | null;
+  is_accepting_orders: boolean;
+};
+
+function toCatalogShop(row: ShopRow): CatalogShop {
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    description: row.description,
+    city: row.city,
+    governorate: row.governorate,
+    logoPath: row.logo_path,
+    coverPath: row.cover_path,
+    workingHours: workingHoursFromJson(row.working_hours),
+    prepTimeMinDays: row.prep_time_min_days,
+    prepTimeMaxDays: row.prep_time_max_days,
+    isAcceptingOrders: row.is_accepting_orders,
+  };
+}
 
 type ImageRow = { path: string; alt: string | null; position: number };
 
@@ -98,23 +151,32 @@ function toCatalogProducts(rows: ProductRow[]): CatalogProduct[] {
  */
 export type Load<T> = { ok: true; data: T } | { ok: false };
 
-export async function loadCategories(): Promise<Load<CatalogCategory[]>> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("categories")
-    .select("id, name, slug, description")
-    .eq("is_active", true)
-    .order("position", { ascending: true })
-    .order("name", { ascending: true });
+const FAILED_LOAD: CatalogRead<{ ok: false }> = {
+  value: { ok: false },
+  cacheable: false,
+};
 
-  if (error) return { ok: false };
-  return { ok: true, data: data ?? [] };
-}
+export const loadCategories = cachedCatalogRead(
+  "categories",
+  async (): Promise<CatalogRead<Load<CatalogCategory[]>>> => {
+    const supabase = createPublicClient();
+    const { data, error } = await supabase
+      .from("categories")
+      .select("id, name, slug, description")
+      .eq("is_active", true)
+      .order("position", { ascending: true })
+      .order("name", { ascending: true });
 
-/** Cached per request so generateMetadata and the page share one query. */
-export const loadCategory = cache(
-  async (slug: string): Promise<Load<CatalogCategory | null>> => {
-    const supabase = await createClient();
+    if (error) return FAILED_LOAD;
+    return { value: { ok: true, data: data ?? [] }, cacheable: true };
+  },
+  [CATALOG_TAGS.categories],
+);
+
+const readCategory = cachedCatalogRead(
+  "category",
+  async (slug: string): Promise<CatalogRead<Load<CatalogCategory | null>>> => {
+    const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("categories")
       .select("id, name, slug, description")
@@ -122,119 +184,179 @@ export const loadCategory = cache(
       .eq("is_active", true)
       .maybeSingle();
 
-    if (error) return { ok: false };
-    return { ok: true, data: data ?? null };
+    if (error) return FAILED_LOAD;
+    // Unknown slugs come straight from the URL; never store them.
+    return { value: { ok: true, data: data ?? null }, cacheable: !!data };
   },
+  [CATALOG_TAGS.categories],
 );
 
-export async function loadProductsByCategory(
-  categoryId: string,
-  limit = 60,
-): Promise<Load<CatalogProduct[]>> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("products")
-    .select(PRODUCT_SELECT)
-    .eq("category_id", categoryId)
-    .eq("status", "active")
-    .order("created_at", { ascending: false })
-    .limit(limit)
-    .returns<ProductRow[]>();
+/** Also memoized per request so generateMetadata and the page share one lookup. */
+export const loadCategory = cache(readCategory);
 
-  if (error) return { ok: false };
-  return { ok: true, data: toCatalogProducts(data ?? []) };
-}
+export const loadProductsByCategory = cachedCatalogRead(
+  "products-by-category",
+  async (
+    categoryId: string,
+    limit: number = 60,
+  ): Promise<CatalogRead<Load<CatalogProduct[]>>> => {
+    const supabase = createPublicClient();
+    const { data, error } = await supabase
+      .from("products")
+      .select(PRODUCT_SELECT)
+      .eq("category_id", categoryId)
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(limit)
+      .returns<ProductRow[]>();
+
+    if (error) return FAILED_LOAD;
+    return {
+      value: { ok: true, data: toCatalogProducts(data ?? []) },
+      cacheable: true,
+    };
+  },
+  [CATALOG_TAGS.catalog, CATALOG_TAGS.categories, CATALOG_TAGS.shops],
+);
 
 export async function getCategories(): Promise<CatalogCategory[]> {
   const result = await loadCategories();
   return result.ok ? result.data : [];
 }
 
-export async function loadShops(limit?: number): Promise<Load<CatalogShop[]>> {
-  const supabase = await createClient();
-  let query = supabase
-    .from("public_vendors")
-    .select("id, name, slug, description, city, governorate")
-    .order("name", { ascending: true });
-
-  if (limit) query = query.limit(limit);
-
-  const { data, error } = await query;
-  if (error) return { ok: false };
-  return { ok: true, data: data ?? [] };
-}
-
-/** Cached per request so generateMetadata and the page share one query. */
-export const loadShop = cache(
-  async (slug: string): Promise<Load<CatalogShop | null>> => {
-    const supabase = await createClient();
-    const { data, error } = await supabase
+export const loadShops = cachedCatalogRead(
+  "shops",
+  async (limit?: number): Promise<CatalogRead<Load<CatalogShop[]>>> => {
+    const supabase = createPublicClient();
+    let query = supabase
       .from("public_vendors")
-      .select("id, name, slug, description, city, governorate")
-      .eq("slug", slug)
-      .maybeSingle();
+      .select("id, name, slug, description, city, governorate, logo_path, cover_path, working_hours, prep_time_min_days, prep_time_max_days, is_accepting_orders")
+      .order("name", { ascending: true });
 
-    if (error) return { ok: false };
-    return { ok: true, data: data ?? null };
+    if (limit) query = query.limit(limit);
+
+    const { data, error } = await query.returns<ShopRow[]>();
+    if (error) return FAILED_LOAD;
+    return {
+      value: { ok: true, data: (data ?? []).map(toCatalogShop) },
+      cacheable: true,
+    };
   },
+  [CATALOG_TAGS.shops],
 );
 
-export async function loadProductsByShop(
-  vendorId: string,
-  limit = 60,
-): Promise<Load<CatalogProduct[]>> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("products")
-    .select(PRODUCT_SELECT)
-    .eq("vendor_id", vendorId)
-    .eq("status", "active")
-    .order("created_at", { ascending: false })
-    .limit(limit)
-    .returns<ProductRow[]>();
+const readShop = cachedCatalogRead(
+  "shop",
+  async (slug: string): Promise<CatalogRead<Load<CatalogShop | null>>> => {
+    const supabase = createPublicClient();
+    const { data, error } = await supabase
+      .from("public_vendors")
+      .select("id, name, slug, description, city, governorate, logo_path, cover_path, working_hours, prep_time_min_days, prep_time_max_days, is_accepting_orders")
+      .eq("slug", slug)
+      .maybeSingle<ShopRow>();
 
-  if (error) return { ok: false };
-  return { ok: true, data: toCatalogProducts(data ?? []) };
-}
+    if (error) return FAILED_LOAD;
+    // Unknown slugs come straight from the URL; never store them.
+    return {
+      value: { ok: true, data: data ? toCatalogShop(data) : null },
+      cacheable: !!data,
+    };
+  },
+  [CATALOG_TAGS.shops],
+);
+
+/** Also memoized per request so generateMetadata and the page share one lookup. */
+export const loadShop = cache(readShop);
+
+export const loadProductsByShop = cachedCatalogRead(
+  "products-by-shop",
+  async (
+    vendorId: string,
+    limit: number = 60,
+  ): Promise<CatalogRead<Load<CatalogProduct[]>>> => {
+    const supabase = createPublicClient();
+    const { data, error } = await supabase
+      .from("products")
+      .select(PRODUCT_SELECT)
+      .eq("vendor_id", vendorId)
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(limit)
+      .returns<ProductRow[]>();
+
+    if (error) return FAILED_LOAD;
+    return {
+      value: { ok: true, data: toCatalogProducts(data ?? []) },
+      cacheable: true,
+    };
+  },
+  [CATALOG_TAGS.catalog, CATALOG_TAGS.shops],
+);
 
 export async function getShops(limit?: number): Promise<CatalogShop[]> {
   const result = await loadShops(limit);
   return result.ok ? result.data : [];
 }
 
-/** Newest active products across every shop, newest first. */
-export async function getNewArrivals(limit = 8): Promise<CatalogProduct[]> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("products")
-    .select(PRODUCT_SELECT)
-    .eq("status", "active")
-    .order("created_at", { ascending: false })
-    .limit(limit)
-    .returns<ProductRow[]>();
+const readNewArrivals = cachedCatalogRead(
+  "new-arrivals",
+  async (limit: number): Promise<CatalogRead<CatalogProduct[]>> => {
+    const supabase = createPublicClient();
+    const { data, error } = await supabase
+      .from("products")
+      .select(PRODUCT_SELECT)
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(limit)
+      .returns<ProductRow[]>();
 
-  return toCatalogProducts(data ?? []);
+    return {
+      value: toCatalogProducts(data ?? []),
+      cacheable: !error,
+    };
+  },
+  [CATALOG_TAGS.catalog, CATALOG_TAGS.categories, CATALOG_TAGS.shops],
+);
+
+/** Newest active products across every shop, newest first. */
+export function getNewArrivals(limit = 8): Promise<CatalogProduct[]> {
+  return readNewArrivals(limit);
 }
 
+const readProductsByBudget = cachedCatalogRead(
+  "products-by-budget",
+  async (
+    minMinor: number | null,
+    maxMinor: number | null,
+    limit: number,
+  ): Promise<CatalogRead<CatalogProduct[]>> => {
+    const supabase = createPublicClient();
+    let query = supabase
+      .from("products")
+      .select(PRODUCT_SELECT)
+      .eq("status", "active")
+      .order("price_minor", { ascending: true })
+      .limit(limit);
+
+    if (minMinor !== null) query = query.gte("price_minor", minMinor);
+    if (maxMinor !== null) query = query.lte("price_minor", maxMinor);
+
+    const { data, error } = await query.returns<ProductRow[]>();
+    return {
+      value: toCatalogProducts(data ?? []),
+      cacheable: !error,
+    };
+  },
+  [CATALOG_TAGS.catalog, CATALOG_TAGS.categories, CATALOG_TAGS.shops],
+);
+
 /** Active products within a price band (integer piastres). */
-export async function getProductsByBudget(
+export function getProductsByBudget(
   minMinor: number | null,
   maxMinor: number | null,
   limit = 4,
 ): Promise<CatalogProduct[]> {
-  const supabase = await createClient();
-  let query = supabase
-    .from("products")
-    .select(PRODUCT_SELECT)
-    .eq("status", "active")
-    .order("price_minor", { ascending: true })
-    .limit(limit);
-
-  if (minMinor !== null) query = query.gte("price_minor", minMinor);
-  if (maxMinor !== null) query = query.lte("price_minor", maxMinor);
-
-  const { data } = await query.returns<ProductRow[]>();
-  return toCatalogProducts(data ?? []);
+  return readProductsByBudget(minMinor, maxMinor, limit);
 }
 
 export type SearchParams = {

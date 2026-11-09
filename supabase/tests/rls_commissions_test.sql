@@ -758,4 +758,221 @@ begin
   raise notice 'TEST 15 PASSED: fully released commissions can still be reversed on return';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST 16: direct payout authorization and explicit empty-settlement rejection
+-- ---------------------------------------------------------------------------
+reset role;
+do $$
+declare v_sid uuid;
+begin
+  insert into public.settlements (vendor_id, status)
+  values ('41100000-0000-0000-0000-000000000001', 'open')
+  returning id into v_sid;
+  perform set_config('gifto_test.comm_empty_settlement_id', v_sid::text, false);
+end $$;
+
+set role anon;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+begin
+  begin
+    perform public.mark_settlement_paid(
+      current_setting('gifto_test.comm_empty_settlement_id')::uuid
+    );
+    raise exception 'TEST 16 FAILED: anon marked a settlement paid';
+  exception when insufficient_privilege then
+    null;
+  end;
+end $$;
+
+set role authenticated;
+set request.jwt.claim.sub = 'c2110000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"c2110000-0000-0000-0000-000000000003"}';
+do $$
+begin
+  begin
+    perform public.mark_settlement_paid(
+      current_setting('gifto_test.comm_empty_settlement_id')::uuid
+    );
+    raise exception 'TEST 16 FAILED: a non-admin marked a settlement paid';
+  exception when insufficient_privilege then
+    null;
+  end;
+end $$;
+
+set request.jwt.claim.sub = 'c3110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c3110000-0000-0000-0000-000000000001"}';
+do $$
+begin
+  begin
+    perform public.mark_settlement_paid(
+      current_setting('gifto_test.comm_empty_settlement_id')::uuid
+    );
+    raise exception 'TEST 16 FAILED: an empty settlement was marked paid';
+  exception when check_violation then
+    raise notice 'TEST 16 PASSED: authorization and empty-settlement guard hold';
+  end;
+  perform public.void_settlement(
+    current_setting('gifto_test.comm_empty_settlement_id')::uuid,
+    'Empty settlement cleanup for the next isolated test'
+  );
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 17: independent open settlements reject inconsistent snapshots while
+-- valid zero-value commission entries remain payable.
+-- ---------------------------------------------------------------------------
+set role authenticated;
+set request.jwt.claim.sub = 'c1110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c1110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_oid uuid;
+begin
+  v_oid := public.place_order(
+    '[{"product_id":"51100000-0000-0000-0000-000000000004","quantity":1}]'::jsonb,
+    'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria'
+  );
+  perform set_config('gifto_test.comm_order5_id', v_oid::text, false);
+end $$;
+
+set request.jwt.claim.sub = 'c2110000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"c2110000-0000-0000-0000-000000000003"}';
+do $$
+declare v_ov uuid;
+begin
+  select id into v_ov
+    from public.order_vendors
+   where order_id = current_setting('gifto_test.comm_order5_id')::uuid
+     and vendor_id = '41100000-0000-0000-0000-000000000002';
+  update public.order_vendors set status = 'confirmed' where id = v_ov;
+  update public.order_vendors set status = 'shipped' where id = v_ov;
+  update public.order_vendors set status = 'delivered' where id = v_ov;
+end $$;
+
+set role authenticated;
+set request.jwt.claim.sub = 'c3110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c3110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_sid uuid;
+begin
+  v_sid := public.create_settlement('41100000-0000-0000-0000-000000000002');
+  perform set_config('gifto_test.comm_settlement5_id', v_sid::text, false);
+end $$;
+
+reset role;
+do $$
+begin
+  update public.settlement_lines
+     set amount_minor = 1
+   where settlement_id = current_setting('gifto_test.comm_settlement5_id')::uuid;
+end $$;
+
+set role authenticated;
+set request.jwt.claim.sub = 'c3110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c3110000-0000-0000-0000-000000000001"}';
+do $$
+begin
+  begin
+    perform public.mark_settlement_paid(
+      current_setting('gifto_test.comm_settlement5_id')::uuid
+    );
+    raise exception 'TEST 17 FAILED: mismatched settlement snapshot was paid';
+  exception when check_violation then
+    null;
+  end;
+end $$;
+
+set role authenticated;
+set request.jwt.claim.sub = 'c1110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c1110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_oid uuid;
+begin
+  v_oid := public.place_order(
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria'
+  );
+  perform set_config('gifto_test.comm_order6_id', v_oid::text, false);
+end $$;
+
+set request.jwt.claim.sub = 'c2110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c2110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_ov uuid;
+begin
+  select id into v_ov
+    from public.order_vendors
+   where order_id = current_setting('gifto_test.comm_order6_id')::uuid
+     and vendor_id = '41100000-0000-0000-0000-000000000001';
+  update public.order_vendors set status = 'confirmed' where id = v_ov;
+  update public.order_vendors set status = 'shipped' where id = v_ov;
+  update public.order_vendors set status = 'delivered' where id = v_ov;
+end $$;
+
+set request.jwt.claim.sub = 'c3110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c3110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_sid uuid;
+begin
+  v_sid := public.create_settlement('41100000-0000-0000-0000-000000000001');
+  perform set_config('gifto_test.comm_settlement6_id', v_sid::text, false);
+end $$;
+
+reset role;
+do $$
+begin
+  update public.settlement_lines
+     set amount_minor = 0
+   where settlement_id = current_setting('gifto_test.comm_settlement6_id')::uuid;
+  update public.commission_entries ce
+     set base_minor = 0,
+         amount_minor = 0
+    from public.settlement_lines l
+   where l.settlement_id = current_setting('gifto_test.comm_settlement6_id')::uuid
+     and l.commission_entry_id = ce.id;
+end $$;
+
+set role authenticated;
+set request.jwt.claim.sub = 'c3110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c3110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_paid_at timestamptz; v_paid_by uuid;
+begin
+  perform public.mark_settlement_paid(
+    current_setting('gifto_test.comm_settlement6_id')::uuid
+  );
+  select paid_at, paid_by
+    into v_paid_at, v_paid_by
+    from public.settlements
+   where id = current_setting('gifto_test.comm_settlement6_id')::uuid;
+  if v_paid_at is null
+     or v_paid_by is distinct from 'c3110000-0000-0000-0000-000000000001' then
+    raise exception 'TEST 17 FAILED: zero-value payout audit fields were not stamped';
+  end if;
+  raise notice 'TEST 17 PASSED: mismatch rejects and independent zero-value payout succeeds';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 18: the foreign key rejects an invalid commission reference.
+-- A payout-time orphan cannot be seeded without violating this invariant;
+-- multiple missing references are the same structural boundary.
+-- ---------------------------------------------------------------------------
+reset role;
+do $$
+begin
+  begin
+    insert into public.settlement_lines (
+      settlement_id, commission_entry_id, amount_minor
+    ) values (
+      current_setting('gifto_test.comm_settlement3_id')::uuid,
+      '99900000-0000-0000-0000-000000000001',
+      0
+    );
+    raise exception 'TEST 18 FAILED: an invalid commission reference was accepted';
+  exception when foreign_key_violation then
+    raise notice 'TEST 18 PASSED: missing commission references are blocked by the FK';
+  end;
+end $$;
+
 rollback;

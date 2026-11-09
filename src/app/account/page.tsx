@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { requireUser } from "@/lib/auth";
+import { getRequestContext } from "@/lib/auth";
 
 export const metadata = { title: "Account — Gifto" };
 
@@ -20,40 +20,47 @@ const statusHelp: Record<string, string> = {
 };
 
 export default async function AccountPage() {
-  const { supabase, user } = await requireUser();
+  const { supabase, user, memberships, isPlatformAdmin } =
+    await getRequestContext();
 
-  const [{ data: profile }, { data: memberships }] = await Promise.all([
+  if (!user) redirect("/login");
+
+  // The request context (shared with the header) already holds the admin flag
+  // and memberships, so the redirects below cost no extra queries.
+  if (isPlatformAdmin) {
+    redirect("/admin");
+  }
+
+  // Only send vendors with eligible active memberships to the vendor dashboard.
+  // Pending/suspended/rejected vendors must remain on the account page to see status.
+  const preferred = memberships.find((m) => m.vendor?.status === "active");
+  if (preferred?.vendor) {
+    redirect(`/vendor/overview?vendor=${preferred.vendor.id}`);
+  }
+
+  // Only profile details and (when the user belongs to a shop) shop locations
+  // are fetched here; shops are skipped entirely for plain customers.
+  const [{ data: profile }, { data: shopRows }] = await Promise.all([
     supabase
       .from("profiles")
       .select("full_name, phone, is_platform_admin")
       .eq("id", user.id)
       .maybeSingle(),
-    supabase
-      .from("vendor_members")
-      .select(
-        "role, vendor:vendors(id, name, slug, status, city, governorate)",
-      )
-      .eq("profile_id", user.id)
-      .order("created_at", { ascending: true }),
+    memberships.length > 0
+      ? supabase
+          .from("vendor_members")
+          .select(
+            "role, vendor:vendors(id, name, slug, status, city, governorate)",
+          )
+          .eq("profile_id", user.id)
+          .order("created_at", { ascending: true })
+      : Promise.resolve({ data: [] }),
   ]);
 
-  const isPlatformAdmin = profile?.is_platform_admin ?? false;
-  if (isPlatformAdmin) {
-    redirect("/admin");
-  }
-
-  const shops = (memberships ?? []).filter(
+  const shops = (shopRows ?? []).filter(
     (m): m is typeof m & { vendor: NonNullable<typeof m.vendor> } =>
       Boolean(m.vendor),
   );
-
-  // Only send vendors with eligible active memberships to the vendor dashboard.
-  // Pending/suspended/rejected vendors must remain on the account page to see status.
-  const eligibleActiveShops = shops.filter((s) => s.vendor.status === "active");
-  if (eligibleActiveShops.length > 0) {
-    const preferred = eligibleActiveShops[0];
-    redirect(`/vendor/overview?vendor=${preferred.vendor.id}`);
-  }
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-10">

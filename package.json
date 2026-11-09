@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "seed:demo": "node scripts/seed-demo.mjs",
     "demo:passwords": "node scripts/demo-passwords.mjs",
-    "cleanup:demo": "node scripts/cleanup-demo.mjs"
+    "cleanup:demo": "node scripts/cleanup-demo.mjs",
+    "media:backfill": "node scripts/backfill-vendor-media.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

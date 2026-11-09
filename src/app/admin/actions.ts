@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requirePlatformAdmin } from "@/lib/auth";
+import { revalidatePublicCatalog } from "@/lib/catalog-cache";
 import { getSiteUrl } from "@/lib/site-url";
 import { slugify } from "@/lib/slugify";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -52,6 +53,7 @@ export async function setVendorStatus(
   revalidatePath("/admin");
   revalidatePath("/shops");
   revalidatePath("/account");
+  revalidatePublicCatalog();
 
   return { vendorId, success: `Status set to “${status}”.` };
 }
@@ -305,6 +307,7 @@ export async function createCategory(
   revalidatePath("/admin");
   revalidatePath("/categories");
   revalidatePath("/");
+  revalidatePublicCatalog();
 
   return { success: `Category “${name}” created.` };
 }

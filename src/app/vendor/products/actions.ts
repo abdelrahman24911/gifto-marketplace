@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { revalidatePublicCatalog } from "@/lib/catalog-cache";
 import { parseEgpToMinor } from "@/lib/money";
 import { requireVendorRole } from "@/lib/vendor";
 
@@ -97,6 +98,7 @@ export async function saveProduct(
 
   const { supabase, access, canManage } = await requireVendorRole(
     formData.get("vendor") as string | null,
+    { verifyWithAuthServer: true },
   );
 
   if (!canManage) {
@@ -152,6 +154,7 @@ export async function saveProduct(
     revalidatePath("/shops");
     revalidatePath("/categories");
     revalidatePath(`/shops/${access.vendorSlug}`);
+    revalidatePublicCatalog();
 
     return { success: "Product updated.", productId: data.id, attempt };
   }
@@ -188,6 +191,7 @@ export async function saveProduct(
   revalidatePath("/shops");
   revalidatePath("/categories");
   revalidatePath(`/shops/${access.vendorSlug}`);
+  revalidatePublicCatalog();
 
   return { success: "Product created.", productId: data.id, attempt };
 }
@@ -213,6 +217,7 @@ export async function deleteProduct(
 
   const { supabase, access } = await requireVendorRole(
     formData.get("vendor") as string | null,
+    { verifyWithAuthServer: true },
   );
 
   // Collect image paths first so the Storage objects can be cleaned up after
@@ -240,6 +245,7 @@ export async function deleteProduct(
   revalidatePath("/shops");
   revalidatePath("/categories");
   revalidatePath(`/shops/${access.vendorSlug}`);
+  revalidatePublicCatalog();
 
   return { success: "Product deleted.", attempt };
 }

@@ -1,13 +1,20 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
+import { Pagination } from "@/components/pagination";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { formatEgp } from "@/lib/money";
 import {
   ORDER_STATUS_LABELS,
   ORDER_STATUS_STYLES,
   isOrderStatus,
-  isTerminalOrderStatus,
 } from "@/lib/orders";
+import {
+  DEFAULT_PAGE_SIZE,
+  clampPage,
+  pageWindow,
+  parsePage,
+} from "@/lib/pagination";
 
 import type { OrderStatus } from "@/lib/supabase/database.types";
 
@@ -25,36 +32,65 @@ const ADMIN_FILTERS = [
   { value: "partially_completed", label: "Partially completed" },
 ] as const;
 
+const ATTENTION_STATUSES: OrderStatus[] = [
+  "placed",
+  "confirmed",
+  "shipped",
+];
+
+function adminOrdersHref(filter: string, page = 1) {
+  const params = new URLSearchParams();
+  if (filter !== "all") params.set("status", filter);
+  if (page > 1) params.set("page", String(page));
+  const query = params.toString();
+  return query ? `/admin/orders?${query}` : "/admin/orders";
+}
+
 export default async function AdminOrdersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; page?: string }>;
 }) {
-  const { status: statusFilter } = await searchParams;
+  const { status: statusFilter, page: pageParam } = await searchParams;
   const { supabase } = await requirePlatformAdmin();
 
-  const { data } = await supabase
+  const filter = statusFilter ?? "all";
+  const requestedPage = parsePage(pageParam);
+  const range = pageWindow(requestedPage);
+
+  let listQuery = supabase
     .from("orders")
     .select(
       "id, public_reference, user_id, status, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, contact_email, city, governorate, created_at, order_vendors(id, status, subtotal_minor, commission_rate, vendor:vendors(name, slug), order_items(product_name, quantity, line_total_minor), commission_entries(amount_minor, status))",
-    )
-    .order("created_at", { ascending: false });
-
-  let orders = data ?? [];
-  const filter = statusFilter ?? "all";
+      { count: "exact" },
+    );
 
   if (filter === "attention") {
-    orders = orders.filter((order) => {
-      const s = order.status;
-      return s === "placed" || s === "confirmed" || s === "shipped";
-    });
+    listQuery = listQuery.in("status", ATTENTION_STATUSES);
   } else if (filter !== "all" && isOrderStatus(filter)) {
-    orders = orders.filter((order) => order.status === filter);
+    listQuery = listQuery.eq("status", filter);
   }
 
-  const openCount = (data ?? []).filter(
-    (order) => !isTerminalOrderStatus(order.status),
-  ).length;
+  const [listResult, { count: openCount }] = await Promise.all([
+    listQuery
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(range.from, range.to),
+    supabase
+      .from("orders")
+      .select("id", { count: "exact", head: true })
+      .not("status", "in", "(delivered,cancelled,returned)"),
+  ]);
+
+  const total = listResult.count ?? 0;
+  const currentPage = clampPage(requestedPage, total);
+
+  if (requestedPage > 1 && currentPage !== requestedPage) {
+    redirect(adminOrdersHref(filter, currentPage));
+  }
+
+  const orders = listResult.data ?? [];
+  const inProgress = openCount ?? 0;
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-10">
@@ -70,7 +106,7 @@ export default async function AdminOrdersPage({
             Marketplace orders
           </h1>
           <p className="mt-1 text-sm text-zinc-600">
-            Read-only oversight of every order across all shops · {openCount}{" "}
+            Read-only oversight of every order across all shops · {inProgress}{" "}
             in progress
           </p>
         </div>
@@ -78,7 +114,7 @@ export default async function AdminOrdersPage({
 
       <nav aria-label="Filter orders" className="mt-6 flex flex-wrap gap-2">
         {ADMIN_FILTERS.map((f) => {
-          const href = `/admin/orders${f.value === "all" ? "" : `?status=${f.value}`}`;
+          const href = adminOrdersHref(f.value);
           const active = filter === f.value;
           return (
             <Link
@@ -96,9 +132,20 @@ export default async function AdminOrdersPage({
         })}
       </nav>
 
+      {listResult.error ? (
+        <p
+          role="alert"
+          className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+        >
+          Orders could not be loaded. Refresh the page to try again.
+        </p>
+      ) : null}
+
       {orders.length === 0 ? (
         <p className="mt-8 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-12 text-center text-sm text-zinc-600">
-          No orders have been placed yet.
+          {filter === "all"
+            ? "No orders have been placed yet."
+            : "No orders match this filter."}
         </p>
       ) : (
         <ul className="mt-8 flex flex-col gap-4">
@@ -256,6 +303,14 @@ export default async function AdminOrdersPage({
           })}
         </ul>
       )}
+
+      <Pagination
+        page={currentPage}
+        total={total}
+        pageSize={DEFAULT_PAGE_SIZE}
+        label="Marketplace order pages"
+        buildHref={(page) => adminOrdersHref(filter, page)}
+      />
     </div>
   );
 }

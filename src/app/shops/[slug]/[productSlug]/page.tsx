@@ -18,7 +18,7 @@ export default async function ProductPage({
 
   const { data: shop } = await supabase
     .from("public_vendors")
-    .select("id, name, slug")
+    .select("id, name, slug, is_accepting_orders")
     .eq("slug", slug)
     .maybeSingle();
 
@@ -71,6 +71,8 @@ export default async function ProductPage({
                     alt={image.alt ?? `${product.name} ${index + 1}`}
                     name={product.name}
                     className="h-64 w-full"
+                    sizes="(min-width: 768px) 448px, 100vw"
+                    preload={index === 0}
                   />
                 </li>
               ))}
@@ -125,19 +127,29 @@ export default async function ProductPage({
           ) : null}
 
           <div className="mt-6">
-            <AddToCartButton
-              item={{
-                productId: product.id,
-                vendorId: shop.id,
-                vendorName: shop.name,
-                vendorSlug: shop.slug,
-                name: product.name,
-                slug: product.slug,
-                priceMinor: product.price_minor,
-                imagePath: images[0]?.path ?? null,
-                stock: product.stock,
-              }}
-            />
+            {shop.is_accepting_orders ? (
+              <AddToCartButton
+                item={{
+                  productId: product.id,
+                  vendorId: shop.id,
+                  vendorName: shop.name,
+                  vendorSlug: shop.slug,
+                  name: product.name,
+                  slug: product.slug,
+                  priceMinor: product.price_minor,
+                  imagePath: images[0]?.path ?? null,
+                  stock: product.stock,
+                }}
+              />
+            ) : (
+              <p
+                role="status"
+                className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+              >
+                {shop.name} has paused new orders. Browse the shop and come back
+                when checkout reopens.
+              </p>
+            )}
             <p className="mt-3 text-sm text-zinc-500">
               Cash on delivery. Each shop delivers its own items, so an order
               with several shops arrives in separate deliveries.

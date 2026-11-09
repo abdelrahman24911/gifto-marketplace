@@ -1,10 +1,11 @@
 import Link from "next/link";
 
 import { requirePlatformAdmin } from "@/lib/auth";
+import { fetchAllRows } from "@/lib/fetch-all";
 import {
   buildSettlementLineLookup,
   commissionEntriesById,
-  settlementTotals,
+  settlementTotalsResult,
   totalsForEntries,
   totalsForFinanceState,
 } from "@/lib/finance";
@@ -73,31 +74,42 @@ function actorLabel(id: string | null, actors: ReadonlyMap<string, ActorRow>) {
 export default async function AdminSettlementsPage() {
   const { supabase } = await requirePlatformAdmin();
 
-  const [
-    { data: settlementData, error: settlementsError },
-    { data: entryData, error: entriesError },
-    { data: vendorData, error: vendorsError },
-  ] = await Promise.all([
-    supabase
-      .from("settlements")
-      .select(
-        "id, vendor_id, status, total_minor, note, created_at, paid_at, created_by, paid_by, voided_at, voided_by, void_reason, vendor:vendors(name, slug), settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
-      )
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("commission_entries")
-      .select(
-        "id, vendor_id, status, rate, base_minor, amount_minor, earned_at, reversed_at",
+  const [settlementsResult, entriesResult, { data: vendorData, error: vendorsError }] =
+    await Promise.all([
+      fetchAllRows<SettlementQueryRow>((from, to) =>
+        supabase
+          .from("settlements")
+          .select(
+            "id, vendor_id, status, total_minor, note, created_at, paid_at, created_by, paid_by, voided_at, voided_by, void_reason, vendor:vendors(name, slug), settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
+          )
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, to)
+          .returns<SettlementQueryRow[]>(),
       ),
-    supabase
-      .from("vendors")
-      .select("id, name, slug")
-      .eq("status", "active")
-      .order("name", { ascending: true }),
-  ]);
+      fetchAllRows<CommissionEntryRecord>((from, to) =>
+        supabase
+          .from("commission_entries")
+          .select(
+            "id, vendor_id, status, rate, base_minor, amount_minor, earned_at, reversed_at",
+          )
+          .order("earned_at", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, to)
+          .returns<CommissionEntryRecord[]>(),
+      ),
+      supabase
+        .from("vendors")
+        .select("id, name, slug")
+        .eq("status", "active")
+        .order("name", { ascending: true }),
+    ]);
 
-  const settlements = (settlementData ?? []) as unknown as SettlementQueryRow[];
-  const entries = (entryData ?? []) as CommissionEntryRecord[];
+  const settlements = settlementsResult.rows;
+  const settlementsById = new Map(
+    settlements.map((settlement) => [settlement.id, settlement]),
+  );
+  const entries = entriesResult.rows;
   const vendors = (vendorData ?? []) as VendorQueryRow[];
 
   const records: SettlementRecord[] = settlements.map((settlement) => ({
@@ -167,7 +179,13 @@ export default async function AdminSettlementsPage() {
     ((actorData ?? []) as ActorRow[]).map((actor) => [actor.id, actor]),
   );
 
-  const loadError = settlementsError ?? entriesError ?? vendorsError;
+  const loadError = settlementsResult.failed || entriesResult.failed || vendorsError;
+  const totalsIncomplete =
+    settlementsResult.truncated || entriesResult.truncated;
+  const entryRead = {
+    failed: entriesResult.failed,
+    truncated: entriesResult.truncated,
+  };
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-10">
@@ -194,6 +212,17 @@ export default async function AdminSettlementsPage() {
           className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
         >
           Settlement data could not be loaded. Refresh the page to try again.
+        </p>
+      ) : null}
+
+      {totalsIncomplete ? (
+        <p
+          role="status"
+          className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+        >
+          This shop network has more settlement history than can be summed on
+          one page. The balances below are incomplete; use the individual shop
+          finance pages for exact statements.
         </p>
       ) : null}
 
@@ -275,9 +304,10 @@ export default async function AdminSettlementsPage() {
         ) : (
           <ul className="mt-3 flex flex-col gap-4">
             {openSettlements.map((settlement) => {
-              const vendor = settlements.find((row) => row.id === settlement.id)
-                ?.vendor;
-              const totals = settlementTotals(settlement, entriesById);
+              const row = settlementsById.get(settlement.id);
+              const vendor = row?.vendor;
+              const totalsResult = settlementTotalsResult(settlement, entriesById, entryRead);
+              const totals = totalsResult.totals;
               return (
                 <li
                   key={settlement.id}
@@ -290,11 +320,7 @@ export default async function AdminSettlementsPage() {
                       </p>
                       <p className="mt-1 text-sm text-zinc-500">
                         Opened {formatDate(settlement.created_at)} by{" "}
-                        {actorLabel(
-                          settlements.find((row) => row.id === settlement.id)
-                            ?.created_by ?? null,
-                          actors,
-                        )}
+                        {actorLabel(row?.created_by ?? null, actors)}
                       </p>
                     </div>
                     <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-medium text-sky-800">
@@ -306,7 +332,7 @@ export default async function AdminSettlementsPage() {
                     <div>
                       <dt className="text-zinc-500">Delivered gross</dt>
                       <dd className="font-medium text-zinc-900">
-                        {formatEgp(totals.grossMinor)}
+                        {totals.grossMinor === null ? "Unavailable" : formatEgp(totals.grossMinor)}
                       </dd>
                     </div>
                     <div>
@@ -318,7 +344,7 @@ export default async function AdminSettlementsPage() {
                     <div>
                       <dt className="text-zinc-500">Shop net</dt>
                       <dd className="font-medium text-zinc-900">
-                        {formatEgp(totals.netMinor)}
+                        {totals.netMinor === null ? "Unavailable" : formatEgp(totals.netMinor)}
                       </dd>
                     </div>
                     <div>
@@ -328,6 +354,15 @@ export default async function AdminSettlementsPage() {
                       </dd>
                     </div>
                   </dl>
+                  {!totals.complete ? (
+                    <p className="mt-3 text-xs text-amber-800">
+                      {totalsResult.state === "read_failed"
+                        ? "Gross and shop net are unavailable because commission data could not be read."
+                        : totalsResult.state === "truncated"
+                          ? "Gross and shop net are unavailable because commission history was truncated."
+                          : "Gross and shop net are unavailable because one or more commission entries are missing."}
+                    </p>
+                  ) : null}
 
                   {settlement.note ? (
                     <p className="mt-3 rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
@@ -359,8 +394,9 @@ export default async function AdminSettlementsPage() {
         ) : (
           <ul className="mt-3 flex flex-col divide-y divide-zinc-100 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
             {paidSettlements.map((settlement) => {
-              const row = settlements.find((item) => item.id === settlement.id);
-              const totals = settlementTotals(settlement, entriesById);
+              const row = settlementsById.get(settlement.id);
+              const totalsResult = settlementTotalsResult(settlement, entriesById, entryRead);
+              const totals = totalsResult.totals;
               return (
                 <li
                   key={settlement.id}
@@ -388,7 +424,7 @@ export default async function AdminSettlementsPage() {
                     <span className="text-zinc-500">
                       Shop net{" "}
                       <span className="font-medium text-zinc-900">
-                        {formatEgp(totals.netMinor)}
+                        {totals.netMinor === null ? "Unavailable" : formatEgp(totals.netMinor)}
                       </span>
                     </span>
                     <Link
@@ -416,8 +452,9 @@ export default async function AdminSettlementsPage() {
           </p>
           <ul className="mt-3 flex flex-col divide-y divide-zinc-100 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
             {voidedSettlements.map((settlement) => {
-              const row = settlements.find((item) => item.id === settlement.id);
-              const totals = settlementTotals(settlement, entriesById);
+              const row = settlementsById.get(settlement.id);
+              const totalsResult = settlementTotalsResult(settlement, entriesById, entryRead);
+              const totals = totalsResult.totals;
               return (
                 <li
                   key={settlement.id}

@@ -5,7 +5,9 @@ import {
   commissionEntriesById,
   getEntryFinanceState,
   settlementEffectiveStatus,
+  settlementLineGrossMinor,
   settlementTotals,
+  settlementTotalsResult,
   totalsForFinanceState,
 } from "@/lib/finance";
 
@@ -201,9 +203,12 @@ describe("finance helpers", () => {
 
     expect(totals).toEqual({
       count: 1,
+      matchedCount: 1,
+      missingEntryCount: 0,
       grossMinor: 4_000,
       commissionMinor: 400,
       netMinor: 3_600,
+      complete: true,
     });
     expect(settlements[2].total_minor).toBe(totals.commissionMinor);
   });
@@ -216,11 +221,158 @@ describe("finance helpers", () => {
 
     expect(totals).toEqual({
       count: 1,
+      matchedCount: 1,
+      missingEntryCount: 0,
       grossMinor: 7_500,
       commissionMinor: 1_125,
       netMinor: 6_375,
+      complete: true,
     });
     expect(totals.commissionMinor).toBe(settlements[1].total_minor);
     expect(totals.netMinor).not.toBe(settlements[1].total_minor);
+  });
+
+  it("reports complete totals when every commission entry is present", () => {
+    expect(
+      settlementTotalsResult(
+        settlements[0],
+        commissionEntriesById(entries),
+      ),
+    ).toEqual({
+      totals: {
+        count: 1,
+        matchedCount: 1,
+        missingEntryCount: 0,
+        grossMinor: 10_000,
+        commissionMinor: 800,
+        netMinor: 9_200,
+        complete: true,
+      },
+      state: "complete",
+    });
+  });
+
+  it("does not fabricate gross or net when one or more entries are missing", () => {
+    const settlement = {
+      ...settlements[0],
+      settlement_lines: [
+        ...settlements[0].settlement_lines,
+        {
+          commission_entry_id: "missing",
+          amount_minor: 0,
+          released_at: null,
+          released_by: null,
+          release_reason: null,
+        },
+      ],
+    };
+
+    expect(
+      settlementTotalsResult(settlement, commissionEntriesById(entries)),
+    ).toMatchObject({
+      totals: {
+        count: 2,
+        matchedCount: 1,
+        missingEntryCount: 1,
+        grossMinor: null,
+        commissionMinor: 800,
+        netMinor: null,
+        complete: false,
+      },
+      state: "missing_entries",
+    });
+  });
+
+  it("tracks multiple missing entries and empty settlements", () => {
+    const empty = settlementTotalsResult(
+      { settlement_lines: [] },
+      new Map(),
+    );
+    const missing = settlementTotalsResult(
+      {
+        settlement_lines: [
+          { commission_entry_id: "a", amount_minor: 0, released_at: null, released_by: null, release_reason: null },
+          { commission_entry_id: "b", amount_minor: 25, released_at: null, released_by: null, release_reason: null },
+        ],
+      },
+      new Map(),
+    );
+
+    expect(empty).toMatchObject({
+      totals: { count: 0, grossMinor: 0, commissionMinor: 0, netMinor: 0, complete: true },
+      state: "complete",
+    });
+    expect(missing).toMatchObject({
+      totals: { count: 2, matchedCount: 0, missingEntryCount: 2, grossMinor: null, netMinor: null, complete: false },
+      state: "missing_entries",
+    });
+  });
+
+  it("distinguishes failed reads and truncated pagination", () => {
+    const settlement = settlements[0];
+    const failed = settlementTotalsResult(settlement, new Map(), { failed: true });
+    const truncated = settlementTotalsResult(
+      settlement,
+      commissionEntriesById(entries),
+      { truncated: true },
+    );
+
+    expect(failed.state).toBe("read_failed");
+    expect(failed.totals.complete).toBe(false);
+    expect(failed.totals.grossMinor).toBeNull();
+    expect(truncated.state).toBe("truncated");
+    expect(truncated.totals.complete).toBe(false);
+    expect(truncated.totals.netMinor).toBeNull();
+  });
+
+  it("preserves zero gross for a present commission entry", () => {
+    const entry = { ...entries[0], id: "zero-gross", base_minor: 0 };
+    const result = settlementTotalsResult(
+      {
+        settlement_lines: [
+          {
+            commission_entry_id: entry.id,
+            amount_minor: 0,
+            released_at: null,
+            released_by: null,
+            release_reason: null,
+          },
+        ],
+      },
+      commissionEntriesById([entry]),
+    );
+
+    expect(result).toMatchObject({
+      state: "complete",
+      totals: { grossMinor: 0, commissionMinor: 0, netMinor: 0, complete: true },
+    });
+    expect(settlementLineGrossMinor(entry)).toBe(0);
+    expect(settlementLineGrossMinor(undefined)).toBeNull();
+    expect(settlementLineGrossMinor(entry, "read_failed")).toBeNull();
+    expect(settlementLineGrossMinor(entry, "truncated")).toBeNull();
+  });
+
+  it("keeps an empty failed read explicit and prioritizes failed over truncated", () => {
+    const emptyFailed = settlementTotalsResult(
+      { settlement_lines: [] },
+      new Map(),
+      { failed: true },
+    );
+    const both = settlementTotalsResult(
+      settlements[0],
+      commissionEntriesById(entries),
+      { failed: true, truncated: true },
+    );
+
+    expect(emptyFailed).toMatchObject({
+      state: "read_failed",
+      totals: { grossMinor: null, netMinor: null, complete: false },
+    });
+    expect(both.state).toBe("read_failed");
+  });
+
+  it("renders unavailable gross for missing detail entries", () => {
+    expect(settlementLineGrossMinor(undefined)).toBeNull();
+    expect(settlementLineGrossMinor(entries[0])).toBe(entries[0].base_minor);
   });
 });

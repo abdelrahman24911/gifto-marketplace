@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
+import { scopeOrdersToUser } from "@/lib/account-orders";
 import { formatEgp } from "@/lib/money";
+import { loadOrderVendorProfiles } from "@/lib/order-vendors.server";
 import {
   ORDER_STATUS_HELP,
   ORDER_STATUS_LABELS,
@@ -31,20 +33,29 @@ export default async function AccountOrderPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { supabase } = await requireUser();
+  const { supabase, user } = await requireUser();
 
-  // RLS limits this to the caller's own orders (or a platform admin's view).
-  const { data: order } = await supabase
+  // RLS remains a second boundary; this explicit filter prevents platform
+  // admin privileges from broadening the customer-facing page.
+  const { data: order, error } = await scopeOrdersToUser(
+    supabase
     .from("orders")
     .select(
-      "id, status, payment_method, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, address_line, city, governorate, notes, created_at, order_vendors(id, status, subtotal_minor, vendor:vendors(name, slug), order_items(id, product_name, product_slug, unit_price_minor, quantity, line_total_minor))",
+      "id, status, payment_method, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, address_line, city, governorate, notes, created_at, order_vendors(id, status, subtotal_minor, vendor_id, order_items(id, product_name, product_slug, unit_price_minor, quantity, line_total_minor))",
     )
     .eq("id", id)
+    ,
+    user.id,
+  )
     .maybeSingle();
 
+  if (error) {
+    throw new Error("Your order could not be loaded.");
+  }
   if (!order) notFound();
 
   const suborders = order.order_vendors ?? [];
+  const vendorProfiles = await loadOrderVendorProfiles(suborders);
   const canCancel = order.status === "placed";
 
   return (
@@ -109,7 +120,7 @@ export default async function AccountOrderPage({
       <section className="mt-6 flex flex-col gap-4">
         {suborders.map((suborder) => {
           const items = suborder.order_items ?? [];
-          const vendor = suborder.vendor;
+          const vendor = vendorProfiles.get(suborder.vendor_id) ?? null;
 
           return (
             <div

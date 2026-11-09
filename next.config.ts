@@ -1,6 +1,37 @@
 import type { NextConfig } from "next";
 
+// Optimized images may only come from this project's PUBLIC storage objects.
+// Derived from the environment (never hardcoded); no host is allowed if the
+// URL is missing or invalid.
+function supabaseImagePatterns(): NonNullable<
+  NonNullable<NextConfig["images"]>["remotePatterns"]
+> {
+  const raw = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!raw) return [];
+
+  try {
+    const url = new URL(raw);
+    return [
+      {
+        protocol: url.protocol === "http:" ? "http" : "https",
+        hostname: url.hostname,
+        port: url.port,
+        pathname: "/storage/v1/object/public/**",
+      },
+    ];
+  } catch {
+    return [];
+  }
+}
+
 const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: supabaseImagePatterns(),
+    formats: ["image/avif", "image/webp"],
+    // Uploaded files get a fresh UUID path (upsert is off), so a URL never
+    // changes content and optimized copies can be kept for a long time.
+    minimumCacheTTL: 60 * 60 * 24 * 30,
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: "30mb",

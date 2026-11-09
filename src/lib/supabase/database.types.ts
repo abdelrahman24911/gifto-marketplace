@@ -12,11 +12,16 @@
  * Phase 15: active-only policies, stock-column grants, create_vendor_for_owner.
  * Phase 16: settlement audit actors, voiding and one-open-per-vendor uniqueness.
  * Phase 17/18: explicit void state, preserved/released settlement lines.
+ * Phase 20: vendor profile privacy, working hours, public vendor projection.
+ * Phase 21: dedicated vendor-media bucket policies.
+ * Phase 22: vendor order pause enforced in checkout.
+ * Phase 23: vendor support requests and admin queue.
+ * Phase 24: analytics vendor/date index.
  *
  * Regenerate from the live database once the Gifto project exists:
  *   supabase gen types typescript --project-id <ref> > src/lib/supabase/database.types.ts
  * (Keeps this file and the real schema in sync; the placeholders below cover
- * Phases 1–18.)
+ * Phases 1–24.)
  */
 export type Json =
   | string
@@ -39,9 +44,13 @@ export type OrderStatus =
   | "partially_completed";
 export type CommissionStatus = "earned" | "reversed";
 export type SettlementStatus = "open" | "paid" | "voided";
+export type SupportRequestStatus = "open" | "in_progress" | "resolved";
 
 /** The Storage bucket reserved for catalog media (upload arrives later). */
 export const PRODUCT_IMAGES_BUCKET = "product-images";
+
+/** Public-read bucket for vendor logos and cover images. */
+export const VENDOR_MEDIA_BUCKET = "vendor-media";
 
 export type Database = {
   public: {
@@ -90,6 +99,12 @@ export type Database = {
           commission_rate: number;
           contact_phone: string | null;
           contact_email: string | null;
+          cover_path: string | null;
+          address_line: string | null;
+          working_hours: Json;
+          prep_time_min_days: number | null;
+          prep_time_max_days: number | null;
+          is_accepting_orders: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -106,6 +121,12 @@ export type Database = {
           commission_rate?: number;
           contact_phone?: string | null;
           contact_email?: string | null;
+          cover_path?: string | null;
+          address_line?: string | null;
+          working_hours?: Json;
+          prep_time_min_days?: number | null;
+          prep_time_max_days?: number | null;
+          is_accepting_orders?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -122,6 +143,12 @@ export type Database = {
           commission_rate?: number;
           contact_phone?: string | null;
           contact_email?: string | null;
+          cover_path?: string | null;
+          address_line?: string | null;
+          working_hours?: Json;
+          prep_time_min_days?: number | null;
+          prep_time_max_days?: number | null;
+          is_accepting_orders?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -330,6 +357,57 @@ export type Database = {
             foreignKeyName: "product_images_product_id_fkey";
             columns: ["product_id"];
             referencedRelation: "products";
+            referencedColumns: ["id"];
+            isOneToOne: false;
+          },
+        ];
+      };
+      support_requests: {
+        Row: {
+          id: string;
+          vendor_id: string;
+          created_by: string | null;
+          category: string;
+          subject: string;
+          body: string;
+          status: SupportRequestStatus;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          vendor_id: string;
+          created_by?: string | null;
+          category: string;
+          subject: string;
+          body: string;
+          status?: SupportRequestStatus;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          vendor_id?: string;
+          created_by?: string | null;
+          category?: string;
+          subject?: string;
+          body?: string;
+          status?: SupportRequestStatus;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "support_requests_vendor_id_fkey";
+            columns: ["vendor_id"];
+            referencedRelation: "vendors";
+            referencedColumns: ["id"];
+            isOneToOne: false;
+          },
+          {
+            foreignKeyName: "support_requests_created_by_fkey";
+            columns: ["created_by"];
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
             isOneToOne: false;
           },
@@ -794,11 +872,20 @@ export type Database = {
           city: string | null;
           governorate: string | null;
           created_at: string;
+          cover_path: string | null;
+          working_hours: Json;
+          prep_time_min_days: number | null;
+          prep_time_max_days: number | null;
+          is_accepting_orders: boolean;
         };
         Relationships: [];
       };
     };
     Functions: {
+      vendor_working_hours_valid: {
+        Args: { p_hours: Json };
+        Returns: boolean;
+      };
       is_public_vendor: {
         Args: { p_vendor_id: string };
         Returns: boolean;

@@ -3,6 +3,8 @@
 import Image from "next/image";
 import { useActionState } from "react";
 
+import { shouldOptimizeImages } from "@/lib/images";
+
 import {
   deleteProductImage,
   uploadProductImages,
@@ -62,7 +64,8 @@ export function ProductImagesPanel({
                     src={`${baseUrl}/storage/v1/object/public/product-images/${image.path}`}
                     alt={image.alt ?? ""}
                     fill
-                    unoptimized
+                    sizes="(min-width: 640px) 25vw, 50vw"
+                    unoptimized={!shouldOptimizeImages()}
                     className="object-cover"
                   />
                 ) : null}

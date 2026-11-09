@@ -5,7 +5,8 @@ import { requirePlatformAdmin } from "@/lib/auth";
 import {
   commissionEntriesById,
   settlementEffectiveStatus,
-  settlementTotals,
+  settlementLineGrossMinor,
+  settlementTotalsResult,
 } from "@/lib/finance";
 import { formatEgp } from "@/lib/money";
 
@@ -124,14 +125,14 @@ export default async function SettlementDetailPage({
     (line) => line.commission_entry_id,
   );
 
-  const { data: entryData } = entryIds.length
+  const { data: entryData, error: entryError } = entryIds.length
     ? await supabase
         .from("commission_entries")
         .select(
           "id, order_vendor_id, vendor_id, status, rate, base_minor, amount_minor, earned_at, reversed_at",
         )
         .in("id", entryIds)
-    : { data: [] };
+    : { data: [], error: null };
 
   const detailEntries = (entryData ?? []) as DetailCommissionEntry[];
   const detailEntriesById = new Map(
@@ -139,7 +140,10 @@ export default async function SettlementDetailPage({
   );
   const entries: CommissionEntryRecord[] = detailEntries;
   const entriesById = commissionEntriesById(entries);
-  const totals = settlementTotals(settlement, entriesById);
+  const totalsResult = settlementTotalsResult(settlement, entriesById, {
+    failed: Boolean(entryError),
+  });
+  const totals = totalsResult.totals;
 
   const orderVendorIds = Array.from(
     new Set(detailEntries.map((entry) => entry.order_vendor_id)),
@@ -209,6 +213,16 @@ export default async function SettlementDetailPage({
             {totals.count === 1 ? "suborder" : "suborders"}
           </p>
         </div>
+        {!totals.complete ? (
+          <p
+            role="alert"
+            className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+          >
+            {totalsResult.state === "read_failed"
+              ? "Gross and shop net are unavailable because commission data could not be read."
+              : "Gross and shop net are unavailable because one or more commission entries are missing."}
+          </p>
+        ) : null}
         <span
           className={`rounded-full border px-3 py-1 text-xs font-medium ${
             effectiveStatus === "paid"
@@ -228,7 +242,9 @@ export default async function SettlementDetailPage({
             Delivered gross
           </dt>
           <dd className="mt-1 text-xl font-semibold text-zinc-900">
-            {formatEgp(totals.grossMinor)}
+            {totals.grossMinor === null
+              ? "Unavailable"
+              : formatEgp(totals.grossMinor)}
           </dd>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
@@ -244,7 +260,9 @@ export default async function SettlementDetailPage({
             Shop net
           </dt>
           <dd className="mt-1 text-xl font-semibold text-emerald-950">
-            {formatEgp(totals.netMinor)}
+            {totals.netMinor === null
+              ? "Unavailable"
+              : formatEgp(totals.netMinor)}
           </dd>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
@@ -322,13 +340,25 @@ export default async function SettlementDetailPage({
         <section className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
           <h2 className="font-semibold text-emerald-950">Record payout</h2>
           <p className="mt-1 text-sm text-emerald-800">
-            Transfer or hand over <strong>{formatEgp(totals.netMinor)}</strong>{" "}
+            Transfer or hand over{" "}
+            <strong>
+              {totals.netMinor === null
+                ? "an unavailable amount"
+                : formatEgp(totals.netMinor)}
+            </strong>{" "}
             to the shop. Marking this paid records the external payout; it does
             not move money.
           </p>
-          <div className="mt-3">
-            <SettlementPaidButton settlementId={row.id} />
-          </div>
+          {totals.complete ? (
+            <div className="mt-3">
+              <SettlementPaidButton settlementId={row.id} />
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-emerald-900">
+              Payout recording is disabled until the complete commission
+              statement is available.
+            </p>
+          )}
           <div className="mt-6 border-t border-emerald-200 pt-4">
             <h3 className="font-semibold text-emerald-950">
               Opened by mistake?
@@ -364,6 +394,10 @@ export default async function SettlementDetailPage({
           <ul className="mt-3 flex flex-col divide-y divide-zinc-100 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
             {lines.map((line) => {
               const entry = detailEntriesById.get(line.commission_entry_id);
+              const lineGrossMinor = settlementLineGrossMinor(
+                entry,
+                totalsResult.state,
+              );
               const suborder = entry
                 ? orderVendors.get(entry.order_vendor_id)
                 : undefined;
@@ -398,7 +432,9 @@ export default async function SettlementDetailPage({
                       <p className="text-zinc-500">
                         Gross{" "}
                         <span className="font-medium text-zinc-900">
-                          {formatEgp(entry?.base_minor ?? line.amount_minor)}
+                          {lineGrossMinor === null
+                            ? "Unavailable"
+                            : formatEgp(lineGrossMinor)}
                         </span>
                       </p>
                       <p className="text-zinc-500">

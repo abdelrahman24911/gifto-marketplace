@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { getRequestContext } from "@/lib/auth";
+import { assertSessionStillValid, getRequestContext } from "@/lib/auth";
 
 import type { VendorRole, VendorStatus } from "@/lib/supabase/database.types";
 
@@ -33,9 +33,14 @@ export type VendorSession = {
  */
 export async function requireVendorRole(
   preferredVendorId?: string | null,
+  options: { verifyWithAuthServer?: boolean } = {},
 ): Promise<VendorSession> {
-  const { supabase, user, memberships, isPlatformAdmin } =
-    await getRequestContext();
+  // Server Actions pass `verifyWithAuthServer`; the Auth-server check runs
+  // concurrently with the (request-memoized) membership lookup.
+  const [{ supabase, user, memberships, isPlatformAdmin }] = await Promise.all([
+    getRequestContext(),
+    options.verifyWithAuthServer ? assertSessionStillValid() : undefined,
+  ]);
 
   if (!user) redirect("/login");
 

@@ -38,6 +38,7 @@ export function ProductCard({
           name={name}
           className="aspect-[4/5] w-full"
           rounded="rounded-none"
+          sizes="(min-width: 1024px) 25vw, 50vw"
         />
         {soldOut ? (
           <span className="absolute left-3 top-3 rounded-full bg-paper/95 px-2.5 py-1 text-[0.7rem] font-medium uppercase tracking-[0.14em] text-ink-soft">

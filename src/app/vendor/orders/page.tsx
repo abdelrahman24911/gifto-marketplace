@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
+import { Pagination } from "@/components/pagination";
 import { formatEgp } from "@/lib/money";
 import {
   ORDER_STATUS_LABELS,
@@ -7,6 +9,12 @@ import {
   isOrderStatus,
   type OrderStatus,
 } from "@/lib/orders";
+import {
+  DEFAULT_PAGE_SIZE,
+  clampPage,
+  pageWindow,
+  parsePage,
+} from "@/lib/pagination";
 import { requireVendorRole } from "@/lib/vendor";
 
 import { SuborderActions } from "./suborder-actions";
@@ -25,38 +33,81 @@ const FILTERS = [
   { value: "partially_completed", label: "Partially completed" },
 ] as const;
 
+const CLOSED_STATUSES = "(delivered,cancelled,returned)";
+
+function ordersHref(vendorId: string, filter: string, page = 1) {
+  const params = new URLSearchParams({ vendor: vendorId });
+  if (filter !== "all") params.set("status", filter);
+  if (page > 1) params.set("page", String(page));
+  return `/vendor/orders?${params.toString()}`;
+}
+
 export default async function VendorOrdersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ vendor?: string; status?: string }>;
+  searchParams: Promise<{ vendor?: string; status?: string; page?: string }>;
 }) {
-  const { vendor, status: statusFilter } = await searchParams;
+  const {
+    vendor,
+    status: statusFilter,
+    page: pageParam,
+  } = await searchParams;
   const { supabase, access, canManage } = await requireVendorRole(vendor);
 
-  // RLS limits this to the caller's shop; the embedded parent order is
-  // readable only because of the "orders: vendor read" policy.
-  const { data } = await supabase
+  const filter = statusFilter ?? "all";
+  const requestedPage = parsePage(pageParam);
+  const range = pageWindow(requestedPage);
+
+  // Filtering, ordering and paging happen in the database: the previous version
+  // loaded every order line (silently capped at 1,000 rows by PostgREST) and
+  // filtered in memory. RLS still limits rows to the caller's shop.
+  let listQuery = supabase
     .from("order_vendors")
     .select(
       "id, status, subtotal_minor, created_at, order:orders(id, public_reference, recipient_name, contact_phone, address_line, city, governorate, notes, created_at), order_items(id, product_name, quantity, unit_price_minor, line_total_minor)",
+      { count: "exact" },
     )
-    .eq("vendor_id", access.vendorId)
-    .order("created_at", { ascending: false });
-
-  let suborders = data ?? [];
-  const filter = statusFilter ?? "all";
+    .eq("vendor_id", access.vendorId);
 
   if (filter === "open") {
-    suborders = suborders.filter(
-      (s) => s.status !== "delivered" && s.status !== "cancelled" && s.status !== "returned",
-    );
+    listQuery = listQuery.not("status", "in", CLOSED_STATUSES);
   } else if (filter !== "all" && isOrderStatus(filter)) {
-    suborders = suborders.filter((s) => s.status === filter);
+    listQuery = listQuery.eq("status", filter);
   }
 
-  const openCount = (data ?? []).filter(
-    (s) => s.status !== "delivered" && s.status !== "cancelled" && s.status !== "returned",
-  ).length;
+  const [listResult, { count: openTotal }] = await Promise.all([
+    listQuery
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(range.from, range.to),
+    supabase
+      .from("order_vendors")
+      .select("id", { count: "exact", head: true })
+      .eq("vendor_id", access.vendorId)
+      .not("status", "in", CLOSED_STATUSES),
+  ]);
+
+  const total = listResult.count ?? 0;
+  const clamped = clampPage(requestedPage, total);
+
+  // A page past the end (a stale link) lands on the last real page instead of
+  // an empty list. PostgREST reports an out-of-range request as an error.
+  if (requestedPage > 1 && (listResult.error || (listResult.data ?? []).length === 0)) {
+    let lastPage = clamped;
+    if (listResult.count === null) {
+      const { count } = await supabase
+        .from("order_vendors")
+        .select("id", { count: "exact", head: true })
+        .eq("vendor_id", access.vendorId);
+      lastPage = clampPage(requestedPage, count ?? 0);
+    }
+    if (lastPage !== requestedPage) {
+      redirect(ordersHref(access.vendorId, filter, lastPage));
+    }
+  }
+
+  const suborders = listResult.data ?? [];
+  const openCount = openTotal ?? 0;
 
   return (
     <div className="w-full">
@@ -77,7 +128,7 @@ export default async function VendorOrdersPage({
 
       <nav aria-label="Filter orders" className="mt-6 flex flex-wrap gap-2">
         {FILTERS.map((f) => {
-          const href = `/vendor/orders?vendor=${access.vendorId}${f.value === "all" ? "" : `&status=${f.value}`}`;
+          const href = ordersHref(access.vendorId, f.value);
           const active = filter === f.value;
           return (
             <Link
@@ -197,6 +248,13 @@ export default async function VendorOrdersPage({
             })}
           </ul>
         )}
+        <Pagination
+          page={clamped}
+          total={total}
+          pageSize={DEFAULT_PAGE_SIZE}
+          label="Orders pages"
+          buildHref={(page) => ordersHref(access.vendorId, filter, page)}
+        />
       </section>
     </div>
   );

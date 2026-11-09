@@ -32,6 +32,7 @@ export async function setSuborderStatus(
 
   const { supabase, access, canManage } = await requireVendorRole(
     formData.get("vendor") as string | null,
+    { verifyWithAuthServer: true },
   );
 
   if (!canManage) {

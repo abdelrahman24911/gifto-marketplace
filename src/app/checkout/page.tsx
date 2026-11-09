@@ -1,14 +1,14 @@
-import { createClient } from "@/lib/supabase/server";
+import { getRequestContext } from "@/lib/auth";
 
 import { CheckoutForm, type CheckoutDefaults } from "./checkout-form";
 
 export const metadata = { title: "Checkout — Gifto" };
 
 export default async function CheckoutPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Shares the header's request-scoped session lookup instead of opening a
+  // second one. This only pre-fills the form; the Server Action re-verifies the
+  // session with the Auth server before placing an order.
+  const { supabase, user } = await getRequestContext();
 
   const defaults: CheckoutDefaults = {
     recipientName: "",

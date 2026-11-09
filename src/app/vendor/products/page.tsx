@@ -1,12 +1,26 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
+import { Pagination } from "@/components/pagination";
 import { ProductImage } from "@/components/product-image";
 import { formatEgp } from "@/lib/money";
+import {
+  DEFAULT_PAGE_SIZE,
+  clampPage,
+  pageWindow,
+  parsePage,
+} from "@/lib/pagination";
 import { requireVendorRole } from "@/lib/vendor";
 
 import type { ProductStatus } from "@/lib/supabase/database.types";
 
 export const metadata = { title: "Manage products — Gifto" };
+
+function productsHref(vendorId: string, page = 1) {
+  const params = new URLSearchParams({ vendor: vendorId });
+  if (page > 1) params.set("page", String(page));
+  return `/vendor/products?${params.toString()}`;
+}
 
 const statusStyles: Record<ProductStatus, string> = {
   draft: "bg-amber-50 text-amber-800 border-amber-200",
@@ -19,20 +33,44 @@ const LOW_STOCK_THRESHOLD = 5;
 export default async function VendorProductsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ vendor?: string }>;
+  searchParams: Promise<{ vendor?: string; page?: string }>;
 }) {
-  const { vendor } = await searchParams;
+  const { vendor, page: pageParam } = await searchParams;
   const { supabase, access, canManage } = await requireVendorRole(vendor);
 
-  const { data: products } = await supabase
+  const requestedPage = parsePage(pageParam);
+  const range = pageWindow(requestedPage);
+
+  const { data: products, count, error } = await supabase
     .from("products")
     .select(
       "id, name, slug, status, price_minor, stock, category:categories(name, slug), product_images(path, alt, position)",
+      { count: "exact" },
     )
     .eq("vendor_id", access.vendorId)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .range(range.from, range.to);
+
+  // A stale link past the last page lands on the last real page.
+  if (requestedPage > 1 && (error || (products ?? []).length === 0)) {
+    let total = count;
+    if (total === null) {
+      const head = await supabase
+        .from("products")
+        .select("id", { count: "exact", head: true })
+        .eq("vendor_id", access.vendorId);
+      total = head.count ?? 0;
+    }
+    const lastPage = clampPage(requestedPage, total);
+    if (lastPage !== requestedPage) {
+      redirect(productsHref(access.vendorId, lastPage));
+    }
+  }
 
   const rows = products ?? [];
+  const total = count ?? rows.length;
+  const currentPage = clampPage(requestedPage, total);
 
   return (
     <div className="w-full">
@@ -86,6 +124,7 @@ export default async function VendorProductsPage({
                     alt={images[0]?.alt ?? product.name}
                     name={product.name}
                     className="h-16 w-16"
+                    sizes="64px"
                   />
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium text-ink">
@@ -121,6 +160,13 @@ export default async function VendorProductsPage({
             })}
           </ul>
         )}
+        <Pagination
+          page={currentPage}
+          total={total}
+          pageSize={DEFAULT_PAGE_SIZE}
+          label="Products pages"
+          buildHref={(page) => productsHref(access.vendorId, page)}
+        />
       </section>
     </div>
   );

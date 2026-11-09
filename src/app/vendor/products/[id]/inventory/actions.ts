@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { CATALOG_TAGS, revalidatePublicCatalog } from "@/lib/catalog-cache";
 import { requireVendorRole } from "@/lib/vendor";
 
 const NOTE_MAX = 280;
@@ -49,6 +50,7 @@ export async function adjustStock(
 
   const { supabase, access, canManage } = await requireVendorRole(
     formData.get("vendor") as string | null,
+    { verifyWithAuthServer: true },
   );
 
   if (!canManage) {
@@ -70,6 +72,7 @@ export async function adjustStock(
   revalidatePath(`/vendor/products/${productId}/inventory`);
   revalidatePath("/vendor/products");
   revalidatePath(`/shops/${access.vendorSlug}`);
+  revalidatePublicCatalog([CATALOG_TAGS.catalog]);
 
   return { success: "Stock updated.", stock: data, attempt };
 }

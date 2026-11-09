@@ -21,11 +21,26 @@ export default async function VendorOverviewPage({
   const { vendor } = await searchParams;
   const { supabase, access, canManage } = await requireVendorRole(vendor);
 
-  const [{ data: allSubordersData }, { data: recentSuborders }, { data: products }] = await Promise.all([
+  // Exact head-only counts and bounded lists replace the previous full-table
+  // reads of every order line and product (which PostgREST also silently caps
+  // at 1,000 rows, making the counts wrong for busy shops).
+  const countStatus = (status: OrderStatus) =>
     supabase
       .from("order_vendors")
-      .select("id, status")
-      .eq("vendor_id", access.vendorId),
+      .select("id", { count: "exact", head: true })
+      .eq("vendor_id", access.vendorId)
+      .eq("status", status);
+
+  const [
+    placedResult,
+    confirmedResult,
+    shippedResult,
+    recentResult,
+    lowStockResult,
+  ] = await Promise.all([
+    countStatus("placed"),
+    countStatus("confirmed"),
+    countStatus("shipped"),
     supabase
       .from("order_vendors")
       .select(
@@ -37,41 +52,30 @@ export default async function VendorOverviewPage({
     supabase
       .from("products")
       .select("id, name, status, stock")
-      .eq("vendor_id", access.vendorId),
+      .eq("vendor_id", access.vendorId)
+      .eq("status", "active")
+      .lte("stock", LOW_STOCK_THRESHOLD)
+      .order("stock", { ascending: true })
+      .order("name", { ascending: true })
+      .limit(10),
   ]);
 
-  const allSuborders = allSubordersData ?? [];
-  const allProducts = products ?? [];
-  const recent = recentSuborders ?? [];
-
-  const actionable = allSuborders.filter((s) => {
-    const st = s.status as OrderStatus;
-    return st === "placed" || st === "confirmed" || st === "shipped";
-  }).length;
+  const recent = recentResult.data ?? [];
+  const lowStock = lowStockResult.data ?? [];
 
   const counts = {
-    placed: 0,
-    confirmed: 0,
-    shipped: 0,
-    delivered: 0,
-    cancelled: 0,
-    returned: 0,
-    partially_completed: 0,
-  } as Record<OrderStatus, number>;
-
-  for (const s of allSuborders) {
-    const st = s.status as string;
-    if (st in counts) {
-      counts[st as OrderStatus]++;
-    }
-  }
-
-  const lowStock = allProducts.filter(
-    (p) =>
-      p.status === "active" &&
-      typeof p.stock === "number" &&
-      p.stock <= LOW_STOCK_THRESHOLD,
-  );
+    placed: placedResult.count ?? 0,
+    confirmed: confirmedResult.count ?? 0,
+    shipped: shippedResult.count ?? 0,
+  };
+  const actionable = counts.placed + counts.confirmed + counts.shipped;
+  const loadError = [
+    placedResult.error,
+    confirmedResult.error,
+    shippedResult.error,
+    recentResult.error,
+    lowStockResult.error,
+  ].some(Boolean);
 
   return (
     <div className="w-full">
@@ -81,6 +85,16 @@ export default async function VendorOverviewPage({
           Your role: {access.role} · shop status: {access.vendorStatus}
         </p>
       </div>
+
+      {loadError ? (
+        <p
+          role="alert"
+          className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+        >
+          Some dashboard data could not be loaded. Counts and lists may be
+          incomplete; refresh the page to try again.
+        </p>
+      ) : null}
 
       {!canManage ? (
         <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">

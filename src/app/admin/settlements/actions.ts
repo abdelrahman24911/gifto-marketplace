@@ -4,6 +4,16 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requirePlatformAdmin } from "@/lib/auth";
+import { fetchAllRows } from "@/lib/fetch-all";
+import {
+  commissionEntriesById,
+  settlementTotalsResult,
+} from "@/lib/finance";
+
+import type {
+  CommissionEntryRecord,
+  SettlementRecord,
+} from "@/lib/finance";
 
 export type CreateSettlementState =
   | { error: string; attempt: number }
@@ -70,6 +80,63 @@ export async function markSettlementPaid(
   if (!settlementId) return { error: "Missing settlement id.", attempt };
 
   const { supabase } = await requirePlatformAdmin();
+
+  const { data: settlementData, error: settlementError } = await supabase
+    .from("settlements")
+    .select(
+      "settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
+    )
+    .eq("id", settlementId)
+    .maybeSingle();
+
+  if (settlementError || !settlementData) {
+    return {
+      error: "The settlement could not be verified. Refresh the page and try again.",
+      attempt,
+    };
+  }
+
+  const settlement = settlementData as Pick<
+    SettlementRecord,
+    "settlement_lines"
+  >;
+  const entryIds = settlement.settlement_lines.map(
+    (line) => line.commission_entry_id,
+  );
+  const entriesResult = entryIds.length
+    ? await fetchAllRows<CommissionEntryRecord>(
+        (from, to) =>
+          supabase
+            .from("commission_entries")
+            .select(
+              "id, vendor_id, status, rate, base_minor, amount_minor, earned_at, reversed_at",
+            )
+            .in("id", entryIds)
+            .order("id", { ascending: true })
+            .range(from, to)
+            .returns<CommissionEntryRecord[]>(),
+      )
+    : { rows: [], failed: false, truncated: false };
+  const totalsResult = settlementTotalsResult(
+    settlement,
+    commissionEntriesById(entriesResult.rows),
+    {
+      failed: entriesResult.failed,
+      truncated: entriesResult.truncated,
+    },
+  );
+
+  if (!totalsResult.totals.complete) {
+    return {
+      error:
+        totalsResult.state === "read_failed"
+          ? "Commission data could not be read. The settlement was not marked paid."
+          : totalsResult.state === "truncated"
+            ? "Commission data is too large to verify safely. The settlement was not marked paid."
+            : "One or more commission entries are missing. The settlement was not marked paid.",
+      attempt,
+    };
+  }
 
   const { error } = await supabase.rpc("mark_settlement_paid", {
     p_settlement_id: settlementId,

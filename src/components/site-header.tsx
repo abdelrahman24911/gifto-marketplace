@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 
 import { CartLink } from "@/components/cart-link";
 import { GiftoMark, UserIcon } from "@/components/icons";
@@ -42,12 +43,13 @@ function AnnouncementBar() {
 }
 
 /**
- * Server-rendered navigation. Reads the verified session on every request so
+ * Account-dependent controls. Reads the verified session on every request so
  * account controls are only shown to users who are actually signed in — the
  * real authorization boundary remains RLS plus the server-side page guards,
- * never this header.
+ * never this header. Rendered inside <Suspense> so the rest of the header and
+ * the page shell stream without waiting for the session lookup.
  */
-export async function SiteHeader() {
+async function HeaderActions() {
   const { user, memberships, isPlatformAdmin } = await getRequestContext();
 
   let hasActiveVendor = false;
@@ -92,6 +94,54 @@ export async function SiteHeader() {
       ];
 
   return (
+    <>
+      <Link
+        href={user ? "/account" : "/login"}
+        className="inline-flex h-10 items-center gap-1.5 rounded-full px-3 text-sm font-medium text-ink-soft transition-colors hover:bg-berry-soft hover:text-berry-deep"
+      >
+        <UserIcon className="h-5 w-5" />
+        <span className="hidden sm:inline">{user ? "Account" : "Sign in"}</span>
+      </Link>
+
+      <CartLink className={cartLinkClass} />
+
+      {user ? (
+        <SignOutButton className="hidden h-10 items-center rounded-full px-3 text-sm font-medium text-ink-mute transition-colors hover:text-berry lg:inline-flex" />
+      ) : null}
+
+      <MobileNav nav={NAV} account={accountLinks} showSignOut={!!user} />
+    </>
+  );
+}
+
+const cartLinkClass =
+  "inline-flex h-10 items-center gap-1.5 rounded-full px-3 text-sm font-medium text-ink-soft transition-colors hover:bg-berry-soft hover:text-berry-deep";
+
+/** Same footprint as the real controls, so nothing shifts when they stream in. */
+function HeaderActionsFallback() {
+  return (
+    <>
+      <span
+        aria-hidden
+        className="inline-flex h-10 items-center gap-1.5 rounded-full px-3 text-ink-soft"
+      >
+        <UserIcon className="h-5 w-5" />
+        <span className="hidden h-4 w-14 animate-pulse rounded bg-line sm:inline-block" />
+      </span>
+
+      <CartLink className={cartLinkClass} />
+
+      <MobileNav nav={NAV} account={[]} showSignOut={false} />
+    </>
+  );
+}
+
+/**
+ * Navigation chrome renders immediately; only the account-dependent controls
+ * wait for the session lookup.
+ */
+export function SiteHeader() {
+  return (
     <header className="sticky top-0 z-40 border-b border-line bg-paper/85 backdrop-blur">
       <AnnouncementBar />
 
@@ -121,23 +171,9 @@ export async function SiteHeader() {
           <div className="ml-auto flex items-center gap-1 sm:gap-2">
             <SearchForm className="hidden w-52 transition-[width] duration-300 focus-within:w-72 lg:flex" />
 
-            <Link
-              href={user ? "/account" : "/login"}
-              className="inline-flex h-10 items-center gap-1.5 rounded-full px-3 text-sm font-medium text-ink-soft transition-colors hover:bg-berry-soft hover:text-berry-deep"
-            >
-              <UserIcon className="h-5 w-5" />
-              <span className="hidden sm:inline">
-                {user ? "Account" : "Sign in"}
-              </span>
-            </Link>
-
-            <CartLink className="inline-flex h-10 items-center gap-1.5 rounded-full px-3 text-sm font-medium text-ink-soft transition-colors hover:bg-berry-soft hover:text-berry-deep" />
-
-            {user ? (
-              <SignOutButton className="hidden h-10 items-center rounded-full px-3 text-sm font-medium text-ink-mute transition-colors hover:text-berry lg:inline-flex" />
-            ) : null}
-
-            <MobileNav nav={NAV} account={accountLinks} showSignOut={!!user} />
+            <Suspense fallback={<HeaderActionsFallback />}>
+              <HeaderActions />
+            </Suspense>
           </div>
         </div>
       </Container>

@@ -39,11 +39,15 @@ export async function proxy(request: NextRequest) {
     },
   );
 
-  // Do not run logic between createServerClient and getUser() — a side effect
+  // Do not run logic between createServerClient and getClaims() — a side effect
   // here could trigger an unnecessary token refresh.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  //
+  // getClaims() verifies the access token's signature/expiry locally against the
+  // cached JWKS (no Auth-server round trip) and still refreshes an expired
+  // session. This guard is a convenience layer; pages re-check the session and
+  // Server Actions/admin pages additionally confirm it with the Auth server.
+  const { data } = await supabase.auth.getClaims();
+  const user = data?.claims?.sub ? data.claims : null;
 
   // Route guards. This is convenience only: every protected page ALSO verifies
   // the session server-side, and data access is enforced by RLS regardless.
@@ -67,13 +71,6 @@ export async function proxy(request: NextRequest) {
       redirectResponse.cookies.set(cookie);
     }
     return redirectResponse;
-  }
-
-  // Expose a safe flag for server-side route guards / UI only.
-  if (user) {
-    supabaseResponse.headers.set("x-gifto-auth", "1");
-  } else {
-    supabaseResponse.headers.delete("x-gifto-auth");
   }
 
   return supabaseResponse;

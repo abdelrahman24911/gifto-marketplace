@@ -3,7 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ProductCard } from "@/components/product-card";
-import { ShopMonogram } from "@/components/shop-card";
+import { ShopCover } from "@/components/shop-cover";
+import { ShopLogo } from "@/components/shop-logo";
 import {
   Breadcrumb,
   Container,
@@ -11,6 +12,7 @@ import {
   Eyebrow,
 } from "@/components/ui/section";
 import { loadProductsByShop, loadShop } from "@/lib/catalog";
+import { formatPrepTime, formatWorkingHours } from "@/lib/vendor-settings";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -58,6 +60,11 @@ export default async function ShopPage({ params }: Props) {
   const productsResult = await loadProductsByShop(shop.id);
   const products = productsResult.ok ? productsResult.data : [];
   const location = [shop.city, shop.governorate].filter(Boolean).join(", ");
+  const workingHours = formatWorkingHours(shop.workingHours);
+  const prepTime = formatPrepTime(
+    shop.prepTimeMinDays,
+    shop.prepTimeMaxDays,
+  );
 
   return (
     <div className="pb-8">
@@ -71,9 +78,14 @@ export default async function ShopPage({ params }: Props) {
             ]}
           />
 
+          <div className="mt-5">
+            <ShopCover path={shop.coverPath} name={shop.name} preload />
+          </div>
+
           <div className="mt-6 flex flex-col gap-5 sm:flex-row sm:items-start">
-            <ShopMonogram
+            <ShopLogo
               name={shop.name}
+              path={shop.logoPath}
               className="h-16 w-16 rounded-2xl text-3xl"
             />
             <div className="max-w-2xl">
@@ -86,6 +98,47 @@ export default async function ShopPage({ params }: Props) {
               ) : null}
               {shop.description ? (
                 <p className="mt-4 text-lg text-ink-soft">{shop.description}</p>
+              ) : null}
+              {workingHours.length > 0 || prepTime ? (
+                <div className="mt-5 grid gap-4 rounded-xl border border-line bg-paper px-4 py-3 sm:grid-cols-2">
+                  {workingHours.length > 0 ? (
+                    <div>
+                      <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-mute">
+                        Opening hours
+                      </h2>
+                      <dl className="mt-2 grid gap-1 text-sm">
+                        {workingHours.map((day) => (
+                          <div
+                            key={day.day}
+                            className="flex items-center justify-between gap-3"
+                          >
+                            <dt className="text-ink-soft">{day.label}</dt>
+                            <dd className="font-medium text-ink">{day.value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </div>
+                  ) : null}
+                  {prepTime ? (
+                    <div>
+                      <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-mute">
+                        Preparation time
+                      </h2>
+                      <p className="mt-2 text-sm font-medium text-ink">
+                        {prepTime}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              {!shop.isAcceptingOrders ? (
+                <p
+                  role="status"
+                  className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+                >
+                  This shop has paused new orders. You can still browse the
+                  gifts; checkout will reopen when the shop resumes.
+                </p>
               ) : null}
             </div>
           </div>

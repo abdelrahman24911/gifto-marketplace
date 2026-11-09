@@ -1,3 +1,7 @@
+import { redirect } from "next/navigation";
+
+import { Pagination } from "@/components/pagination";
+import { fetchAllRows } from "@/lib/fetch-all";
 import { requireVendorRole } from "@/lib/vendor";
 import {
   FINANCE_ENTRY_STATE_LABELS,
@@ -6,11 +10,17 @@ import {
   commissionEntriesById,
   getEntryFinanceState,
   settlementEffectiveStatus,
-  settlementTotals,
+  settlementTotalsResult,
   totalsForEntries,
   totalsForFinanceState,
 } from "@/lib/finance";
 import { formatEgp } from "@/lib/money";
+import {
+  DEFAULT_PAGE_SIZE,
+  clampPage,
+  pageWindow,
+  parsePage,
+} from "@/lib/pagination";
 
 import type {
   CommissionEntryRecord,
@@ -20,9 +30,8 @@ import type {
 
 export const metadata = { title: "Finance — Gifto" };
 
-type FinanceCommissionEntry = CommissionEntryRecord & {
-  order_vendor_id: string;
-};
+const ENTRY_COLUMNS =
+  "id, vendor_id, status, rate, base_minor, amount_minor, earned_at, reversed_at";
 
 type FinanceOrderVendor = {
   id: string;
@@ -31,6 +40,10 @@ type FinanceOrderVendor = {
     | { public_reference: string | null }[]
     | null;
   order_items: { product_name: string; quantity: number }[] | null;
+};
+
+type LedgerEntry = CommissionEntryRecord & {
+  order_vendor: FinanceOrderVendor | FinanceOrderVendor[] | null;
 };
 
 function formatDate(value: string) {
@@ -52,36 +65,74 @@ function orderReference(row: FinanceOrderVendor | undefined) {
   return order?.public_reference ?? "Order";
 }
 
+function financeHref(vendorId: string, page = 1) {
+  const params = new URLSearchParams({ vendor: vendorId });
+  if (page > 1) params.set("page", String(page));
+  return `/vendor/finance?${params.toString()}`;
+}
+
 export default async function VendorFinancePage({
   searchParams,
 }: {
-  searchParams: Promise<{ vendor?: string }>;
+  searchParams: Promise<{ vendor?: string; page?: string }>;
 }) {
-  const { vendor } = await searchParams;
+  const { vendor, page: pageParam } = await searchParams;
   const { supabase, access } = await requireVendorRole(vendor);
 
-  const [
-    { data: entryData, error: entriesError },
-    { data: settlementData, error: settlementsError },
-  ] = await Promise.all([
+  const requestedPage = parsePage(pageParam);
+  const range = pageWindow(requestedPage);
+
+  // Balances need every ledger row and settlement, so they are read in chunks
+  // (PostgREST caps one response at 1,000 rows) and flagged if incomplete. The
+  // visible ledger is a separate, paginated query that embeds the order and its
+  // lines through the foreign key — no giant `.in()` URL and no second trip.
+  const [entriesResult, settlementsResult, ledger] = await Promise.all([
+    fetchAllRows<CommissionEntryRecord>((from, to) =>
+      supabase
+        .from("commission_entries")
+        .select(ENTRY_COLUMNS)
+        .eq("vendor_id", access.vendorId)
+        .order("earned_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, to),
+    ),
+    fetchAllRows<SettlementRecord>(
+      (from, to) =>
+        supabase
+          .from("settlements")
+          .select(
+            "id, vendor_id, status, total_minor, note, created_at, paid_at, created_by, paid_by, voided_at, voided_by, void_reason, settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
+          )
+          .eq("vendor_id", access.vendorId)
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, to)
+          .returns<SettlementRecord[]>(),
+    ),
     supabase
       .from("commission_entries")
       .select(
-        "id, order_vendor_id, vendor_id, status, rate, base_minor, amount_minor, earned_at, reversed_at",
+        `${ENTRY_COLUMNS}, order_vendor:order_vendors(id, order:orders(public_reference), order_items(product_name, quantity))`,
+        { count: "exact" },
       )
       .eq("vendor_id", access.vendorId)
-      .order("earned_at", { ascending: false }),
-    supabase
-      .from("settlements")
-      .select(
-        "id, vendor_id, status, total_minor, note, created_at, paid_at, created_by, paid_by, voided_at, voided_by, void_reason, settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
-      )
-      .eq("vendor_id", access.vendorId)
-      .order("created_at", { ascending: false }),
+      .order("earned_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(range.from, range.to)
+      .returns<LedgerEntry[]>(),
   ]);
 
-  const entries = (entryData ?? []) as FinanceCommissionEntry[];
-  const settlements = (settlementData ?? []) as unknown as SettlementRecord[];
+  const entries = entriesResult.rows;
+  const settlements = settlementsResult.rows;
+  const ledgerRows = ledger.data ?? [];
+  const ledgerTotal = ledger.count ?? entries.length;
+  const currentPage = clampPage(requestedPage, ledgerTotal);
+
+  // A stale link past the last page lands on the last real page.
+  if (requestedPage > 1 && currentPage !== requestedPage) {
+    redirect(financeHref(access.vendorId, currentPage));
+  }
+
   const lookup = buildSettlementLineLookup(settlements);
   const entriesById = commissionEntriesById(entries);
 
@@ -103,27 +154,10 @@ export default async function VendorFinancePage({
     entries.filter((entry) => entry.status === "earned"),
   );
 
-  const orderVendorIds = Array.from(
-    new Set(entries.map((entry) => entry.order_vendor_id)),
-  );
-
-  const { data: orderVendorData } = orderVendorIds.length
-    ? await supabase
-        .from("order_vendors")
-        .select(
-          "id, order:orders(public_reference), order_items(product_name, quantity)",
-        )
-        .in("id", orderVendorIds)
-    : { data: [] };
-
-  const orderVendors = new Map(
-    ((orderVendorData ?? []) as unknown as FinanceOrderVendor[]).map((row) => [
-      row.id,
-      row,
-    ]),
-  );
-
-  const loadError = entriesError ?? settlementsError;
+  const loadError =
+    entriesResult.failed || settlementsResult.failed || ledger.error;
+  const totalsIncomplete =
+    entriesResult.truncated || settlementsResult.truncated;
 
   const cards: {
     label: string;
@@ -182,6 +216,17 @@ export default async function VendorFinancePage({
         </p>
       ) : null}
 
+      {totalsIncomplete ? (
+        <p
+          role="status"
+          className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+        >
+          This shop has more ledger history than can be summed on this page, so
+          the balances below are incomplete. Contact Gifto support for an exact
+          statement.
+        </p>
+      ) : null}
+
       <section className="mt-6">
         <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {cards.map((card) => (
@@ -222,7 +267,11 @@ export default async function VendorFinancePage({
           <ul className="mt-3 flex flex-col divide-y divide-line overflow-hidden rounded-2xl border border-line bg-paper-soft">
             {settlements.map((settlement) => {
               const status = settlementEffectiveStatus(settlement);
-              const totals = settlementTotals(settlement, entriesById);
+              const totalsResult = settlementTotalsResult(settlement, entriesById, {
+                failed: entriesResult.failed,
+                truncated: entriesResult.truncated,
+              });
+              const totals = totalsResult.totals;
               return (
                 <li key={settlement.id} className="px-4 py-4 sm:px-5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -245,8 +294,19 @@ export default async function VendorFinancePage({
                         {totals.count}{" "}
                         {totals.count === 1 ? "suborder" : "suborders"} ·{" "}
                         {formatEgp(totals.commissionMinor)} commission ·{" "}
-                        {formatEgp(totals.netMinor)} shop net
+                        {totals.netMinor === null
+                          ? "Shop net unavailable"
+                          : `${formatEgp(totals.netMinor)} shop net`}
                       </p>
+                      {!totals.complete ? (
+                        <p className="mt-1 text-xs text-amber-700">
+                          {totalsResult.state === "read_failed"
+                            ? "Gross and net are unavailable because commission data could not be read."
+                            : totalsResult.state === "truncated"
+                              ? "Gross and net are unavailable because commission history was truncated."
+                              : "Gross and net are unavailable because a commission entry is missing."}
+                        </p>
+                      ) : null}
                       {status === "paid" && settlement.paid_at ? (
                         <p className="mt-1 text-xs text-ink-mute">
                           Recorded paid {formatDate(settlement.paid_at)}
@@ -281,16 +341,18 @@ export default async function VendorFinancePage({
           one stored when the customer placed the order.
         </p>
 
-        {entries.length === 0 ? (
+        {ledgerRows.length === 0 ? (
           <p className="mt-3 rounded-2xl border border-dashed border-line-strong bg-paper-soft px-4 py-10 text-center text-sm text-ink-soft">
             No commission has been earned yet. Delivered suborders appear here.
           </p>
         ) : (
           <ul className="mt-3 flex flex-col divide-y divide-line overflow-hidden rounded-2xl border border-line bg-paper-soft">
-            {entries.map((entry) => {
+            {ledgerRows.map((entry) => {
               const state = getEntryFinanceState(entry, lookup);
               const settlement = settlementByEntry.get(entry.id);
-              const suborder = orderVendors.get(entry.order_vendor_id);
+              const suborder = Array.isArray(entry.order_vendor)
+                ? entry.order_vendor[0]
+                : (entry.order_vendor ?? undefined);
               const items = (suborder?.order_items ?? [])
                 .map((item) => `${item.product_name} × ${item.quantity}`)
                 .join(", ");
@@ -338,6 +400,13 @@ export default async function VendorFinancePage({
             })}
           </ul>
         )}
+        <Pagination
+          page={currentPage}
+          total={ledgerTotal}
+          pageSize={DEFAULT_PAGE_SIZE}
+          label="Commission ledger pages"
+          buildHref={(page) => financeHref(access.vendorId, page)}
+        />
       </section>
     </div>
   );

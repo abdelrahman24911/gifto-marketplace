@@ -3,12 +3,17 @@
 import Image from "next/image";
 import { useState } from "react";
 
+import { shouldOptimizeImages } from "@/lib/images";
 import { PRODUCT_IMAGES_BUCKET } from "@/lib/supabase/database.types";
 
 /**
  * Renders a catalog image from its Storage path, falling back to a warm
  * typographic panel when there is no image yet or the file cannot load, so a
  * missing photo looks intentional rather than broken.
+ *
+ * `bucket`/`fallbackBucket` support the vendor-branding rollout: new uploads
+ * live in `vendor-media`, while legacy logos remain readable from
+ * `product-images` until the backfill has run.
  */
 export function ProductImage({
   path,
@@ -16,19 +21,38 @@ export function ProductImage({
   name,
   className = "h-40 w-full",
   rounded = "rounded-xl",
+  bucket = PRODUCT_IMAGES_BUCKET,
+  fallbackBucket,
+  sizes,
+  preload = false,
 }: {
   path: string | null;
   alt: string;
   name: string;
   className?: string;
   rounded?: string;
+  bucket?: string;
+  fallbackBucket?: string;
+  /** Rendered width hint for the browser, e.g. "(min-width: 1024px) 25vw, 50vw". */
+  sizes?: string;
+  /** Preload an above-the-fold (LCP) image. */
+  preload?: boolean;
 }) {
+  const [sourceIndex, setSourceIndex] = useState(0);
   const [failed, setFailed] = useState(false);
+  const [previousPath, setPreviousPath] = useState(path);
+
+  if (previousPath !== path) {
+    setPreviousPath(path);
+    setSourceIndex(0);
+    setFailed(false);
+  }
 
   const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const buckets = fallbackBucket ? [bucket, fallbackBucket] : [bucket];
   const src =
-    path && baseUrl
-      ? `${baseUrl}/storage/v1/object/public/${PRODUCT_IMAGES_BUCKET}/${path}`
+    path && baseUrl && !failed
+      ? `${baseUrl}/storage/v1/object/public/${buckets[sourceIndex] ?? bucket}/${path}`
       : null;
 
   if (!src || failed) {
@@ -52,8 +76,16 @@ export function ProductImage({
       alt={alt}
       width={400}
       height={500}
-      unoptimized
-      onError={() => setFailed(true)}
+      sizes={sizes}
+      preload={preload}
+      unoptimized={!shouldOptimizeImages()}
+      onError={() => {
+        if (sourceIndex < buckets.length - 1) {
+          setSourceIndex((index) => index + 1);
+        } else {
+          setFailed(true);
+        }
+      }}
       className={`object-cover ${rounded} ${className}`}
     />
   );

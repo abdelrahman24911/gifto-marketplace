@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { revalidatePublicCatalog } from "@/lib/catalog-cache";
 import { requireVendorRole } from "@/lib/vendor";
 
 import { PRODUCT_IMAGES_BUCKET } from "@/lib/supabase/database.types";
@@ -31,6 +32,7 @@ function revalidateProductPaths(vendorId: string, productId: string) {
   revalidatePath("/shops");
   revalidatePath("/categories");
   revalidatePath("/search");
+  revalidatePublicCatalog();
 }
 
 /**
@@ -61,6 +63,7 @@ export async function uploadProductImages(
 
   const { supabase, access, canManage } = await requireVendorRole(
     formData.get("vendor") as string | null,
+    { verifyWithAuthServer: true },
   );
   if (!canManage) {
     return {
@@ -161,6 +164,7 @@ export async function deleteProductImage(
 
   const { supabase, access, canManage } = await requireVendorRole(
     formData.get("vendor") as string | null,
+    { verifyWithAuthServer: true },
   );
   if (!canManage) {
     return {

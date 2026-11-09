@@ -20,7 +20,7 @@ const STATUS_ORDER: VendorStatus[] = [
 export default async function AdminPage() {
   const { supabase } = await requirePlatformAdmin();
 
-  const [{ data: vendors }, { data: categories }, { data: attentionOrders }, { data: recentOrders }] = await Promise.all([
+  const [{ data: vendors }, { data: categories }, { count: attentionCount }, { data: recentOrders }] = await Promise.all([
     supabase
       .from("vendors")
       .select(
@@ -34,13 +34,14 @@ export default async function AdminPage() {
       .order("name", { ascending: true }),
     supabase
       .from("orders")
-      .select("id, status")
+      .select("id", { count: "exact", head: true })
       .in("status", ["placed", "confirmed", "shipped"]),
     supabase
       .from("orders")
       .select(
         "id, public_reference, status, created_at, user_id, order_vendors(id, vendor:vendors(name))",
       )
+      .in("status", ["placed", "confirmed", "shipped"])
       .order("created_at", { ascending: false })
       .limit(15),
   ]);
@@ -54,12 +55,8 @@ export default async function AdminPage() {
   const pending = all.filter((v) => v.status === "pending");
   const others = all.filter((v) => v.status !== "pending");
 
-  const needingAttentionCount = (attentionOrders ?? []).length;
-  const needingAttention = recentOrders ?? [];
-  const needingAttentionRecent = needingAttention.filter((o) => {
-    const s = o.status;
-    return s === "placed" || s === "confirmed" || s === "shipped";
-  });
+  const needingAttentionCount = attentionCount ?? 0;
+  const needingAttentionRecent = recentOrders ?? [];
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-10">
@@ -83,6 +80,12 @@ export default async function AdminPage() {
           className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50"
         >
           Shop settlements
+        </Link>
+        <Link
+          href="/admin/support"
+          className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50"
+        >
+          Vendor support queue
         </Link>
       </div>
 

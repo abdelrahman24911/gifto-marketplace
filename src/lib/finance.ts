@@ -51,6 +51,33 @@ export type FinanceTotals = {
   netMinor: number;
 };
 
+/**
+ * Gross and net can only be rebuilt from commission snapshots. When a line's
+ * snapshot is missing, those figures are unavailable rather than replaced by
+ * the settlement's commission amount. Commission itself is snapshotted on the
+ * settlement line and stays exact.
+ */
+export type SettlementTotals = {
+  count: number;
+  matchedCount: number;
+  missingEntryCount: number;
+  grossMinor: number | null;
+  commissionMinor: number;
+  netMinor: number | null;
+  complete: boolean;
+};
+
+export type SettlementTotalsReadState =
+  | "complete"
+  | "missing_entries"
+  | "read_failed"
+  | "truncated";
+
+export type SettlementTotalsResult = {
+  totals: SettlementTotals;
+  state: SettlementTotalsReadState;
+};
+
 export type SettlementLineLookup = Map<
   string,
   { settlementId: string; status: ActiveSettlementStatus }
@@ -139,29 +166,89 @@ export function totalsForEntries(
 /**
  * A settlement's stored total is the platform commission collected in the
  * batch, not the vendor's payout. Gross and vendor net must be rebuilt from the
- * commission snapshots behind each line.
+ * commission snapshots behind each line. A missing snapshot makes gross and
+ * net unavailable; the line's commission amount is never substituted for gross.
  */
 export function settlementTotals(
   settlement: Pick<SettlementRecord, "settlement_lines">,
   entriesById: ReadonlyMap<string, CommissionEntryRecord>,
-): FinanceTotals {
+): SettlementTotals {
   let grossMinor = 0;
   let commissionMinor = 0;
+  let matchedCount = 0;
   let count = 0;
 
   for (const line of settlement.settlement_lines) {
-    const entry = entriesById.get(line.commission_entry_id);
-    grossMinor += entry?.base_minor ?? line.amount_minor;
-    commissionMinor += line.amount_minor;
     count += 1;
+    commissionMinor += line.amount_minor;
+
+    const entry = entriesById.get(line.commission_entry_id);
+    if (!entry) continue;
+
+    matchedCount += 1;
+    grossMinor += entry.base_minor;
   }
+
+  const missingEntryCount = count - matchedCount;
+  const complete = missingEntryCount === 0;
 
   return {
     count,
-    grossMinor,
+    matchedCount,
+    missingEntryCount,
+    grossMinor: complete ? grossMinor : null,
     commissionMinor,
-    netMinor: grossMinor - commissionMinor,
+    netMinor: complete ? grossMinor - commissionMinor : null,
+    complete,
   };
+}
+
+export function settlementLineGrossMinor(
+  entry: Pick<CommissionEntryRecord, "base_minor"> | undefined,
+  state: SettlementTotalsReadState = "complete",
+): number | null {
+  if (state === "read_failed" || state === "truncated") return null;
+  return entry?.base_minor ?? null;
+}
+
+/**
+ * Adds the reason the commission snapshots are incomplete. Failed reads and
+ * truncated pagination are page-level conditions; a missing entry is a
+ * per-settlement condition. Callers must show the state instead of presenting
+ * the affected gross/net figures as exact.
+ */
+export function settlementTotalsResult(
+  settlement: Pick<SettlementRecord, "settlement_lines">,
+  entriesById: ReadonlyMap<string, CommissionEntryRecord>,
+  read: { failed?: boolean; truncated?: boolean } = {},
+): SettlementTotalsResult {
+  const totals = settlementTotals(settlement, entriesById);
+
+  if (read.failed) {
+    return {
+      totals: {
+        ...totals,
+        grossMinor: null,
+        netMinor: null,
+        complete: false,
+      },
+      state: "read_failed",
+    };
+  }
+
+  if (read.truncated) {
+    return {
+      totals: {
+        ...totals,
+        grossMinor: null,
+        netMinor: null,
+        complete: false,
+      },
+      state: "truncated",
+    };
+  }
+  if (!totals.complete) return { totals, state: "missing_entries" };
+  return { totals, state: "complete" };
 }
 
 export function commissionEntriesById(

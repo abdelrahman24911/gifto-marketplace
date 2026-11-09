@@ -93,7 +93,11 @@ export function safeCheckoutError(message: unknown): string {
 
   const trimmed = message.trim();
 
-  if (SAFE_DB_ERROR.test(trimmed) || /is no longer available\.$/.test(trimmed)) {
+  if (
+    SAFE_DB_ERROR.test(trimmed) ||
+    /is no longer available\.$/.test(trimmed) ||
+    /is not accepting orders right now\.$/.test(trimmed)
+  ) {
     return trimmed;
   }
 

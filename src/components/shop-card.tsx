@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { ArrowRightIcon } from "@/components/icons";
+import { ShopLogo } from "@/components/shop-logo";
 
 type Shop = {
   id: string;
@@ -9,26 +10,8 @@ type Shop = {
   description: string | null;
   city: string | null;
   governorate: string | null;
+  logoPath: string | null;
 };
-
-/** Berry monogram fallback — shops have no guaranteed public imagery yet. */
-export function ShopMonogram({
-  name,
-  className = "h-12 w-12 rounded-xl text-xl",
-}: {
-  name: string;
-  className?: string;
-}) {
-  const initial = name.trim().charAt(0).toUpperCase() || "?";
-  return (
-    <div
-      aria-hidden
-      className={`flex shrink-0 items-center justify-center bg-berry font-display font-medium text-paper ${className}`}
-    >
-      {initial}
-    </div>
-  );
-}
 
 export function ShopCard({ shop }: { shop: Shop }) {
   const location = [shop.city, shop.governorate].filter(Boolean).join(", ");
@@ -39,7 +22,7 @@ export function ShopCard({ shop }: { shop: Shop }) {
       className="group flex h-full flex-col gap-3 rounded-2xl border border-line bg-paper-soft p-5 transition duration-300 hover:-translate-y-1 hover:border-berry/30 hover:shadow-[0_22px_50px_-30px_oklch(0.33_0.13_12/0.55)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
     >
       <div className="flex items-center gap-3">
-        <ShopMonogram name={shop.name} />
+        <ShopLogo name={shop.name} path={shop.logoPath} />
         <div className="min-w-0">
           <p className="truncate font-display text-lg text-ink">
             {shop.name}
