@@ -153,7 +153,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             </EmptyState>
           ) : (
             <>
-              <p className="mb-6 text-sm text-ink-mute">
+              <p className="mb-6 break-words text-sm text-ink-mute">
                 {products.length}{" "}
                 {products.length === 1 ? "gift" : "gifts"}
                 {activeCategory ? ` in ${activeCategory.name}` : ""}

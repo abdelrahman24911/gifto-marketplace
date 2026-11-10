@@ -12,6 +12,13 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Playwright QA harness (kept separate from the application lint/typecheck):
+    "tests/**",
+    "playwright.config.ts",
+    "specs/**",
+    ".opencode/**",
+    "test-results/**",
+    "playwright-report/**",
   ]),
 ]);
 

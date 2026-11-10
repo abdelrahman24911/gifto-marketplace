@@ -75,7 +75,9 @@ export function EmptyState({
     <div className="rounded-2xl border border-dashed border-line-strong bg-paper-soft px-6 py-12 text-center">
       <p className="font-display text-xl text-ink">{title}</p>
       {children ? (
-        <p className="mx-auto mt-2 max-w-md text-sm text-ink-soft">{children}</p>
+        <p className="mx-auto mt-2 max-w-md break-words text-sm text-ink-soft">
+          {children}
+        </p>
       ) : null}
     </div>
   );
