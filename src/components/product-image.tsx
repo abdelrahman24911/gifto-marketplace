@@ -25,6 +25,7 @@ export function ProductImage({
   fallbackBucket,
   sizes,
   preload = false,
+  fit = "cover",
 }: {
   path: string | null;
   alt: string;
@@ -37,6 +38,8 @@ export function ProductImage({
   sizes?: string;
   /** Preload an above-the-fold (LCP) image. */
   preload?: boolean;
+  /** `contain` keeps the whole image visible in the fullscreen preview. */
+  fit?: "cover" | "contain";
 }) {
   const [sourceIndex, setSourceIndex] = useState(0);
   const [failed, setFailed] = useState(false);
@@ -86,7 +89,7 @@ export function ProductImage({
           setFailed(true);
         }
       }}
-      className={`object-cover ${rounded} ${className}`}
+      className={`${fit === "contain" ? "object-contain" : "object-cover"} ${rounded} ${className}`}
     />
   );
 }

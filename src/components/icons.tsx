@@ -67,6 +67,46 @@ export function ArrowRightIcon(props: IconProps) {
   );
 }
 
+export function ChevronLeftIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="m14.5 6-6 6 6 6" />
+    </svg>
+  );
+}
+
+export function ChevronRightIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="m9.5 6 6 6-6 6" />
+    </svg>
+  );
+}
+
+export function ExpandIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M9 4H4v5M15 4h5v5M9 20H4v-5M20 15v5h-5" />
+    </svg>
+  );
+}
+
+export function MinusIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M5 12h14" />
+    </svg>
+  );
+}
+
+export function PlusIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
 export function CheckIcon(props: IconProps) {
   return (
     <svg {...base} {...props}>

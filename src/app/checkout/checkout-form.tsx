@@ -5,7 +5,17 @@ import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState } from "react";
 
 import { useCart } from "@/components/cart-provider";
-import { toOrderItems, type CartItem } from "@/lib/cart";
+import { ProductImage } from "@/components/product-image";
+import {
+  selectCheckoutItems,
+  shouldClearCartAfterOrder,
+  type BuyNowCheckout,
+} from "@/lib/buy-now";
+import {
+  cartSubtotalMinor,
+  toOrderItems,
+  type CartItem,
+} from "@/lib/cart";
 import { createGuestAttempt, type GuestAttempt } from "@/lib/guest-client";
 import { formatEgp } from "@/lib/money";
 
@@ -27,9 +37,15 @@ function groupByVendor(items: CartItem[]): [string, CartItem[]][] {
   return [...groups.entries()];
 }
 
-export function CheckoutForm({ defaults }: { defaults: CheckoutValues }) {
+export function CheckoutForm({
+  defaults,
+  buyNow = null,
+}: {
+  defaults: CheckoutValues;
+  buyNow?: BuyNowCheckout | null;
+}) {
   const router = useRouter();
-  const { items, subtotalMinor, ready, clear } = useCart();
+  const { items, ready, clear } = useCart();
   const [state, formAction, pending] = useActionState<CheckoutState, FormData>(
     placeOrder,
     null,
@@ -41,6 +57,10 @@ export function CheckoutForm({ defaults }: { defaults: CheckoutValues }) {
   // client intentionally produce different ones (suppressed on the inputs).
   const [attempt] = useState<GuestAttempt>(() => createGuestAttempt());
 
+  const isBuyNow = buyNow !== null;
+  const checkoutItems = selectCheckoutItems(items, buyNow?.item ?? null);
+  const checkoutSubtotalMinor = cartSubtotalMinor(checkoutItems);
+
   const values = state && "values" in state ? state.values : defaults;
   const formKey =
     state && "attempt" in state ? `state-${state.attempt}` : "pristine";
@@ -48,20 +68,23 @@ export function CheckoutForm({ defaults }: { defaults: CheckoutValues }) {
   useEffect(() => {
     if (state && "orderId" in state && !handled.current) {
       handled.current = true;
-      clear();
+
+      // Buy Now must leave the existing cart exactly as it was.
+      if (shouldClearCartAfterOrder(isBuyNow)) clear();
+
       router.replace(
         state.isGuest
           ? `/orders/${state.orderId}`
           : `/account/orders/${state.orderId}`,
       );
     }
-  }, [state, clear, router]);
+  }, [state, clear, router, isBuyNow]);
 
-  if (!ready) {
+  if (!isBuyNow && !ready) {
     return <p className="mt-6 text-sm text-zinc-500">Loading your cart…</p>;
   }
 
-  if (items.length === 0 && !(state && "orderId" in state)) {
+  if (checkoutItems.length === 0 && !(state && "orderId" in state)) {
     return (
       <div className="mt-6 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-12 text-center">
         <p className="text-sm text-zinc-600">
@@ -87,7 +110,7 @@ export function CheckoutForm({ defaults }: { defaults: CheckoutValues }) {
         <input
           type="hidden"
           name="items"
-          value={JSON.stringify(toOrderItems(items))}
+          value={JSON.stringify(toOrderItems(checkoutItems))}
           readOnly
         />
         <input
@@ -114,6 +137,13 @@ export function CheckoutForm({ defaults }: { defaults: CheckoutValues }) {
             on delivery.
           </p>
         </div>
+
+        {isBuyNow ? (
+          <p className="rounded-md border border-berry-tint bg-berry-soft px-3 py-2 text-sm text-berry-deep">
+            This order contains only this gift. Your existing cart is unchanged
+            and will not be included.
+          </p>
+        ) : null}
 
         {state && "error" in state ? (
           <p
@@ -240,37 +270,67 @@ export function CheckoutForm({ defaults }: { defaults: CheckoutValues }) {
       <aside className="rounded-2xl border border-zinc-200 bg-white p-5">
         <h2 className="text-lg font-semibold text-zinc-900">Order summary</h2>
 
-        <div className="mt-4 flex flex-col gap-4">
-          {groupByVendor(items).map(([vendorId, vendorItems]) => (
-            <div key={vendorId}>
-              <p className="text-sm font-medium text-zinc-900">
-                {vendorItems[0].vendorName}
-              </p>
-              <ul className="mt-1 flex flex-col gap-1 text-sm text-zinc-600">
-                {vendorItems.map((item) => (
-                  <li
-                    key={item.productId}
-                    className="flex items-start justify-between gap-3"
-                  >
-                    <span className="min-w-0">
-                      {item.name}
-                      <span className="text-zinc-400"> × {item.quantity}</span>
-                    </span>
-                    <span className="whitespace-nowrap text-zinc-900">
-                      {formatEgp(item.priceMinor * item.quantity)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+        {buyNow ? (
+          <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+            <div className="flex items-start gap-3">
+              <ProductImage
+                path={buyNow.item.imagePath}
+                alt={buyNow.item.name}
+                name={buyNow.item.name}
+                className="h-16 w-16"
+                sizes="64px"
+              />
+              <div className="min-w-0 flex-1">
+                <Link
+                  href={buyNow.backHref}
+                  className="font-medium text-zinc-900 hover:underline"
+                >
+                  {buyNow.item.name}
+                </Link>
+                <p className="mt-0.5 text-sm text-zinc-500">
+                  {buyNow.item.vendorName} · Quantity {buyNow.item.quantity}
+                </p>
+                <p className="mt-1 font-medium text-zinc-900">
+                  {formatEgp(
+                    buyNow.item.priceMinor * buyNow.item.quantity,
+                  )}
+                </p>
+              </div>
             </div>
-          ))}
-        </div>
+          </div>
+        ) : (
+          <div className="mt-4 flex flex-col gap-4">
+            {groupByVendor(checkoutItems).map(([vendorId, vendorItems]) => (
+              <div key={vendorId}>
+                <p className="text-sm font-medium text-zinc-900">
+                  {vendorItems[0].vendorName}
+                </p>
+                <ul className="mt-1 flex flex-col gap-1 text-sm text-zinc-600">
+                  {vendorItems.map((item) => (
+                    <li
+                      key={item.productId}
+                      className="flex items-start justify-between gap-3"
+                    >
+                      <span className="min-w-0">
+                        {item.name}
+                        <span className="text-zinc-400"> × {item.quantity}</span>
+                      </span>
+                      <span className="whitespace-nowrap text-zinc-900">
+                        {formatEgp(item.priceMinor * item.quantity)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
 
         <dl className="mt-5 flex flex-col gap-2 border-t border-zinc-200 pt-4 text-sm text-zinc-600">
           <div className="flex items-center justify-between">
             <dt>Items</dt>
             <dd className="font-medium text-zinc-900">
-              {formatEgp(subtotalMinor)}
+              {formatEgp(checkoutSubtotalMinor)}
             </dd>
           </div>
           <div className="flex items-center justify-between">
@@ -280,7 +340,7 @@ export function CheckoutForm({ defaults }: { defaults: CheckoutValues }) {
           <div className="flex items-center justify-between border-t border-zinc-200 pt-3 text-base">
             <dt className="font-medium text-zinc-900">Total</dt>
             <dd className="font-semibold text-zinc-900">
-              {formatEgp(subtotalMinor)}
+              {formatEgp(checkoutSubtotalMinor)}
             </dd>
           </div>
         </dl>
@@ -289,6 +349,9 @@ export function CheckoutForm({ defaults }: { defaults: CheckoutValues }) {
           Prices and stock are confirmed by Gifto when you place the order. If
           an item sold out in the meantime, the order is not placed and you can
           adjust your cart.
+          {isBuyNow
+            ? " Your existing cart is not part of this order and stays unchanged."
+            : null}
         </p>
       </aside>
     </div>

@@ -238,8 +238,9 @@ Running it through the API requires platform-admin — it is a development conve
   cart in `localStorage`, keyed by product id, wrapped in a cached external store so
   `useSyncExternalStore` does not loop. Only product ids and quantities are ever sent for
   checkout; prices come from the database.
-- `Add to cart` on the product page (`src/components/add-to-cart-button.tsx`), replacing the
-  old "ordering is not available" notice. Sold-out products show a disabled state.
+- `Add to cart` and `Buy now` on the product page (`src/components/product-purchase-panel.tsx`).
+  Buy Now checks out only that gift and leaves the existing cart unchanged; sold-out products and
+  paused shops show an unavailable state.
 - `/cart` — grouped by shop, quantity edit, remove, free-delivery summary.
 - `/checkout` — delivery form (recipient, phone, email, address, city, governorate, notes) with a
   COD notice. `/checkout` is public: signed-in customers call `place_order_with_idempotency`;
