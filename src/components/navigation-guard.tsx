@@ -13,9 +13,11 @@ import {
   type ReactNode,
 } from "react";
 
+type DirtySource = symbol;
+
 type NavigationGuardContextValue = {
   isDirty: () => boolean;
-  registerDirty: (dirty: boolean) => void;
+  registerDirty: (source: DirtySource, dirty: boolean) => void;
   requestNavigation: (proceed: () => void) => void;
 };
 
@@ -65,13 +67,17 @@ export function NavigationGuardProvider({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const pendingRef = useRef<(() => void) | null>(null);
   const dirtyRef = useRef(false);
+  const dirtySourcesRef = useRef(new Map<DirtySource, boolean>());
   const ignoreTraversalRef = useRef(false);
   const [dirty, setDirty] = useState(false);
   const [promptOpen, setPromptOpen] = useState(false);
 
-  const registerDirty = useCallback((nextDirty: boolean) => {
-    dirtyRef.current = nextDirty;
-    setDirty((current) => (current === nextDirty ? current : nextDirty));
+  const registerDirty = useCallback((source: DirtySource, nextDirty: boolean) => {
+    dirtySourcesRef.current.set(source, nextDirty);
+    const anyDirty = Array.from(dirtySourcesRef.current.values()).some(Boolean);
+
+    dirtyRef.current = anyDirty;
+    setDirty((current) => (current === anyDirty ? current : anyDirty));
   }, []);
 
   const isDirty = useCallback(() => dirtyRef.current, []);
@@ -279,9 +285,11 @@ export function useGuardedNavigation() {
 
 export function useUnsavedChangesGuard(dirty: boolean) {
   const { registerDirty } = useContext(NavigationGuardContext);
+  const sourceRef = useRef<DirtySource>(Symbol("unsaved-changes-source"));
 
   useEffect(() => {
-    registerDirty(dirty);
-    return () => registerDirty(false);
+    const source = sourceRef.current;
+    registerDirty(source, dirty);
+    return () => registerDirty(source, false);
   }, [dirty, registerDirty]);
 }

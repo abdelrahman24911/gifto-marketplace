@@ -10,6 +10,11 @@ import {
   type OccasionMatchMode,
 } from "@/lib/supabase/database.types";
 import {
+  PRODUCT_PICKER_MAX_SELECTION,
+  parseProductPickerQuery,
+  type ProductPickerQueryInput,
+} from "@/lib/occasion-products";
+import {
   buildOccasionImagePath,
   isUuid,
   moveOccasionId,
@@ -20,6 +25,11 @@ import {
   type OccasionFieldErrors,
   type OccasionFormValues,
 } from "@/lib/occasions";
+
+import {
+  loadProductPickerPage,
+  type ProductPickerPageLoad,
+} from "./product-picker-data";
 
 export type OccasionFormState = {
   attempt: number;
@@ -745,5 +755,117 @@ export async function moveOccasion(
     attempt,
     occasionId,
     success: direction === "up" ? "Moved up." : "Moved down.",
+  };
+}
+
+export type OccasionProductsState = {
+  attempt: number;
+  productIds?: string[];
+  error?: string;
+  success?: string;
+} | null;
+
+function readProductIds(
+  formData: FormData,
+): { ok: true; ids: string[] } | { ok: false; error: string } {
+  const raw = formData.getAll("product_ids");
+  const ids: string[] = [];
+  const seen = new Set<string>();
+
+  for (const value of raw) {
+    const id = String(value).trim();
+    if (!isUuid(id)) {
+      return {
+        ok: false,
+        error: "One or more selected products are not valid.",
+      };
+    }
+    if (seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+
+  if (ids.length > PRODUCT_PICKER_MAX_SELECTION) {
+    return {
+      ok: false,
+      error: `You can select at most ${PRODUCT_PICKER_MAX_SELECTION} products.`,
+    };
+  }
+
+  return { ok: true, ids };
+}
+
+function productSelectionErrorMessage(error: {
+  code?: string;
+  message?: string;
+} | null): string {
+  const message = error?.message ?? "";
+
+  if (
+    error?.code === "42501" ||
+    /platform administrator|permission/i.test(message)
+  ) {
+    return "You do not have permission to change this occasion.";
+  }
+  if (message.includes("at most 500")) {
+    return `You can select at most ${PRODUCT_PICKER_MAX_SELECTION} products.`;
+  }
+  if (message.includes("do not exist")) {
+    return "One or more selected products no longer exist. Refresh the list and try again.";
+  }
+  if (message.includes("Occasion not found")) {
+    return "That occasion no longer exists.";
+  }
+
+  return "The product selection could not be saved. Nothing was changed.";
+}
+
+/** Loads one available-products page for the authenticated admin picker. */
+export async function loadProductPickerPageAction(
+  input: ProductPickerQueryInput,
+): Promise<ProductPickerPageLoad> {
+  const { supabase } = await requirePlatformAdmin();
+  return loadProductPickerPage(supabase, parseProductPickerQuery(input));
+}
+
+/** Atomically replaces an occasion's manual product picks in the submitted order. */
+export async function saveOccasionProducts(
+  previous: OccasionProductsState,
+  formData: FormData,
+): Promise<OccasionProductsState> {
+  const { supabase } = await requirePlatformAdmin();
+  const attempt = nextAttempt(previous);
+  const occasionId = String(formData.get("occasion_id") ?? "").trim();
+
+  if (!isUuid(occasionId)) {
+    return { attempt, error: "That occasion id is not valid." };
+  }
+
+  const parsed = readProductIds(formData);
+  if (!parsed.ok) {
+    return { attempt, error: parsed.error };
+  }
+
+  const { error } = await supabase.rpc("replace_occasion_products", {
+    p_occasion_id: occasionId,
+    p_product_ids: parsed.ids,
+  });
+
+  if (error) {
+    return {
+      attempt,
+      error: productSelectionErrorMessage(error),
+    };
+  }
+
+  revalidateOccasionSurfaces({ id: occasionId });
+
+  return {
+    attempt,
+    productIds: parsed.ids,
+    success:
+      parsed.ids.length === 0
+        ? "All manual product picks were removed."
+        : `${parsed.ids.length} ${parsed.ids.length === 1 ? "product" : "products"} saved.`,
   };
 }

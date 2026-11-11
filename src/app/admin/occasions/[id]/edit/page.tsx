@@ -2,10 +2,17 @@ import { notFound } from "next/navigation";
 
 import { Breadcrumb } from "@/components/ui/section";
 import { requirePlatformAdmin } from "@/lib/auth";
+import { parseProductPickerQuery } from "@/lib/occasion-products";
 import { isUuid, type OccasionFormValues } from "@/lib/occasions";
 
 import { DeleteOccasionButton } from "../../delete-occasion-button";
 import { OccasionForm } from "../../occasion-form";
+import { ProductPicker } from "../../product-picker";
+import {
+  loadProductPickerCategories,
+  loadProductPickerPage,
+  loadSelectedProducts,
+} from "../../product-picker-data";
 
 export const metadata = { title: "Edit occasion — Admin — Gifto" };
 
@@ -38,6 +45,17 @@ export default async function EditOccasionPage({
     matchMode: occasion.match_mode,
     isActive: occasion.is_active,
   };
+
+  const initialPickerQuery = parseProductPickerQuery({});
+  const [selectedProducts, categoryOptions, firstPage] = await Promise.all([
+    loadSelectedProducts(supabase, occasion.id),
+    loadProductPickerCategories(supabase),
+    loadProductPickerPage(supabase, initialPickerQuery),
+  ]);
+
+  if (!selectedProducts.ok) throw new Error(selectedProducts.error);
+  if (!categoryOptions.ok) throw new Error(categoryOptions.error);
+  if (!firstPage.ok) throw new Error(firstPage.error);
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
@@ -83,6 +101,14 @@ export default async function EditOccasionPage({
         occasionId={occasion.id}
         initialValues={initialValues}
         initialImagePath={occasion.image_path}
+      />
+
+      <ProductPicker
+        occasionId={occasion.id}
+        initialSelected={selectedProducts.items}
+        categories={categoryOptions.categories}
+        initialPage={firstPage.data}
+        matchMode={occasion.match_mode}
       />
     </div>
   );

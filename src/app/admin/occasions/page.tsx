@@ -119,8 +119,8 @@ export default async function AdminOccasionsPage({
             Occasions
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-ink-soft">
-            Curate the moments Gifto can build around. Publish a strong,
-            well-named occasion now; matching rules and product picks come in
+            Curate the moments Gifto can build around and hand-pick the
+            products each one should feature. Automatic matching rules come in
             the next phase.
           </p>
         </div>

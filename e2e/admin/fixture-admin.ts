@@ -17,6 +17,84 @@ export const FIXTURE_SLUG = "e2e-navigation-guard";
 export const FIXTURE_NAME = "E2E Navigation Guard";
 export const FIXTURE_IMAGE = FIXTURE_IMAGE_PATH;
 
+const PICKER_VENDOR_ACTIVE = "a1111111-1111-4111-8111-111111111111";
+const PICKER_VENDOR_PAUSED = "a2222222-2222-4222-8222-222222222222";
+const PICKER_CATEGORY_FLOWERS = "b1111111-1111-4111-8111-111111111111";
+const PICKER_CATEGORY_HAMPERS = "b2222222-2222-4222-8222-222222222222";
+
+type PickerProduct = {
+  id: string;
+  name: string;
+  slug: string;
+  categoryId: string;
+  vendorId: string;
+  status: "draft" | "active" | "archived";
+  stock: number;
+  priceMinor: number;
+  createdAt: string;
+};
+
+function pickerProduct(
+  index: number,
+  name: string,
+  slug: string,
+  categoryId: string,
+  overrides: Partial<PickerProduct> = {},
+): PickerProduct {
+  return {
+    id: `c0000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+    name,
+    slug: `e2e-picker-${slug}`,
+    categoryId,
+    vendorId: PICKER_VENDOR_ACTIVE,
+    status: "active",
+    stock: 5,
+    priceMinor: 10_000 + index * 500,
+    createdAt: `2026-01-01T00:${String(index).padStart(2, "0")}:00.000Z`,
+    ...overrides,
+  };
+}
+
+const PICKER_PRODUCTS: PickerProduct[] = [
+  pickerProduct(1, "E2E Picker Rose", "rose", PICKER_CATEGORY_FLOWERS),
+  pickerProduct(2, "E2E Picker Tulip", "tulip", PICKER_CATEGORY_FLOWERS, {
+    stock: 0,
+  }),
+  pickerProduct(3, "E2E Picker Hamper", "hamper", PICKER_CATEGORY_HAMPERS),
+  pickerProduct(4, "E2E Picker Basket", "basket", PICKER_CATEGORY_HAMPERS),
+  pickerProduct(5, "E2E Picker Draft", "draft", PICKER_CATEGORY_FLOWERS, {
+    status: "draft",
+    stock: 1,
+  }),
+  pickerProduct(6, "E2E Picker Archived", "archived", PICKER_CATEGORY_HAMPERS, {
+    status: "archived",
+    stock: 2,
+  }),
+  pickerProduct(7, "E2E Picker Paused", "paused", PICKER_CATEGORY_FLOWERS, {
+    vendorId: PICKER_VENDOR_PAUSED,
+    stock: 4,
+  }),
+  ...Array.from({ length: 6 }, (_, offset) => {
+    const index = offset + 8;
+    return pickerProduct(
+      index,
+      `E2E Picker Bulk ${String(offset + 1).padStart(2, "0")}`,
+      `bulk-${String(offset + 1).padStart(2, "0")}`,
+      offset % 2 === 0 ? PICKER_CATEGORY_FLOWERS : PICKER_CATEGORY_HAMPERS,
+    );
+  }),
+];
+
+export const E2E_PICKER_PRODUCT_NAMES = {
+  rose: "E2E Picker Rose",
+  tulip: "E2E Picker Tulip",
+  hamper: "E2E Picker Hamper",
+  basket: "E2E Picker Basket",
+  draft: "E2E Picker Draft",
+  archived: "E2E Picker Archived",
+  paused: "E2E Picker Paused",
+} as const;
+
 let client: SupabaseClient<Database> | null = null;
 
 export function getAdminClient(): SupabaseClient<Database> {
@@ -55,6 +133,43 @@ $$;
   });
 }
 
+async function removePickerFixture(
+  supabase: SupabaseClient<Database>,
+): Promise<void> {
+  const { error: productError } = await supabase
+    .from("products")
+    .delete()
+    .like("slug", "e2e-picker-%");
+
+  if (productError) {
+    throw new Error(
+      `Could not delete E2E picker products: ${productError.message}`,
+    );
+  }
+
+  const { error: categoryError } = await supabase
+    .from("categories")
+    .delete()
+    .like("slug", "e2e-picker-%");
+
+  if (categoryError) {
+    throw new Error(
+      `Could not delete E2E picker categories: ${categoryError.message}`,
+    );
+  }
+
+  const { error: vendorError } = await supabase
+    .from("vendors")
+    .delete()
+    .like("slug", "e2e-picker-%");
+
+  if (vendorError) {
+    throw new Error(
+      `Could not delete E2E picker vendors: ${vendorError.message}`,
+    );
+  }
+}
+
 export async function cleanupE2EData(): Promise<void> {
   const supabase = getAdminClient();
 
@@ -81,6 +196,8 @@ export async function cleanupE2EData(): Promise<void> {
   if (deleteError) {
     throw new Error(`Could not delete E2E occasions: ${deleteError.message}`);
   }
+
+  await removePickerFixture(supabase);
 
   const { data: users, error: usersError } =
     await supabase.auth.admin.listUsers({ page: 1, perPage: 1_000 });
@@ -126,6 +243,79 @@ export async function seedAdmin(): Promise<string> {
   }
 
   return data.user.id;
+}
+
+export async function resetPickerFixture(): Promise<void> {
+  const supabase = getAdminClient();
+  await removePickerFixture(supabase);
+
+  const { error: categoryError } = await supabase.from("categories").insert([
+    {
+      id: PICKER_CATEGORY_FLOWERS,
+      name: "E2E Picker Flowers",
+      slug: "e2e-picker-flowers",
+      position: 9_001,
+      is_active: true,
+    },
+    {
+      id: PICKER_CATEGORY_HAMPERS,
+      name: "E2E Picker Hampers",
+      slug: "e2e-picker-hampers",
+      position: 9_002,
+      is_active: true,
+    },
+  ]);
+
+  if (categoryError) {
+    throw new Error(
+      `Could not create E2E picker categories: ${categoryError.message}`,
+    );
+  }
+
+  const { error: vendorError } = await supabase.from("vendors").insert([
+    {
+      id: PICKER_VENDOR_ACTIVE,
+      name: "E2E Picker Bloom Shop",
+      slug: "e2e-picker-bloom-shop",
+      status: "active",
+      is_accepting_orders: true,
+    },
+    {
+      id: PICKER_VENDOR_PAUSED,
+      name: "E2E Picker Paused Shop",
+      slug: "e2e-picker-paused-shop",
+      status: "active",
+      is_accepting_orders: false,
+    },
+  ]);
+
+  if (vendorError) {
+    throw new Error(
+      `Could not create E2E picker vendors: ${vendorError.message}`,
+    );
+  }
+
+  const { error: productError } = await supabase.from("products").insert(
+    PICKER_PRODUCTS.map((product) => ({
+      id: product.id,
+      vendor_id: product.vendorId,
+      category_id: product.categoryId,
+      name: product.name,
+      slug: product.slug,
+      description: "Temporary product used by the local admin E2E lane.",
+      price_minor: product.priceMinor,
+      currency: "EGP",
+      stock: product.stock,
+      status: product.status,
+      created_at: product.createdAt,
+    })),
+  );
+
+  if (productError) {
+    throw new Error(
+      `Could not create E2E picker products: ${productError.message}`,
+    );
+  }
 }
 
 export async function resetFixture(): Promise<{

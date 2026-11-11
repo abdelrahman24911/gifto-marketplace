@@ -17,11 +17,15 @@ vi.mock("next/cache", () => ({
   updateTag: vi.fn(),
 }));
 
+vi.mock("server-only", () => ({}));
+
 import {
   deleteOccasion,
+  loadProductPickerPageAction,
   moveOccasion,
   removeOccasionImage,
   saveOccasion,
+  saveOccasionProducts,
   setOccasionVisibility,
 } from "./actions";
 
@@ -982,5 +986,154 @@ describe("moveOccasion", () => {
       occasionId: OTHER_ID,
       error: "Could not reorder the occasions. No changes were saved.",
     });
+  });
+});
+
+describe("product picker authorization", () => {
+  it("rejects unauthorized page loads before touching the database", async () => {
+    state.authRejected = true;
+    const client = state.supabase as ReturnType<typeof makeClient>;
+
+    await expect(loadProductPickerPageAction({})).rejects.toThrow(
+      "REDIRECT:/login",
+    );
+    expect(client.calls).toEqual([]);
+  });
+
+  it("rejects unauthorized saves before calling the RPC", async () => {
+    state.authRejected = true;
+    const client = state.supabase as ReturnType<typeof makeClient>;
+
+    await expect(
+      saveOccasionProducts(null, form({ occasion_id: ROW_ID })),
+    ).rejects.toThrow("REDIRECT:/login");
+    expect(client.rpcCalls).toEqual([]);
+  });
+});
+
+describe("saveOccasionProducts", () => {
+  const PRODUCT_A = "11111111-1111-4111-8111-111111111111";
+  const PRODUCT_B = "22222222-2222-4222-8222-222222222222";
+
+  it("rejects invalid occasion and product ids without calling the RPC", async () => {
+    const client = state.supabase as ReturnType<typeof makeClient>;
+
+    expect(
+      await saveOccasionProducts(null, form({ occasion_id: "not-a-uuid" })),
+    ).toMatchObject({ error: "That occasion id is not valid." });
+
+    expect(
+      await saveOccasionProducts(
+        null,
+        form({ occasion_id: ROW_ID, product_ids: "not-a-uuid" }),
+      ),
+    ).toMatchObject({
+      error: "One or more selected products are not valid.",
+    });
+
+    expect(client.rpcCalls).toEqual([]);
+  });
+
+  it("deduplicates ids, preserves their order and saves atomically", async () => {
+    const client = state.supabase as ReturnType<typeof makeClient>;
+    const data = form({ occasion_id: ROW_ID });
+    data.append("product_ids", PRODUCT_B);
+    data.append("product_ids", PRODUCT_A);
+    data.append("product_ids", PRODUCT_B);
+
+    const result = await saveOccasionProducts(null, data);
+
+    expect(client.rpcCalls).toEqual([
+      {
+        name: "replace_occasion_products",
+        args: {
+          p_occasion_id: ROW_ID,
+          p_product_ids: [PRODUCT_B, PRODUCT_A],
+        },
+      },
+    ]);
+    expect(result).toMatchObject({
+      productIds: [PRODUCT_B, PRODUCT_A],
+      success: "2 products saved.",
+    });
+  });
+
+  it("can clear every manual pick", async () => {
+    const client = state.supabase as ReturnType<typeof makeClient>;
+
+    const result = await saveOccasionProducts(
+      null,
+      form({ occasion_id: ROW_ID }),
+    );
+
+    expect(client.rpcCalls[0]).toMatchObject({
+      name: "replace_occasion_products",
+      args: { p_occasion_id: ROW_ID, p_product_ids: [] },
+    });
+    expect(result).toMatchObject({
+      productIds: [],
+      success: "All manual product picks were removed.",
+    });
+  });
+
+  it("reports a missing product without claiming success", async () => {
+    const client = state.supabase as ReturnType<typeof makeClient>;
+    client.errors.set("rpc", {
+      code: "22023",
+      message: "One or more selected products do not exist.",
+    });
+
+    const result = await saveOccasionProducts(
+      null,
+      form({ occasion_id: ROW_ID, product_ids: PRODUCT_A }),
+    );
+
+    expect(result).toMatchObject({
+      error:
+        "One or more selected products no longer exist. Refresh the list and try again.",
+    });
+    expect(result).not.toHaveProperty("success");
+  });
+
+  it("maps permission and unexpected RPC failures to safe messages", async () => {
+    const client = state.supabase as ReturnType<typeof makeClient>;
+
+    client.errors.set("rpc", { code: "42501", message: "denied" });
+    expect(
+      await saveOccasionProducts(
+        null,
+        form({ occasion_id: ROW_ID, product_ids: PRODUCT_A }),
+      ),
+    ).toMatchObject({
+      error: "You do not have permission to change this occasion.",
+    });
+
+    client.errors.set("rpc", { message: "connection reset" });
+    expect(
+      await saveOccasionProducts(
+        null,
+        form({ occasion_id: ROW_ID, product_ids: PRODUCT_A }),
+      ),
+    ).toMatchObject({
+      error:
+        "The product selection could not be saved. Nothing was changed.",
+    });
+  });
+
+  it("rejects more than 500 unique products before calling the RPC", async () => {
+    const client = state.supabase as ReturnType<typeof makeClient>;
+    const data = form({ occasion_id: ROW_ID });
+
+    for (let index = 0; index < 501; index += 1) {
+      data.append(
+        "product_ids",
+        `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+      );
+    }
+
+    expect(await saveOccasionProducts(null, data)).toMatchObject({
+      error: "You can select at most 500 products.",
+    });
+    expect(client.rpcCalls).toEqual([]);
   });
 });
