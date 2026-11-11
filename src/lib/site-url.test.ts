@@ -19,11 +19,11 @@ describe("getSiteUrl", () => {
     expect(getSiteUrl()).toBe("https://gifto.example");
   });
 
-  it("requires the public origin in production", () => {
+  it("uses the deployed origin when production has no site URL override", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("NEXT_PUBLIC_SITE_URL", "");
 
-    expect(() => getSiteUrl()).toThrow(/must be set/);
+    expect(getSiteUrl()).toBe("https://gifto-marketplace.vercel.app");
   });
 
   it("rejects localhost in production", () => {

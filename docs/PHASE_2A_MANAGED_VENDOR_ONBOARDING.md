@@ -36,18 +36,24 @@ Neither migration has been applied. Review and approval are required before runn
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
-NEXT_PUBLIC_SITE_URL=https://your-production-domain.example
+NEXT_PUBLIC_SITE_URL=https://gifto-marketplace.vercel.app
 ```
 
 `SUPABASE_SERVICE_ROLE_KEY` is used only in server actions through `src/lib/supabase/service.ts`, which imports `server-only`. Never expose it to the browser.
 
-`NEXT_PUBLIC_SITE_URL` is used to build invitation/recovery redirects. It is required in production. The app refuses to fall back to localhost in production and rejects localhost origins there.
+`NEXT_PUBLIC_SITE_URL` is used to build invitation/recovery redirects. Production
+defaults to `https://gifto-marketplace.vercel.app` when the variable is omitted,
+and rejects localhost origins if one is configured. Development defaults to
+`http://localhost:3000`.
 
 ## Supabase Auth setup
 
-1. Set **Authentication → URL Configuration → Site URL** to the production site URL.
+1. Set **Authentication → URL Configuration → Site URL** to
+   `https://gifto-marketplace.vercel.app`.
 2. Add the following to **Redirect URLs**:
-   - `https://your-production-domain.example/auth/accept-invite`
+   - `https://gifto-marketplace.vercel.app/auth/callback`
+   - `https://gifto-marketplace.vercel.app/auth/accept-invite`
+   - `http://localhost:3000/auth/callback`
    - `http://localhost:3000/auth/accept-invite` for local development
 3. Configure SMTP or the Supabase email provider so invitation emails are delivered.
 4. Confirm the Auth email template for **Invite user** is enabled and looks correct.

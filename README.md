@@ -30,6 +30,22 @@ npm run dev
 
 Never commit `.env*`. Only variable *names* belong in `.env.example`.
 
+### Supabase Auth URL configuration
+
+In the Supabase Dashboard, open **Authentication → URL Configuration**:
+
+- Set **Site URL** to `https://gifto-marketplace.vercel.app`.
+- Add `https://gifto-marketplace.vercel.app/auth/callback` and
+  `https://gifto-marketplace.vercel.app/auth/accept-invite` to **Redirect URLs**.
+- For local development, also add `http://localhost:3000/auth/callback` and
+  `http://localhost:3000/auth/accept-invite`.
+
+The application builds signup confirmation and server-side recovery URLs from
+the validated site URL. Production defaults to the deployed URL above when
+`NEXT_PUBLIC_SITE_URL` is not set; development defaults to
+`http://localhost:3000`. Do not put a localhost URL in Vercel production
+environment variables.
+
 ## Scripts
 
 ```bash

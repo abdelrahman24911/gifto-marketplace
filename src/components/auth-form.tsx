@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { createClient } from "@/lib/supabase/client";
+import { getAuthCallbackUrl, getSafeAuthPath } from "@/lib/auth-redirect";
 
 type Mode = "login" | "signup";
 
@@ -38,10 +39,7 @@ export function AuthForm({ mode, initialError }: { mode: Mode; initialError?: st
     // The proxy appends ?next=<path> for protected routes; only allow same-site
     // absolute paths so the parameter cannot be used as an open redirect.
     const requestedNext = new URLSearchParams(window.location.search).get("next");
-    const redirectTo =
-      requestedNext && requestedNext.startsWith("/") && !requestedNext.startsWith("//")
-        ? requestedNext
-        : "/account";
+    const redirectTo = getSafeAuthPath(requestedNext);
 
     const supabase = createClient();
 
@@ -63,7 +61,7 @@ export function AuthForm({ mode, initialError }: { mode: Mode; initialError?: st
           password,
           options: {
             data: { full_name: fullName },
-            emailRedirectTo: `${window.location.origin}/auth/callback`,
+            emailRedirectTo: getAuthCallbackUrl(redirectTo),
           },
         });
         if (signUpError) {

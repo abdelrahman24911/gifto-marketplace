@@ -1,13 +1,12 @@
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "0.0.0.0", "[::1]"]);
+export const PRODUCTION_SITE_URL = "https://gifto-marketplace.vercel.app";
 
 export function getSiteUrl(): string {
   const configured = process.env.NEXT_PUBLIC_SITE_URL?.trim();
 
   if (!configured) {
     if (process.env.NODE_ENV === "production") {
-      throw new Error(
-        "NEXT_PUBLIC_SITE_URL must be set to the public site origin in production.",
-      );
+      return PRODUCTION_SITE_URL;
     }
     return "http://localhost:3000";
   }
@@ -29,5 +28,5 @@ export function getSiteUrl(): string {
     );
   }
 
-  return configured.replace(/\/+$/, "");
+  return parsed.origin;
 }
