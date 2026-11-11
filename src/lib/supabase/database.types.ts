@@ -17,6 +17,7 @@
  * Phase 22: vendor order pause enforced in checkout.
  * Phase 23: vendor support requests and admin queue.
  * Phase 24: analytics vendor/date index.
+ * Phase 26: occasions, tags, matching joins, slug redirects and suggestions.
  *
  * Regenerate from the live database once the Gifto project exists:
  *   supabase gen types typescript --project-id <ref> > src/lib/supabase/database.types.ts
@@ -45,12 +46,17 @@ export type OrderStatus =
 export type CommissionStatus = "earned" | "reversed";
 export type SettlementStatus = "open" | "paid" | "voided";
 export type SupportRequestStatus = "open" | "in_progress" | "resolved";
+export type OccasionMatchMode = "manual" | "automatic" | "hybrid";
+export type TagSuggestionStatus = "pending" | "approved" | "rejected";
 
 /** The Storage bucket reserved for catalog media (upload arrives later). */
 export const PRODUCT_IMAGES_BUCKET = "product-images";
 
 /** Public-read bucket for vendor logos and cover images. */
 export const VENDOR_MEDIA_BUCKET = "vendor-media";
+
+/** Public-read bucket for occasion hero images. */
+export const OCCASION_IMAGES_BUCKET = "occasion-images";
 
 export type Database = {
   public: {
@@ -860,6 +866,330 @@ export type Database = {
           },
         ];
       };
+      occasions: {
+        Row: {
+          id: string;
+          name: string;
+          slug: string;
+          description: string | null;
+          image_path: string | null;
+          image_alt: string | null;
+          is_active: boolean;
+          sort_order: number;
+          match_mode: OccasionMatchMode;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          slug: string;
+          description?: string | null;
+          image_path?: string | null;
+          image_alt?: string | null;
+          is_active?: boolean;
+          sort_order?: number;
+          match_mode?: OccasionMatchMode;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          slug?: string;
+          description?: string | null;
+          image_path?: string | null;
+          image_alt?: string | null;
+          is_active?: boolean;
+          sort_order?: number;
+          match_mode?: OccasionMatchMode;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      occasion_slug_redirects: {
+        Row: {
+          id: string;
+          old_slug: string;
+          occasion_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          old_slug: string;
+          occasion_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          old_slug?: string;
+          occasion_id?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "occasion_slug_redirects_occasion_id_fkey";
+            columns: ["occasion_id"];
+            isOneToOne: false;
+            referencedRelation: "occasions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      tags: {
+        Row: {
+          id: string;
+          name: string;
+          slug: string;
+          description: string | null;
+          is_active: boolean;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          slug: string;
+          description?: string | null;
+          is_active?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          slug?: string;
+          description?: string | null;
+          is_active?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tags_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      occasion_tags: {
+        Row: {
+          occasion_id: string;
+          tag_id: string;
+          created_at: string;
+        };
+        Insert: {
+          occasion_id: string;
+          tag_id: string;
+          created_at?: string;
+        };
+        Update: {
+          occasion_id?: string;
+          tag_id?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "occasion_tags_occasion_id_fkey";
+            columns: ["occasion_id"];
+            isOneToOne: false;
+            referencedRelation: "occasions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "occasion_tags_tag_id_fkey";
+            columns: ["tag_id"];
+            isOneToOne: false;
+            referencedRelation: "tags";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      occasion_categories: {
+        Row: {
+          occasion_id: string;
+          category_id: string;
+          created_at: string;
+        };
+        Insert: {
+          occasion_id: string;
+          category_id: string;
+          created_at?: string;
+        };
+        Update: {
+          occasion_id?: string;
+          category_id?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "occasion_categories_occasion_id_fkey";
+            columns: ["occasion_id"];
+            isOneToOne: false;
+            referencedRelation: "occasions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "occasion_categories_category_id_fkey";
+            columns: ["category_id"];
+            isOneToOne: false;
+            referencedRelation: "categories";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      occasion_products: {
+        Row: {
+          occasion_id: string;
+          product_id: string;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          occasion_id: string;
+          product_id: string;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Update: {
+          occasion_id?: string;
+          product_id?: string;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "occasion_products_occasion_id_fkey";
+            columns: ["occasion_id"];
+            isOneToOne: false;
+            referencedRelation: "occasions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "occasion_products_product_id_fkey";
+            columns: ["product_id"];
+            isOneToOne: false;
+            referencedRelation: "products";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      product_tags: {
+        Row: {
+          product_id: string;
+          tag_id: string;
+          created_at: string;
+          created_by: string | null;
+        };
+        Insert: {
+          product_id: string;
+          tag_id: string;
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Update: {
+          product_id?: string;
+          tag_id?: string;
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "product_tags_product_id_fkey";
+            columns: ["product_id"];
+            isOneToOne: false;
+            referencedRelation: "products";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "product_tags_tag_id_fkey";
+            columns: ["tag_id"];
+            isOneToOne: false;
+            referencedRelation: "tags";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "product_tags_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      tag_suggestions: {
+        Row: {
+          id: string;
+          name: string;
+          normalized_slug: string;
+          description: string | null;
+          suggested_by: string | null;
+          vendor_id: string;
+          status: TagSuggestionStatus;
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          rejection_reason: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          normalized_slug: string;
+          description?: string | null;
+          suggested_by?: string | null;
+          vendor_id: string;
+          status?: TagSuggestionStatus;
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+          rejection_reason?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          normalized_slug?: string;
+          description?: string | null;
+          suggested_by?: string | null;
+          vendor_id?: string;
+          status?: TagSuggestionStatus;
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+          rejection_reason?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tag_suggestions_vendor_id_fkey";
+            columns: ["vendor_id"];
+            isOneToOne: false;
+            referencedRelation: "vendors";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tag_suggestions_suggested_by_fkey";
+            columns: ["suggested_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tag_suggestions_reviewed_by_fkey";
+            columns: ["reviewed_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       public_vendors: {
@@ -976,6 +1306,57 @@ export type Database = {
         Args: { p_product_id: string; p_delta: number; p_note?: string | null };
         Returns: number;
       };
+      get_occasion_products: {
+        Args: {
+          p_occasion_id: string;
+          p_limit?: number;
+          p_offset?: number;
+        };
+        Returns: {
+          id: string;
+          vendor_id: string;
+          category_id: string | null;
+          name: string;
+          slug: string;
+          description: string | null;
+          price_minor: number;
+          currency: string;
+          stock: number;
+          status: ProductStatus;
+          created_at: string;
+          updated_at: string;
+          is_manual: boolean;
+          total_count: number;
+        }[];
+      };
+      replace_occasion_products: {
+        Args: { p_occasion_id: string; p_product_ids: string[] };
+        Returns: undefined;
+      };
+      replace_occasion_categories: {
+        Args: { p_occasion_id: string; p_category_ids: string[] };
+        Returns: undefined;
+      };
+      replace_occasion_tags: {
+        Args: { p_occasion_id: string; p_tag_ids: string[] };
+        Returns: undefined;
+      };
+      reorder_occasions: {
+        Args: { p_occasion_ids: string[] };
+        Returns: undefined;
+      };
+      replace_product_tags: {
+        Args: { p_product_id: string; p_tag_ids: string[] };
+        Returns: undefined;
+      };
+      review_tag_suggestion: {
+        Args: {
+          p_suggestion_id: string;
+          p_approve: boolean;
+          p_rejection_reason?: string | null;
+        };
+        Returns: string | null;
+      };
     };
     Enums: {
       vendor_role: VendorRole;
@@ -984,6 +1365,8 @@ export type Database = {
       order_status: OrderStatus;
       commission_status: CommissionStatus;
       settlement_status: SettlementStatus;
+      occasion_match_mode: OccasionMatchMode;
+      tag_suggestion_status: TagSuggestionStatus;
     };
     CompositeTypes: Record<string, never>;
   };

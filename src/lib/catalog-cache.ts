@@ -5,6 +5,7 @@ export const CATALOG_TAGS = {
   catalog: "catalog",
   shops: "shops",
   categories: "categories",
+  occasions: "occasions",
 } as const;
 
 export type CatalogTag = (typeof CATALOG_TAGS)[keyof typeof CATALOG_TAGS];

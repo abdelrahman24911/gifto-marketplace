@@ -97,7 +97,12 @@ describe("cachedCatalogRead", () => {
 describe("revalidatePublicCatalog", () => {
   it("invalidates every catalog tag by default", () => {
     revalidatePublicCatalog();
-    expect(runtime.updated.sort()).toEqual(["catalog", "categories", "shops"]);
+    expect(runtime.updated.sort()).toEqual([
+      "catalog",
+      "categories",
+      "occasions",
+      "shops",
+    ]);
   });
 
   it("can target specific tags", () => {
