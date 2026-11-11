@@ -1,6 +1,9 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 import { SearchIcon } from "@/components/icons";
+import { useGuardedNavigation } from "@/components/navigation-guard";
 
 /**
  * Storefront search. A plain GET form — it works without JavaScript and lands
@@ -15,11 +18,26 @@ export function SearchForm({
   autoFocus?: boolean;
   className?: string;
 }) {
+  const router = useRouter();
+  const { isDirty, requestNavigation } = useGuardedNavigation();
+
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    if (!isDirty()) return;
+
+    event.preventDefault();
+    const query = String(new FormData(event.currentTarget).get("q") ?? "");
+    const params = new URLSearchParams();
+    if (query) params.set("q", query);
+    const href = params.size > 0 ? `/search?${params.toString()}` : "/search";
+    requestNavigation(() => router.push(href));
+  }
+
   return (
     <form
       action="/search"
       method="get"
       role="search"
+      onSubmit={handleSubmit}
       className={`group relative flex items-center ${className}`}
     >
       <SearchIcon className="pointer-events-none absolute left-3 h-4 w-4 text-ink-mute" />

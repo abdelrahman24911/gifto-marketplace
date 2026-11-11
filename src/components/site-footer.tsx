@@ -1,6 +1,5 @@
-import Link from "next/link";
-
 import { GiftoMark } from "@/components/icons";
+import { GuardedLink } from "@/components/navigation-guard";
 import { Container } from "@/components/ui/section";
 
 const COLUMNS = [
@@ -51,12 +50,12 @@ export function SiteFooter() {
               <ul className="mt-4 flex flex-col gap-3">
                 {column.links.map((link) => (
                   <li key={link.href}>
-                    <Link
+                    <GuardedLink
                       href={link.href}
                       className="text-sm text-ink-soft transition-colors hover:text-berry"
                     >
                       {link.label}
-                    </Link>
+                    </GuardedLink>
                   </li>
                 ))}
               </ul>

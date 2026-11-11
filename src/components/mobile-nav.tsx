@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { CloseIcon, MenuIcon } from "@/components/icons";
+import { GuardedLink } from "@/components/navigation-guard";
 import { SearchForm } from "@/components/search-form";
 import { SignOutButton } from "@/components/sign-out-button";
 
@@ -55,14 +55,14 @@ export function MobileNav({
 
           <nav aria-label="Store sections" className="mt-5 flex flex-col">
             {nav.map((link) => (
-              <Link
+              <GuardedLink
                 key={link.href}
                 href={link.href}
                 onClick={() => setOpen(false)}
                 className="border-b border-line py-3 font-display text-xl text-ink transition-colors hover:text-berry"
               >
                 {link.label}
-              </Link>
+              </GuardedLink>
             ))}
           </nav>
 
@@ -71,14 +71,14 @@ export function MobileNav({
             className="mt-6 flex flex-wrap items-center gap-2 border-t border-line pt-4"
           >
             {account.map((link) => (
-              <Link
+              <GuardedLink
                 key={link.href}
                 href={link.href}
                 onClick={() => setOpen(false)}
                 className="rounded-full border border-line px-4 py-2 text-sm font-medium text-ink-soft transition-colors hover:border-berry/40 hover:text-berry"
               >
                 {link.label}
-              </Link>
+              </GuardedLink>
             ))}
             {showSignOut ? (
               <SignOutButton

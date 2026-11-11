@@ -1,7 +1,7 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { ArrowRightIcon } from "@/components/icons";
+import { GuardedLink } from "@/components/navigation-guard";
 
 /** Consistent page gutter + max width for storefront sections. */
 export function Container({
@@ -51,13 +51,13 @@ export function SectionHeading({
         ) : null}
       </div>
       {href && linkLabel ? (
-        <Link
+        <GuardedLink
           href={href}
           className="group inline-flex items-center gap-1.5 text-sm font-medium text-berry hover:text-berry-deep"
         >
           {linkLabel}
           <ArrowRightIcon className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
-        </Link>
+        </GuardedLink>
       ) : null}
     </div>
   );
@@ -95,12 +95,12 @@ export function Breadcrumb({
         {items.map((item, index) => (
           <li key={`${item.label}-${index}`} className="flex items-center gap-2">
             {item.href ? (
-              <Link
+              <GuardedLink
                 href={item.href}
                 className="transition-colors hover:text-berry"
               >
                 {item.label}
-              </Link>
+              </GuardedLink>
             ) : (
               <span className="text-ink-soft">{item.label}</span>
             )}

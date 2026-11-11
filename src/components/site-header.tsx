@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { Suspense } from "react";
 
 import { CartLink } from "@/components/cart-link";
 import { GiftoMark, UserIcon } from "@/components/icons";
 import { MobileNav } from "@/components/mobile-nav";
+import { GuardedLink } from "@/components/navigation-guard";
 import { SearchForm } from "@/components/search-form";
 import { SignOutButton } from "@/components/sign-out-button";
 import { Container } from "@/components/ui/section";
@@ -95,13 +95,13 @@ async function HeaderActions() {
 
   return (
     <>
-      <Link
+      <GuardedLink
         href={user ? "/account" : "/login"}
         className="inline-flex h-10 items-center gap-1.5 rounded-full px-3 text-sm font-medium text-ink-soft transition-colors hover:bg-berry-soft hover:text-berry-deep"
       >
         <UserIcon className="h-5 w-5" />
         <span className="hidden sm:inline">{user ? "Account" : "Sign in"}</span>
-      </Link>
+      </GuardedLink>
 
       <CartLink className={cartLinkClass} />
 
@@ -147,7 +147,7 @@ export function SiteHeader() {
 
       <Container>
         <div className="flex h-16 items-center gap-3">
-          <Link
+          <GuardedLink
             href="/"
             className="flex items-center gap-2 rounded-full py-1 pr-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
           >
@@ -155,16 +155,20 @@ export function SiteHeader() {
             <span className="font-display text-xl font-medium tracking-tight text-ink">
               Gifto
             </span>
-          </Link>
+          </GuardedLink>
 
           <nav
             aria-label="Store sections"
             className="ml-2 hidden items-center gap-1 lg:flex"
           >
             {NAV.map((link) => (
-              <Link key={link.href} href={link.href} className={navLinkClass}>
+              <GuardedLink
+                key={link.href}
+                href={link.href}
+                className={navLinkClass}
+              >
                 {link.label}
-              </Link>
+              </GuardedLink>
             ))}
           </nav>
 

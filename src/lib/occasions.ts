@@ -37,6 +37,28 @@ export type OccasionFieldErrors = Partial<
   Record<"name" | "slug" | "description" | "image_alt" | "match_mode" | "image", string>
 >;
 
+export function occasionFormValuesEqual(
+  left: OccasionFormValues,
+  right: OccasionFormValues,
+): boolean {
+  return (
+    left.name === right.name &&
+    left.slug === right.slug &&
+    left.description === right.description &&
+    left.imageAlt === right.imageAlt &&
+    left.matchMode === right.matchMode &&
+    left.isActive === right.isActive
+  );
+}
+
+export function isOccasionFormDirty(
+  values: OccasionFormValues,
+  savedValues: OccasionFormValues,
+  hasNewImage = false,
+): boolean {
+  return hasNewImage || !occasionFormValuesEqual(values, savedValues);
+}
+
 export type OccasionValidationResult = {
   ok: boolean;
   values: OccasionFormValues;

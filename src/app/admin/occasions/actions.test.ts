@@ -20,6 +20,7 @@ vi.mock("next/cache", () => ({
 import {
   deleteOccasion,
   moveOccasion,
+  removeOccasionImage,
   saveOccasion,
   setOccasionVisibility,
 } from "./actions";
@@ -706,6 +707,111 @@ describe("saveOccasion edit", () => {
       success: expect.any(String),
       warning: expect.stringContaining("not recognized"),
     });
+  });
+});
+
+describe("removeOccasionImage", () => {
+  it("detaches the image before deleting its stored object", async () => {
+    const client = state.supabase as ReturnType<typeof makeClient>;
+    const path = `${ROW_ID}/old.png`;
+    client.occasions.push(occasion({ image_path: path }));
+
+    const result = await removeOccasionImage(
+      null,
+      form({ occasion_id: ROW_ID }),
+    );
+
+    expect(result).toMatchObject({
+      success: "The occasion image was removed.",
+      warning: undefined,
+    });
+    expect(client.occasions[0].image_path).toBeNull();
+    expect(client.removals).toEqual([[path]]);
+    expect(client.operations).toEqual([
+      "update:occasions",
+      `remove:${path}`,
+    ]);
+  });
+
+  it("warns when the database is cleared but Storage cleanup fails", async () => {
+    const client = state.supabase as ReturnType<typeof makeClient>;
+    const path = `${ROW_ID}/old.png`;
+    client.occasions.push(occasion({ image_path: path }));
+    client.errors.set("remove", { message: "remove failed" });
+
+    const result = await removeOccasionImage(
+      null,
+      form({ occasion_id: ROW_ID }),
+    );
+
+    expect(result).toMatchObject({
+      success: "The occasion image was removed.",
+      warning: expect.stringContaining("Storage"),
+    });
+    expect(client.occasions[0].image_path).toBeNull();
+  });
+
+  it("does not touch an unrecognized image path", async () => {
+    const client = state.supabase as ReturnType<typeof makeClient>;
+    client.occasions.push(occasion({ image_path: "legacy/image.png" }));
+
+    const result = await removeOccasionImage(
+      null,
+      form({ occasion_id: ROW_ID }),
+    );
+
+    expect(result).toMatchObject({
+      error: expect.stringContaining("not recognized"),
+    });
+    expect(client.occasions[0].image_path).toBe("legacy/image.png");
+    expect(client.operations).toEqual([]);
+  });
+
+  it("leaves everything unchanged when clearing the database fails", async () => {
+    const client = state.supabase as ReturnType<typeof makeClient>;
+    const path = `${ROW_ID}/old.png`;
+    client.occasions.push(occasion({ image_path: path }));
+    client.errors.set("update", { message: "update failed" });
+
+    const result = await removeOccasionImage(
+      null,
+      form({ occasion_id: ROW_ID }),
+    );
+
+    expect(result).toMatchObject({
+      error: expect.stringContaining("Nothing was changed"),
+    });
+    expect(client.occasions[0].image_path).toBe(path);
+    expect(client.removals).toEqual([]);
+  });
+
+  it("is idempotent when there is no image", async () => {
+    const client = state.supabase as ReturnType<typeof makeClient>;
+    client.occasions.push(occasion({ image_path: null }));
+
+    const result = await removeOccasionImage(
+      null,
+      form({ occasion_id: ROW_ID }),
+    );
+
+    expect(result).toMatchObject({
+      success: "This occasion already has no image.",
+    });
+    expect(client.operations).toEqual([]);
+  });
+
+  it("rejects an invalid occasion id", async () => {
+    const client = state.supabase as ReturnType<typeof makeClient>;
+
+    const result = await removeOccasionImage(
+      null,
+      form({ occasion_id: "not-a-uuid" }),
+    );
+
+    expect(result).toMatchObject({
+      error: "That occasion id is not valid.",
+    });
+    expect(client.calls).toEqual([]);
   });
 });
 

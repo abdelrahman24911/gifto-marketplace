@@ -1,9 +1,16 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
-import { useActionState, useEffect, useId, useRef, useState } from "react";
+import {
+  useActionState,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 
+import { GuardedLink, useUnsavedChangesGuard } from "@/components/navigation-guard";
 import { ProductImage } from "@/components/product-image";
 import {
   OCCASION_DESCRIPTION_MAX,
@@ -14,6 +21,7 @@ import {
   OCCASION_NAME_MAX,
   OCCASION_NAME_MIN,
   OCCASION_SLUG_MAX,
+  isOccasionFormDirty,
   isOccasionMatchMode,
   validateOccasionImageBasics,
   validateOccasionInput,
@@ -24,6 +32,7 @@ import { slugify } from "@/lib/slugify";
 import { OCCASION_IMAGES_BUCKET } from "@/lib/supabase/database.types";
 
 import { saveOccasion, type OccasionFormState } from "./actions";
+import { RemoveOccasionImageButton } from "./remove-occasion-image-button";
 
 const inputClass =
   "w-full rounded-lg border border-line-strong bg-paper-soft px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-mute transition-colors focus:border-berry focus:outline-none focus:ring-2 focus:ring-berry/15";
@@ -46,10 +55,19 @@ export function OccasionForm({
   initialImagePath,
 }: Props) {
   const [state, formAction, pending] = useActionState(saveOccasion, null);
+  const [savedValues, setSavedValues] = useState(initialValues);
+  const [lastSuccess, setLastSuccess] = useState<OccasionFormState>(null);
   const createSucceeded = mode === "create" && Boolean(state?.success);
   const values = state?.values ?? initialValues;
   const imagePath =
     state?.imagePath !== undefined ? state.imagePath : initialImagePath;
+
+  if (state?.success && state !== lastSuccess) {
+    setLastSuccess(state);
+    setSavedValues(state.values);
+  }
+
+  const baselineValues = state?.success ? state.values : savedValues;
 
   return (
     <div className="mt-8">
@@ -69,6 +87,7 @@ export function OccasionForm({
           mode={mode}
           occasionId={occasionId}
           initialValues={values}
+          baselineValues={baselineValues}
           initialImagePath={imagePath}
           serverState={state}
           formAction={formAction}
@@ -109,19 +128,19 @@ function SuccessNotice({
       ) : null}
       <div className="mt-3 flex flex-wrap gap-3 text-sm font-medium">
         {mode === "create" && occasionId ? (
-          <Link
+          <GuardedLink
             href={`/admin/occasions/${occasionId}/edit`}
             className="rounded-full bg-emerald-900 px-4 py-1.5 text-paper hover:bg-emerald-800"
           >
             Continue editing
-          </Link>
+          </GuardedLink>
         ) : null}
-        <Link
+        <GuardedLink
           href="/admin/occasions"
           className="rounded-full border border-emerald-300 px-4 py-1.5 text-emerald-900 hover:bg-emerald-100"
         >
           Back to occasions
-        </Link>
+        </GuardedLink>
         {mode === "create" ? (
           <button
             type="button"
@@ -140,6 +159,7 @@ function OccasionFields({
   mode,
   occasionId,
   initialValues,
+  baselineValues,
   initialImagePath,
   serverState,
   formAction,
@@ -148,6 +168,7 @@ function OccasionFields({
   mode: "create" | "edit";
   occasionId?: string;
   initialValues: OccasionFormValues;
+  baselineValues: OccasionFormValues;
   initialImagePath: string | null;
   serverState: OccasionFormState;
   formAction: (payload: FormData) => void;
@@ -162,24 +183,25 @@ function OccasionFields({
   const [imageError, setImageError] = useState<string | null>(null);
   const [clientErrors, setClientErrors] = useState<OccasionFieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
-  const [dirty, setDirty] = useState(Boolean(serverState?.error));
+  const [hasNewImage, setHasNewImage] = useState(false);
+  const [imageRemoved, setImageRemoved] = useState(false);
+  const [imageRemovedWarning, setImageRemovedWarning] = useState<string | null>(
+    null,
+  );
+  const currentImagePath = imageRemoved ? null : initialImagePath;
+  const dirty = isOccasionFormDirty(values, baselineValues, hasNewImage);
+
+  useUnsavedChangesGuard(dirty);
 
   useEffect(() => {
     if (!previewUrl) return;
     return () => URL.revokeObjectURL(previewUrl);
   }, [previewUrl]);
 
-  useEffect(() => {
-    if (!dirty) return;
-
-    function warnBeforeUnload(event: BeforeUnloadEvent) {
-      event.preventDefault();
-      event.returnValue = "";
-    }
-
-    window.addEventListener("beforeunload", warnBeforeUnload);
-    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
-  }, [dirty]);
+  const handleImageRemoved = useCallback((warning?: string) => {
+    setImageRemoved(true);
+    setImageRemovedWarning(warning ?? null);
+  }, []);
 
   const errors = { ...serverState?.fieldErrors, ...clientErrors };
   const visibleError = serverState?.error ?? formError;
@@ -192,7 +214,6 @@ function OccasionFields({
       slug:
         mode === "create" && !slugTouched ? slugify(name) : current.slug,
     }));
-    setDirty(true);
   }
 
   function clearFile() {
@@ -200,8 +221,8 @@ function OccasionFields({
     setPreviewUrl(null);
     setSelectedFileName(null);
     setImageError(null);
+    setHasNewImage(false);
     setClientErrors((current) => ({ ...current, image: undefined }));
-    setDirty(true);
   }
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -212,6 +233,7 @@ function OccasionFields({
       setPreviewUrl(null);
       setSelectedFileName(null);
       setImageError(null);
+      setHasNewImage(false);
       return;
     }
 
@@ -220,14 +242,14 @@ function OccasionFields({
       setPreviewUrl(null);
       setSelectedFileName(null);
       setImageError(basics.error);
-      setDirty(true);
+      setHasNewImage(true);
       return;
     }
 
     setImageError(null);
     setSelectedFileName(file.name);
     setPreviewUrl(URL.createObjectURL(file));
-    setDirty(true);
+    setHasNewImage(true);
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -327,7 +349,6 @@ function OccasionFields({
                       ...current,
                       slug: event.target.value,
                     }));
-                    setDirty(true);
                   }}
                   placeholder="ramadan-evenings"
                   className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm text-ink placeholder:text-ink-mute focus:outline-none"
@@ -366,7 +387,6 @@ function OccasionFields({
                     ...current,
                     description: event.target.value,
                   }));
-                  setDirty(true);
                 }}
                 placeholder="What makes this occasion worth browsing? Keep it warm and specific."
                 className={`${inputClass} resize-y`}
@@ -405,9 +425,9 @@ function OccasionFields({
                     sizes="(min-width: 640px) 240px, 100vw"
                     className="object-cover"
                   />
-                ) : initialImagePath ? (
+                ) : currentImagePath ? (
                   <ProductImage
-                    path={initialImagePath}
+                    path={currentImagePath}
                     alt={values.imageAlt || values.name || "Occasion image"}
                     name={values.name || "Occasion"}
                     bucket={OCCASION_IMAGES_BUCKET}
@@ -428,7 +448,7 @@ function OccasionFields({
                     </span>
                   </div>
                 )}
-                {previewUrl || initialImagePath ? (
+                {previewUrl || currentImagePath ? (
                   <span className="absolute left-2 top-2 rounded-full bg-ink/80 px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-wide text-paper">
                     {previewUrl ? "New image" : "Current image"}
                   </span>
@@ -440,7 +460,9 @@ function OccasionFields({
                   htmlFor={imageInputId}
                   className="cursor-pointer rounded-full border border-line-strong bg-paper-soft px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:border-berry/40 hover:bg-berry-soft"
                 >
-                  {previewUrl || initialImagePath ? "Replace image" : "Choose image"}
+                  {previewUrl || currentImagePath
+                    ? "Replace image"
+                    : "Choose image"}
                 </label>
                 {previewUrl || imageError ? (
                   <button
@@ -450,6 +472,12 @@ function OccasionFields({
                   >
                     Clear selection
                   </button>
+                ) : null}
+                {mode === "edit" && occasionId && currentImagePath && !previewUrl ? (
+                  <RemoveOccasionImageButton
+                    occasionId={occasionId}
+                    onRemoved={handleImageRemoved}
+                  />
                 ) : null}
                 <input
                   ref={imageInputRef}
@@ -467,6 +495,22 @@ function OccasionFields({
               {selectedFileName ? (
                 <p className="mt-1 break-all text-xs text-ink-mute">
                   {selectedFileName}
+                </p>
+              ) : null}
+              {imageRemoved ? (
+                <p
+                  role="status"
+                  className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900"
+                >
+                  The image was removed.
+                </p>
+              ) : null}
+              {imageRemovedWarning ? (
+                <p
+                  role="alert"
+                  className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+                >
+                  {imageRemovedWarning}
                 </p>
               ) : null}
               {errors.image ? (
@@ -498,7 +542,6 @@ function OccasionFields({
                     ...current,
                     imageAlt: event.target.value,
                   }));
-                  setDirty(true);
                 }}
                 placeholder="Describe the image for screen readers"
                 className={inputClass}
@@ -547,7 +590,6 @@ function OccasionFields({
                   ...current,
                   isActive: event.target.checked,
                 }));
-                setDirty(true);
               }}
               className="mt-0.5 size-4 shrink-0 accent-berry"
             />
@@ -573,7 +615,6 @@ function OccasionFields({
                   ...current,
                   matchMode: event.target.value as OccasionFormValues["matchMode"],
                 }));
-                setDirty(true);
               }}
               className={inputClass}
               aria-invalid={Boolean(errors.match_mode)}
@@ -625,25 +666,16 @@ function OccasionFields({
                 ? "Create occasion"
                 : "Save changes"}
           </button>
-          <Link
+          <GuardedLink
             href="/admin/occasions"
             aria-disabled={pending}
             onClick={(event) => {
-              if (pending) {
-                event.preventDefault();
-                return;
-              }
-              if (
-                dirty &&
-                !window.confirm("Discard your unsaved changes?")
-              ) {
-                event.preventDefault();
-              }
+              if (pending) event.preventDefault();
             }}
             className="mt-2 block rounded-full px-4 py-2 text-center text-sm font-medium text-ink-soft transition-colors hover:bg-paper-deep hover:text-ink aria-disabled:pointer-events-none aria-disabled:opacity-60"
           >
             Cancel
-          </Link>
+          </GuardedLink>
           <p className="mt-3 text-center text-[0.7rem] leading-relaxed text-ink-mute">
             {OCCASION_IMAGE_MAX_BYTES / (1024 * 1024)} MB image limit · changes
             are validated on the server

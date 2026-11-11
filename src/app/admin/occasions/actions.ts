@@ -446,6 +446,96 @@ export async function saveOccasion(
   };
 }
 
+/**
+ * Detaches an image from its occasion, then attempts to delete the stored
+ * object. The database is cleared first so a Storage failure leaves an
+ * orphaned file rather than a broken reference.
+ */
+export async function removeOccasionImage(
+  previous: OccasionSimpleState,
+  formData: FormData,
+): Promise<OccasionSimpleState> {
+  const { supabase } = await requirePlatformAdmin();
+  const attempt = nextAttempt(previous);
+  const occasionId = String(formData.get("occasion_id") ?? "").trim();
+
+  if (!isUuid(occasionId)) {
+    return { attempt, error: "That occasion id is not valid." };
+  }
+
+  const { data: occasion, error: loadError } = await supabase
+    .from("occasions")
+    .select("id, slug, image_path")
+    .eq("id", occasionId)
+    .maybeSingle();
+
+  if (loadError) {
+    return { attempt, occasionId, error: "Could not load the occasion." };
+  }
+
+  if (!occasion) {
+    return { attempt, occasionId, error: "That occasion no longer exists." };
+  }
+
+  if (!occasion.image_path) {
+    return {
+      attempt,
+      occasionId,
+      success: "This occasion already has no image.",
+    };
+  }
+
+  if (!occasionImagePathBelongsTo(occasion.image_path, occasionId)) {
+    return {
+      attempt,
+      occasionId,
+      error:
+        "The stored image path was not recognized. Nothing was changed.",
+    };
+  }
+
+  const imagePath = occasion.image_path;
+  const { data: cleared, error: clearError } = await supabase
+    .from("occasions")
+    .update({ image_path: null })
+    .eq("id", occasionId)
+    .eq("image_path", imagePath)
+    .select("id")
+    .maybeSingle();
+
+  if (clearError) {
+    return {
+      attempt,
+      occasionId,
+      error: "Could not detach the image. Nothing was changed.",
+    };
+  }
+
+  if (!cleared) {
+    return {
+      attempt,
+      occasionId,
+      error:
+        "The image changed before it could be removed. Reload the page and try again.",
+    };
+  }
+
+  const { error: storageError } = await supabase.storage
+    .from(OCCASION_IMAGES_BUCKET)
+    .remove([imagePath]);
+
+  revalidateOccasionSurfaces({ id: occasionId, slug: occasion.slug });
+
+  return {
+    attempt,
+    occasionId,
+    success: "The occasion image was removed.",
+    warning: storageError
+      ? "The image was detached, but its file could not be deleted from Storage."
+      : undefined,
+  };
+}
+
 /** Removes the image first (the Storage policy needs the row), then the row. */
 export async function deleteOccasion(
   previous: OccasionSimpleState,

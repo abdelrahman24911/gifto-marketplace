@@ -1,16 +1,15 @@
 "use client";
 
-import Link from "next/link";
-
 import { useCart } from "@/components/cart-provider";
 import { CartIcon } from "@/components/icons";
+import { GuardedLink } from "@/components/navigation-guard";
 
 /** Header cart link. Renders a stable label until the stored cart is read. */
 export function CartLink({ className }: { className?: string }) {
   const { count, ready } = useCart();
 
   return (
-    <Link
+    <GuardedLink
       href="/cart"
       className={className}
       aria-label={ready && count > 0 ? `Cart, ${count} items` : "Cart"}
@@ -22,6 +21,6 @@ export function CartLink({ className }: { className?: string }) {
           {count}
         </span>
       ) : null}
-    </Link>
+    </GuardedLink>
   );
 }

@@ -9,16 +9,19 @@ import {
   buildOccasionImagePath,
   detectOccasionImageType,
   filterOccasions,
+  isOccasionFormDirty,
   isOccasionMatchMode,
   isUuid,
   moveOccasionId,
   normalizeOccasionName,
   normalizeOccasionSlug,
+  occasionFormValuesEqual,
   occasionImagePathBelongsTo,
   parseOccasionStatusFilter,
   validateOccasionImageBasics,
   validateOccasionImageFile,
   validateOccasionInput,
+  type OccasionFormValues,
 } from "./occasions";
 
 const OCCASION_ID = "11111111-1111-4111-8111-111111111111";
@@ -66,6 +69,50 @@ describe("occasion value normalization", () => {
     expect(isUuid(OCCASION_ID.toUpperCase())).toBe(true);
     expect(isUuid("11111111-1111-4111-8111")).toBe(false);
     expect(isUuid("not-a-uuid")).toBe(false);
+  });
+});
+
+describe("occasion form dirty state", () => {
+  const savedValues: OccasionFormValues = {
+    name: "Ramadan evenings",
+    slug: "ramadan-evenings",
+    description: "Warm gifts for the table.",
+    imageAlt: "Lanterns at dusk",
+    matchMode: "hybrid",
+    isActive: false,
+  };
+
+  it("treats identical values as unchanged", () => {
+    expect(occasionFormValuesEqual(savedValues, { ...savedValues })).toBe(true);
+    expect(isOccasionFormDirty(savedValues, savedValues)).toBe(false);
+  });
+
+  it("detects each editable field and a new image", () => {
+    expect(
+      occasionFormValuesEqual(savedValues, {
+        ...savedValues,
+        name: "Ramadan evenings ",
+      }),
+    ).toBe(false);
+    expect(
+      isOccasionFormDirty({ ...savedValues, isActive: true }, savedValues),
+    ).toBe(true);
+    expect(isOccasionFormDirty(savedValues, savedValues, true)).toBe(true);
+  });
+
+  it("becomes clean again when edits are reverted", () => {
+    const edited: OccasionFormValues = {
+      ...savedValues,
+      description: "Temporary edit",
+    };
+
+    expect(isOccasionFormDirty(edited, savedValues)).toBe(true);
+    expect(
+      isOccasionFormDirty(
+        { ...edited, description: savedValues.description },
+        savedValues,
+      ),
+    ).toBe(false);
   });
 });
 

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Fraunces, Geist, Geist_Mono } from "next/font/google";
 
 import { CartProvider } from "@/components/cart-provider";
+import { NavigationGuardProvider } from "@/components/navigation-guard";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 
@@ -74,11 +75,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-paper text-ink">
-        <CartProvider>
-          <SiteHeader />
-          <main className="flex-1">{children}</main>
-        </CartProvider>
-        <SiteFooter />
+        <NavigationGuardProvider>
+          <CartProvider>
+            <SiteHeader />
+            <main className="flex-1">{children}</main>
+          </CartProvider>
+          <SiteFooter />
+        </NavigationGuardProvider>
       </body>
     </html>
   );
