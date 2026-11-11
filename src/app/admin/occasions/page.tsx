@@ -119,18 +119,26 @@ export default async function AdminOccasionsPage({
             Occasions
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-ink-soft">
-            Curate the moments Gifto can build around and hand-pick the
-            products each one should feature. Automatic matching rules come in
-            the next phase.
+            Curate the moments Gifto can build around. Combine manual picks
+            with category and approved-tag rules, then preview the public
+            collection before publishing.
           </p>
         </div>
-        <Link
-          href="/admin/occasions/new"
-          className="inline-flex items-center gap-2 rounded-full bg-berry px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-berry-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
-        >
-          <PlusIcon className="h-4 w-4" />
-          New occasion
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/admin/tags"
+            className="rounded-full border border-line-strong bg-paper px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-paper-deep"
+          >
+            Manage tags
+          </Link>
+          <Link
+            href="/admin/occasions/new"
+            className="inline-flex items-center gap-2 rounded-full bg-berry px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-berry-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
+          >
+            <PlusIcon className="h-4 w-4" />
+            New occasion
+          </Link>
+        </div>
       </div>
 
       {params.deleted === "1" ? (

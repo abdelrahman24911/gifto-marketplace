@@ -265,7 +265,7 @@ export function ProductPicker({
     matchMode === "automatic"
       ? "This occasion is set to Automatic, so these manual picks are saved but not currently included in the public collection."
       : matchMode === "hybrid"
-        ? "Hybrid mode uses these manual picks and will also add automatic matches when matching rules are configured."
+        ? "Hybrid mode places these manual picks first, then adds category and tag matches from the matching rules below."
         : "Manual mode uses only the products you pick here.";
 
   return (

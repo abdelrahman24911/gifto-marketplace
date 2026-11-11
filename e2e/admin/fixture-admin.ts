@@ -19,8 +19,20 @@ export const FIXTURE_IMAGE = FIXTURE_IMAGE_PATH;
 
 const PICKER_VENDOR_ACTIVE = "a1111111-1111-4111-8111-111111111111";
 const PICKER_VENDOR_PAUSED = "a2222222-2222-4222-8222-222222222222";
-const PICKER_CATEGORY_FLOWERS = "b1111111-1111-4111-8111-111111111111";
+export const PICKER_CATEGORY_FLOWERS =
+  "b1111111-1111-4111-8111-111111111111";
 const PICKER_CATEGORY_HAMPERS = "b2222222-2222-4222-8222-222222222222";
+
+export const E2E_TAG_THOUGHTFUL_ID = "f3000000-0000-4000-8000-000000000001";
+export const E2E_TAG_RETIRED_ID = "f3000000-0000-4000-8000-000000000002";
+export const E2E_TAG_NAMES = {
+  thoughtful: "E2E Tag Thoughtful",
+  retired: "E2E Tag Retired",
+  suggestion: "E2E Tag Suggestion",
+  created: "E2E Tag Created",
+} as const;
+
+const E2E_TAG_IDS = [E2E_TAG_THOUGHTFUL_ID, E2E_TAG_RETIRED_ID];
 
 type PickerProduct = {
   id: string;
@@ -170,6 +182,52 @@ async function removePickerFixture(
   }
 }
 
+async function removeTaggingFixture(
+  supabase: SupabaseClient<Database>,
+): Promise<void> {
+  const { error: productLinkError } = await supabase
+    .from("product_tags")
+    .delete()
+    .in("tag_id", E2E_TAG_IDS);
+
+  if (productLinkError) {
+    throw new Error(
+      `Could not delete E2E product tags: ${productLinkError.message}`,
+    );
+  }
+
+  const { error: occasionLinkError } = await supabase
+    .from("occasion_tags")
+    .delete()
+    .in("tag_id", E2E_TAG_IDS);
+
+  if (occasionLinkError) {
+    throw new Error(
+      `Could not delete E2E occasion tags: ${occasionLinkError.message}`,
+    );
+  }
+
+  const { error: suggestionError } = await supabase
+    .from("tag_suggestions")
+    .delete()
+    .like("normalized_slug", "e2e-tag-%");
+
+  if (suggestionError) {
+    throw new Error(
+      `Could not delete E2E tag suggestions: ${suggestionError.message}`,
+    );
+  }
+
+  const { error: tagError } = await supabase
+    .from("tags")
+    .delete()
+    .like("slug", "e2e-tag-%");
+
+  if (tagError) {
+    throw new Error(`Could not delete E2E tags: ${tagError.message}`);
+  }
+}
+
 export async function cleanupE2EData(): Promise<void> {
   const supabase = getAdminClient();
 
@@ -198,6 +256,7 @@ export async function cleanupE2EData(): Promise<void> {
   }
 
   await removePickerFixture(supabase);
+  await removeTaggingFixture(supabase);
 
   const { data: users, error: usersError } =
     await supabase.auth.admin.listUsers({ page: 1, perPage: 1_000 });
@@ -318,7 +377,72 @@ export async function resetPickerFixture(): Promise<void> {
   }
 }
 
-export async function resetFixture(): Promise<{
+export async function resetTaggingFixture(): Promise<void> {
+  const supabase = getAdminClient();
+  await removeTaggingFixture(supabase);
+
+  const { error: tagError } = await supabase.from("tags").insert([
+    {
+      id: E2E_TAG_THOUGHTFUL_ID,
+      name: E2E_TAG_NAMES.thoughtful,
+      slug: "e2e-tag-thoughtful",
+      description: "Chosen with care for E2E matching.",
+      is_active: true,
+    },
+    {
+      id: E2E_TAG_RETIRED_ID,
+      name: E2E_TAG_NAMES.retired,
+      slug: "e2e-tag-retired",
+      description: "Inactive fixture tag.",
+      is_active: false,
+    },
+  ]);
+
+  if (tagError) {
+    throw new Error(`Could not create E2E tags: ${tagError.message}`);
+  }
+
+  const { error: linkError } = await supabase.from("product_tags").insert([
+    {
+      product_id: PICKER_PRODUCTS[0].id,
+      tag_id: E2E_TAG_THOUGHTFUL_ID,
+    },
+    {
+      product_id: PICKER_PRODUCTS[2].id,
+      tag_id: E2E_TAG_THOUGHTFUL_ID,
+    },
+  ]);
+
+  if (linkError) {
+    throw new Error(
+      `Could not create E2E product tag links: ${linkError.message}`,
+    );
+  }
+
+  const { error: suggestionError } = await supabase
+    .from("tag_suggestions")
+    .insert({
+      name: E2E_TAG_NAMES.suggestion,
+      vendor_id: PICKER_VENDOR_ACTIVE,
+      description: "Pending fixture suggestion for admin review.",
+    });
+
+  if (suggestionError) {
+    throw new Error(
+      `Could not create the E2E tag suggestion: ${suggestionError.message}`,
+    );
+  }
+}
+
+export async function resetFixture({
+  matchMode = "manual",
+  categoryIds = [],
+  tagIds = [],
+}: {
+  matchMode?: "manual" | "automatic" | "hybrid";
+  categoryIds?: string[];
+  tagIds?: string[];
+} = {}): Promise<{
   id: string;
   slug: string;
   name: string;
@@ -360,11 +484,45 @@ export async function resetFixture(): Promise<{
     image_alt: "A plain test image",
     is_active: false,
     sort_order: 999_999,
-    match_mode: "manual",
+    match_mode: matchMode,
   });
 
   if (insertError) {
     throw new Error(`Could not create the E2E fixture: ${insertError.message}`);
+  }
+
+  if (categoryIds.length > 0) {
+    const { error: categoryError } = await supabase
+      .from("occasion_categories")
+      .insert(
+        categoryIds.map((categoryId) => ({
+          occasion_id: FIXTURE_ID,
+          category_id: categoryId,
+        })),
+      );
+
+    if (categoryError) {
+      throw new Error(
+        `Could not attach E2E fixture categories: ${categoryError.message}`,
+      );
+    }
+  }
+
+  if (tagIds.length > 0) {
+    const { error: tagLinkError } = await supabase
+      .from("occasion_tags")
+      .insert(
+        tagIds.map((tagId) => ({
+          occasion_id: FIXTURE_ID,
+          tag_id: tagId,
+        })),
+      );
+
+    if (tagLinkError) {
+      throw new Error(
+        `Could not attach E2E fixture tags: ${tagLinkError.message}`,
+      );
+    }
   }
 
   const { error: uploadError } = await supabase.storage

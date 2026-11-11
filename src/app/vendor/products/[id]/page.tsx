@@ -6,6 +6,8 @@ import { requireVendorRole } from "@/lib/vendor";
 
 import { DeleteProductButton } from "../delete-product-button";
 import { ProductForm } from "../product-form";
+import { loadProductTagging } from "../tag-data";
+import { ProductTagPanel } from "../tag-panel";
 import { ProductImagesPanel } from "./images/product-images-panel";
 
 export const metadata = { title: "Edit product — Gifto" };
@@ -22,7 +24,7 @@ export default async function EditProductPage({
   const { supabase, access, canManage, isPlatformAdmin } =
     await requireVendorRole(vendor);
 
-  const [{ data: product }, { data: categories }] = await Promise.all([
+  const [{ data: product }, { data: categories }, tagging] = await Promise.all([
     supabase
       .from("products")
       .select(
@@ -37,9 +39,11 @@ export default async function EditProductPage({
       .eq("is_active", true)
       .order("position", { ascending: true })
       .order("name", { ascending: true }),
+    loadProductTagging(supabase, id, access.vendorId),
   ]);
 
   if (!product) notFound();
+  if (!tagging.ok) throw new Error(tagging.error);
 
   const images = [...(product.product_images ?? [])].sort(
     (a, b) => a.position - b.position,
@@ -94,6 +98,16 @@ export default async function EditProductPage({
           vendorId={access.vendorId}
         />
       </div>
+
+      <ProductTagPanel
+        productId={product.id}
+        vendorId={access.vendorId}
+        canManage={canManage}
+        tags={tagging.data.tags}
+        initialTagIds={tagging.data.selectedTagIds}
+        inactiveSelectionCount={tagging.data.inactiveSelectionCount}
+        suggestions={tagging.data.suggestions}
+      />
 
       {canManage && (access.role === "owner" || isPlatformAdmin) ? (
         <div className="mt-10 border-t border-line pt-6">

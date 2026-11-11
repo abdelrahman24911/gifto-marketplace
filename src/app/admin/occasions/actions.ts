@@ -765,6 +765,63 @@ export type OccasionProductsState = {
   success?: string;
 } | null;
 
+export type OccasionMatchingRulesState = {
+  attempt: number;
+  categoryIds?: string[];
+  tagIds?: string[];
+  error?: string;
+  success?: string;
+} | null;
+
+function readUuidList(
+  formData: FormData,
+  field: string,
+  label: string,
+): { ok: true; ids: string[] } | { ok: false; error: string } {
+  const ids: string[] = [];
+  const seen = new Set<string>();
+
+  for (const value of formData.getAll(field)) {
+    const id = String(value).trim();
+    if (!isUuid(id)) {
+      return {
+        ok: false,
+        error: `One or more selected ${label} are not valid.`,
+      };
+    }
+    if (seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+
+  return { ok: true, ids };
+}
+
+function matchingRulesErrorMessage(error: {
+  code?: string;
+  message?: string;
+} | null): string {
+  const message = error?.message ?? "";
+
+  if (
+    error?.code === "42501" ||
+    /platform administrator|permission/i.test(message)
+  ) {
+    return "You do not have permission to change this occasion.";
+  }
+  if (message.includes("active approved tags")) {
+    return "One or more selected tags are no longer active. Reload the page and choose again.";
+  }
+  if (message.includes("do not exist")) {
+    return "One or more selected categories or tags no longer exist. Reload the page and try again.";
+  }
+  if (message.includes("Occasion not found")) {
+    return "That occasion no longer exists.";
+  }
+
+  return "The matching rules could not be saved. Nothing was changed.";
+}
+
 function readProductIds(
   formData: FormData,
 ): { ok: true; ids: string[] } | { ok: false; error: string } {
@@ -867,5 +924,60 @@ export async function saveOccasionProducts(
       parsed.ids.length === 0
         ? "All manual product picks were removed."
         : `${parsed.ids.length} ${parsed.ids.length === 1 ? "product" : "products"} saved.`,
+  };
+}
+
+/** Atomically replaces category and tag matching rules for one occasion. */
+export async function saveOccasionMatchingRules(
+  previous: OccasionMatchingRulesState,
+  formData: FormData,
+): Promise<OccasionMatchingRulesState> {
+  const { supabase } = await requirePlatformAdmin();
+  const attempt = nextAttempt(previous);
+  const occasionId = String(formData.get("occasion_id") ?? "").trim();
+
+  if (!isUuid(occasionId)) {
+    return { attempt, error: "That occasion id is not valid." };
+  }
+
+  const categoryResult = readUuidList(
+    formData,
+    "category_ids",
+    "categories",
+  );
+  if (!categoryResult.ok) {
+    return { attempt, error: categoryResult.error };
+  }
+
+  const tagResult = readUuidList(formData, "tag_ids", "tags");
+  if (!tagResult.ok) {
+    return { attempt, error: tagResult.error };
+  }
+
+  const { error } = await supabase.rpc("replace_occasion_matching_rules", {
+    p_occasion_id: occasionId,
+    p_category_ids: categoryResult.ids,
+    p_tag_ids: tagResult.ids,
+  });
+
+  if (error) {
+    return { attempt, error: matchingRulesErrorMessage(error) };
+  }
+
+  revalidateOccasionSurfaces({ id: occasionId });
+
+  const categoryCount = categoryResult.ids.length;
+  const tagCount = tagResult.ids.length;
+
+  return {
+    attempt,
+    categoryIds: categoryResult.ids,
+    tagIds: tagResult.ids,
+    success:
+      categoryCount === 0 && tagCount === 0
+        ? "Matching rules cleared. Manual picks still follow the occasion's matching mode."
+        : `Matching rules saved: ${categoryCount} ${
+            categoryCount === 1 ? "category" : "categories"
+          } and ${tagCount} ${tagCount === 1 ? "tag" : "tags"}.`,
   };
 }

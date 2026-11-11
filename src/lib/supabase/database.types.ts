@@ -1141,7 +1141,7 @@ export type Database = {
         Insert: {
           id?: string;
           name: string;
-          normalized_slug: string;
+          normalized_slug?: string;
           description?: string | null;
           suggested_by?: string | null;
           vendor_id: string;
@@ -1339,6 +1339,14 @@ export type Database = {
       };
       replace_occasion_tags: {
         Args: { p_occasion_id: string; p_tag_ids: string[] };
+        Returns: undefined;
+      };
+      replace_occasion_matching_rules: {
+        Args: {
+          p_occasion_id: string;
+          p_category_ids: string[];
+          p_tag_ids: string[];
+        };
         Returns: undefined;
       };
       reorder_occasions: {

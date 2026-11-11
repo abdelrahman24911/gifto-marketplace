@@ -979,6 +979,14 @@ begin
   exception when insufficient_privilege then
     raise notice 'TEST 17B PASSED: vendor reorder RPC denied';
   end;
+
+  begin
+    perform public.replace_occasion_matching_rules(
+      'c1000000-0000-0000-0000-000000000001', '{}'::uuid[], '{}'::uuid[]);
+    raise exception 'TEST 17I FAILED: vendor changed matching rules';
+  exception when insufficient_privilege then
+    raise notice 'TEST 17I PASSED: vendor matching-rule RPC denied';
+  end;
 end $$;
 
 set request.jwt.claim.sub = 'a0000000-0000-0000-0000-000000000001';
@@ -1032,6 +1040,51 @@ begin
     where occasion_id = 'c1000000-0000-0000-0000-000000000002';
   if n <> 1 then raise exception 'TEST 17F FAILED: tag rows=%', n; end if;
   raise notice 'TEST 17D-F PASSED: category/tag rule replacement is deduped and validated';
+
+  perform public.replace_occasion_matching_rules(
+    'c1000000-0000-0000-0000-000000000002',
+    array[
+      'f1000000-0000-0000-0000-000000000001',
+      'f1000000-0000-0000-0000-000000000001'
+    ]::uuid[],
+    array[
+      'f2000000-0000-0000-0000-000000000001',
+      'f2000000-0000-0000-0000-000000000101',
+      'f2000000-0000-0000-0000-000000000001'
+    ]::uuid[]
+  );
+  select count(*) into n from public.occasion_categories
+    where occasion_id = 'c1000000-0000-0000-0000-000000000002';
+  if n <> 1 then
+    raise exception 'TEST 17H FAILED: combined category rows=%', n;
+  end if;
+  select count(*) into n from public.occasion_tags
+    where occasion_id = 'c1000000-0000-0000-0000-000000000002';
+  if n <> 2 then
+    raise exception 'TEST 17H FAILED: combined tag rows=%', n;
+  end if;
+
+  begin
+    perform public.replace_occasion_matching_rules(
+      'c1000000-0000-0000-0000-000000000002',
+      array['f1000000-0000-0000-0000-000000000002']::uuid[],
+      array['f2000000-0000-0000-0000-000000000003']::uuid[]
+    );
+    raise exception 'TEST 17H FAILED: combined RPC accepted an inactive tag';
+  exception when check_violation then
+    select count(*) into n from public.occasion_categories
+      where occasion_id = 'c1000000-0000-0000-0000-000000000002'
+        and category_id = 'f1000000-0000-0000-0000-000000000001';
+    if n <> 1 then
+      raise exception 'TEST 17H FAILED: failed combined call changed categories';
+    end if;
+    select count(*) into n from public.occasion_tags
+      where occasion_id = 'c1000000-0000-0000-0000-000000000002';
+    if n <> 2 then
+      raise exception 'TEST 17H FAILED: failed combined call changed tags';
+    end if;
+    raise notice 'TEST 17H PASSED: combined matching RPC is atomic and validated';
+  end;
 
   perform public.reorder_occasions(array[
     'c1000000-0000-0000-0000-000000000003',
