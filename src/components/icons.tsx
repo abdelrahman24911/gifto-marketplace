@@ -67,6 +67,32 @@ export function ArrowRightIcon(props: IconProps) {
   );
 }
 
+export function SparkleIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M12 3c.6 5.1 3.9 8.4 9 9-5.1.6-8.4 3.9-9 9-.6-5.1-3.9-8.4-9-9 5.1-.6 8.4-3.9 9-9Z" />
+    </svg>
+  );
+}
+
+export function HeartIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M20.8 5.8a5.2 5.2 0 0 0-7.4 0L12 7.2l-1.4-1.4a5.2 5.2 0 0 0-7.4 7.4L12 22l8.8-8.8a5.2 5.2 0 0 0 0-7.4Z" />
+    </svg>
+  );
+}
+
+export function GiftIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 12v9h16v-9" />
+      <path d="M3 7h18v5H3zM12 7v14" />
+      <path d="M12 7C9.8 7 7.2 6.2 7.2 4.5A2.5 2.5 0 0 1 12 4.4a2.5 2.5 0 0 1 4.8.1C16.8 6.2 14.2 7 12 7Z" />
+    </svg>
+  );
+}
+
 export function ChevronLeftIcon(props: IconProps) {
   return (
     <svg {...base} {...props}>

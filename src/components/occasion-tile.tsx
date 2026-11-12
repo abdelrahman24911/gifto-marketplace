@@ -1,40 +1,72 @@
 import Link from "next/link";
 
 import { ArrowRightIcon } from "@/components/icons";
+import { OccasionFallbackArt } from "@/components/occasion-artwork";
 import { ProductImage } from "@/components/product-image";
 import type { CatalogOccasion } from "@/lib/catalog";
 import { OCCASION_IMAGES_BUCKET } from "@/lib/supabase/database.types";
 
-export function OccasionTile({ occasion }: { occasion: CatalogOccasion }) {
+const TONES = [
+  "from-berry-soft/80 via-paper-soft to-paper",
+  "from-peach/90 via-paper-soft to-paper",
+  "from-gold-soft/55 via-paper-soft to-berry-soft/50",
+];
+
+export function OccasionTile({
+  occasion,
+  index = 0,
+}: {
+  occasion: CatalogOccasion;
+  index?: number;
+}) {
   return (
     <Link
       href={`/occasions/${occasion.slug}`}
-      className="group flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-paper-soft transition duration-300 hover:-translate-y-1 hover:border-berry/30 hover:shadow-[0_22px_50px_-30px_oklch(0.33_0.13_12/0.55)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
+      className={`group grid h-full min-h-[13rem] grid-cols-[42%_58%] overflow-hidden rounded-[1.75rem] border border-line/70 bg-gradient-to-br ${TONES[index % TONES.length]} shadow-[0_18px_45px_-36px_rgba(121,13,43,0.55)] transition duration-300 hover:-translate-y-1 hover:border-berry/25 hover:shadow-[0_28px_60px_-38px_rgba(121,13,43,0.55)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:min-h-[13.5rem] sm:grid-cols-[40%_60%] lg:min-h-[14rem]`}
     >
-      <div className="relative overflow-hidden">
+      <div className="relative min-h-full overflow-hidden">
         <ProductImage
           path={occasion.imagePath}
           alt={occasion.imageAlt ?? occasion.name}
           name={occasion.name}
           bucket={OCCASION_IMAGES_BUCKET}
-          className="aspect-[16/10] w-full transition duration-500 group-hover:scale-[1.03]"
+          className="h-full w-full object-cover transition duration-700 ease-out group-hover:scale-[1.035] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
           rounded="rounded-none"
-          sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+          sizes="(min-width: 1024px) 12vw, (min-width: 640px) 20vw, 38vw"
+          fallback={
+            <OccasionFallbackArt
+              initial={occasion.name.trim().charAt(0).toUpperCase() || "?"}
+              tone={index}
+            />
+          }
+        />
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-gradient-to-t from-berry-deep/10 via-transparent to-paper/15"
+        />
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-r from-transparent to-paper/25"
         />
       </div>
 
-      <div className="flex flex-1 items-start justify-between gap-3 p-5">
+      <div className="relative flex min-w-0 flex-col p-4 sm:p-5">
         <div className="min-w-0">
-          <p className="font-display text-2xl leading-tight text-ink">
+          <p className="line-clamp-2 min-h-[2.1em] break-words font-display text-[1.4rem] leading-[1.05] tracking-[-0.02em] text-ink sm:text-[1.5rem]">
             {occasion.name}
           </p>
           {occasion.description ? (
-            <p className="mt-1 line-clamp-2 text-sm text-ink-soft">
+            <p className="mt-2 line-clamp-2 text-[0.78rem] leading-[1.625] text-ink-soft sm:text-sm">
               {occasion.description}
             </p>
           ) : null}
         </div>
-        <ArrowRightIcon className="mt-1 h-5 w-5 shrink-0 text-berry transition-transform duration-300 group-hover:translate-x-1" />
+
+        <div className="mt-auto flex justify-end pt-4">
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-berry text-paper shadow-[0_12px_24px_-16px_rgba(121,13,43,0.8)] transition-colors duration-300 group-hover:bg-berry-deep sm:h-11 sm:w-11">
+            <ArrowRightIcon className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5 motion-reduce:transition-none" />
+          </span>
+        </div>
       </div>
     </Link>
   );

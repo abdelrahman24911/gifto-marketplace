@@ -1,8 +1,11 @@
 import Link from "next/link";
 
-import { OccasionTile } from "@/components/occasion-tile";
-import { Container, EmptyState, Eyebrow } from "@/components/ui/section";
+import { OccasionEmpty } from "@/components/occasion-empty";
+import { OccasionHero } from "@/components/occasion-hero";
+import { Container } from "@/components/ui/section";
 import { loadOccasions } from "@/lib/catalog";
+
+import { OccasionBrowser } from "./occasion-browser";
 
 export const metadata = {
   title: "Shop by occasion",
@@ -10,53 +13,51 @@ export const metadata = {
     "Browse gifts by the moment you're celebrating — birthdays, weddings, graduations and more.",
 };
 
+const primaryLinkClass =
+  "inline-flex min-h-11 items-center justify-center rounded-full bg-berry px-5 text-sm font-semibold text-paper transition-colors hover:bg-berry-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry";
+const secondaryLinkClass =
+  "inline-flex min-h-11 items-center justify-center rounded-full border border-line-strong bg-paper/80 px-5 text-sm font-semibold text-ink transition-colors hover:border-berry/35 hover:text-berry focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry";
+
 export default async function OccasionsPage() {
   const result = await loadOccasions();
 
   return (
     <div className="pb-8">
-      <section className="border-b border-line bg-paper-soft/60">
-        <Container className="py-12 sm:py-16">
-          <Eyebrow>Browse</Eyebrow>
-          <h1 className="mt-3 font-display text-4xl leading-tight text-ink sm:text-5xl">
-            Shop by occasion
-          </h1>
-          <p className="mt-4 max-w-2xl text-lg text-ink-soft">
-            Start with the moment you&apos;re celebrating. Each occasion is
-            curated by the Gifto team across every shop.
-          </p>
-        </Container>
-      </section>
+      <OccasionHero />
 
-      <Container className="pt-10">
+      <Container className="pt-8 sm:pt-10">
         {!result.ok ? (
-          <EmptyState title="We couldn't load occasions">
-            Something went wrong while loading occasions. Please try again in a
-            moment, or{" "}
-            <Link href="/shops" className="text-berry hover:underline">
-              browse shops instead
-            </Link>
-            .
-          </EmptyState>
+          <OccasionEmpty
+            title="We couldn't load occasions"
+            description="Something went wrong while loading the collection. Please try again in a moment, or browse the shops directly."
+            action={
+              <>
+                <Link href="/occasions" className={primaryLinkClass}>
+                  Try again
+                </Link>
+                <Link href="/shops" className={secondaryLinkClass}>
+                  Browse shops
+                </Link>
+              </>
+            }
+          />
         ) : result.data.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {result.data.map((occasion) => (
-              <OccasionTile key={occasion.id} occasion={occasion} />
-            ))}
-          </div>
+          <OccasionBrowser occasions={result.data} />
         ) : (
-          <EmptyState title="Occasions are on their way">
-            Gifto occasions are curated by the platform team and appear here as
-            soon as they&apos;re published. In the meantime you can{" "}
-            <Link href="/categories" className="text-berry hover:underline">
-              browse categories
-            </Link>{" "}
-            or{" "}
-            <Link href="/search" className="text-berry hover:underline">
-              search gifts
-            </Link>
-            .
-          </EmptyState>
+          <OccasionEmpty
+            title="Occasions are on their way"
+            description="Gifto occasions are curated by the platform team and appear here as soon as they're published. In the meantime, keep exploring another way."
+            action={
+              <>
+                <Link href="/categories" className={primaryLinkClass}>
+                  Browse categories
+                </Link>
+                <Link href="/search" className={secondaryLinkClass}>
+                  Search gifts
+                </Link>
+              </>
+            }
+          />
         )}
       </Container>
     </div>

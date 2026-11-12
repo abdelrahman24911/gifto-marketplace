@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { shouldOptimizeImages } from "@/lib/images";
 import { PRODUCT_IMAGES_BUCKET } from "@/lib/supabase/database.types";
@@ -26,6 +26,7 @@ export function ProductImage({
   sizes,
   preload = false,
   fit = "cover",
+  fallback,
 }: {
   path: string | null;
   alt: string;
@@ -40,6 +41,8 @@ export function ProductImage({
   preload?: boolean;
   /** `contain` keeps the whole image visible in the fullscreen preview. */
   fit?: "cover" | "contain";
+  /** Optional branded fallback for a missing or failed image. */
+  fallback?: ReactNode;
 }) {
   const [sourceIndex, setSourceIndex] = useState(0);
   const [failed, setFailed] = useState(false);
@@ -64,11 +67,15 @@ export function ProductImage({
         aria-hidden
         className={`relative flex items-center justify-center overflow-hidden bg-gradient-to-br from-berry-soft via-paper-deep to-gold-soft ${rounded} ${className}`}
       >
-        <span className="absolute -right-6 -top-6 h-20 w-20 rounded-full border border-berry-tint/70" />
-        <span className="absolute -bottom-8 -left-6 h-24 w-24 rounded-full border border-gold/40" />
-        <span className="relative font-display text-4xl font-medium text-berry-deep/75">
-          {name.trim().charAt(0).toUpperCase() || "?"}
-        </span>
+        {fallback ?? (
+          <>
+            <span className="absolute -right-6 -top-6 h-20 w-20 rounded-full border border-berry-tint/70" />
+            <span className="absolute -bottom-8 -left-6 h-24 w-24 rounded-full border border-gold/40" />
+            <span className="relative font-display text-4xl font-medium text-berry-deep/75">
+              {name.trim().charAt(0).toUpperCase() || "?"}
+            </span>
+          </>
+        )}
       </div>
     );
   }

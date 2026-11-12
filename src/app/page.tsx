@@ -192,12 +192,16 @@ export default async function HomePage() {
             title="Shop by occasion"
             description="From birthdays to weddings, start with the moment you're celebrating."
             href="/occasions"
-            linkLabel="All occasions"
+            linkLabel="Explore all occasions"
           />
           {occasions.length > 0 ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {occasions.slice(0, 6).map((occasion) => (
-                <OccasionTile key={occasion.id} occasion={occasion} />
+              {occasions.slice(0, 6).map((occasion, index) => (
+                <OccasionTile
+                  key={occasion.id}
+                  occasion={occasion}
+                  index={index}
+                />
               ))}
             </div>
           ) : (

@@ -56,3 +56,25 @@ export function CategoryGridSkeleton({ count = 6 }: { count?: number }) {
     </div>
   );
 }
+
+export function OccasionGridSkeleton({ count = 6 }: { count?: number }) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {Array.from({ length: count }).map((_, index) => (
+        <div
+          key={index}
+          className="grid min-h-[13rem] grid-cols-[42%_58%] overflow-hidden rounded-[1.75rem] border border-line/70 bg-paper-soft sm:min-h-[13.5rem] sm:grid-cols-[40%_60%] lg:min-h-[14rem]"
+        >
+          <Skeleton className="h-full min-h-[13rem] w-full rounded-none sm:min-h-[13.5rem] lg:min-h-[14rem]" />
+          <div className="flex min-w-0 flex-col p-4 sm:p-5">
+            <Skeleton className="h-6 w-4/5" />
+            <Skeleton className="mt-2 h-6 w-3/5" />
+            <Skeleton className="mt-3 h-3 w-full" />
+            <Skeleton className="mt-2 h-3 w-4/5" />
+            <Skeleton className="mt-auto ml-auto h-10 w-10 rounded-full" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}

@@ -26,6 +26,7 @@
 
   --color-gold: oklch(0.76 0.11 75);
   --color-gold-soft: oklch(0.91 0.05 80);
+  --color-peach: oklch(0.952 0.044 60);
 
   --color-line: oklch(0.9 0.012 80);
   --color-line-strong: oklch(0.84 0.016 78);

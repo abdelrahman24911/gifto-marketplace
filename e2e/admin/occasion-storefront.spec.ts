@@ -72,6 +72,28 @@ test("creates and publishes an active occasion on the listing, home and detail p
   await expect(page.getByText("No gifts here yet").first()).toBeVisible();
 });
 
+test("filters occasions instantly and recovers from an empty search", async ({
+  page,
+}) => {
+  await resetFixture({ isActive: true, sortOrder: 0 });
+  await page.goto("/occasions");
+
+  const search = page.getByRole("searchbox", { name: "Search occasions" });
+  await expect(search).toBeVisible();
+  await expect(page.locator(`a[href="${PUBLIC_PATH}"]`)).toBeVisible();
+
+  await search.fill(FIXTURE_NAME);
+  await expect(page.locator(`a[href="${PUBLIC_PATH}"]`)).toBeVisible();
+
+  await search.fill("zzzz-no-occasion");
+  await expect(page.getByText(/No occasions match/)).toBeVisible();
+  await expect(page.locator(`a[href="${PUBLIC_PATH}"]`)).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Clear search", exact: true }).click();
+  await expect(search).toHaveValue("");
+  await expect(page.locator(`a[href="${PUBLIC_PATH}"]`)).toBeVisible();
+});
+
 test("keeps a hidden occasion off the storefront", async ({ page }) => {
   await resetFixture({ isActive: false });
   await loginAsAdmin(page);
