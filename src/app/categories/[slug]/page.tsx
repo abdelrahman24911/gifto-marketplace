@@ -140,7 +140,7 @@ export default async function CategoryPage({ params }: Props) {
 
         {otherCategories.length > 0 ? (
           <section className="mt-14 border-t border-line pt-8">
-            <h2 className="font-display text-xl text-ink">Other occasions</h2>
+            <h2 className="font-display text-xl text-ink">Other categories</h2>
             <div className="mt-4 flex flex-wrap gap-2">
               {otherCategories.map((other) => (
                 <Link

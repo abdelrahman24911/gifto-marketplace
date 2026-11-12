@@ -11,17 +11,22 @@ type QueryRecord = {
 type QueryChain = {
   select(columns: string): QueryChain;
   eq(column: string, value: unknown): QueryChain;
+  in(column: string, values: readonly unknown[]): QueryChain;
   ilike(column: string, value: string): QueryChain;
   gte(column: string, value: unknown): QueryChain;
   lte(column: string, value: unknown): QueryChain;
   order(column: string, options: { ascending: boolean }): QueryChain;
   limit(value: number): QueryChain;
-  maybeSingle(): Promise<{ data: null; error: null }>;
-  returns(): Promise<{ data: never[]; error: null }>;
+  maybeSingle(): Promise<{ data: unknown; error: unknown }>;
+  returns(): Promise<{ data: unknown; error: unknown }>;
 };
+
+type FakeResult = { data: unknown; error: unknown };
 
 const db = vi.hoisted(() => ({
   queries: [] as QueryRecord[],
+  rpcCalls: [] as Array<{ name: string; args: unknown }>,
+  results: {} as Record<string, FakeResult>,
 }));
 
 function fakeClient() {
@@ -37,6 +42,10 @@ function fakeClient() {
         },
         eq(column, value) {
           record.filters.push(`eq:${column}=${String(value)}`);
+          return chain;
+        },
+        in(column, values) {
+          record.filters.push(`in:${column}=${values.map(String).join(",")}`);
           return chain;
         },
         ilike(column, value) {
@@ -59,11 +68,16 @@ function fakeClient() {
           record.limit = value;
           return chain;
         },
-        maybeSingle: async () => ({ data: null, error: null }),
-        returns: async () => ({ data: [], error: null }),
+        maybeSingle: async () =>
+          db.results[table] ?? { data: null, error: null },
+        returns: async () => db.results[table] ?? { data: [], error: null },
       };
 
       return chain;
+    },
+    async rpc(name: string, args: unknown) {
+      db.rpcCalls.push({ name, args });
+      return db.results.rpc ?? { data: [], error: null };
     },
   };
 }
@@ -86,12 +100,17 @@ vi.mock("next/cache", () => ({
 
 import {
   getNewArrivals,
+  loadOccasion,
+  loadOccasions,
   loadProductsByCategory,
+  loadProductsByOccasion,
   searchProducts,
 } from "./catalog";
 
 beforeEach(() => {
   db.queries.length = 0;
+  db.rpcCalls.length = 0;
+  for (const key of Object.keys(db.results)) delete db.results[key];
 });
 
 describe("public catalog queries", () => {
@@ -137,5 +156,163 @@ describe("public catalog queries", () => {
       "lte:price_minor=50000",
     ]);
     expect(query.limit).toBe(12);
+  });
+});
+
+describe("public occasion queries", () => {
+  it("lists published occasions in curated order without joining products", async () => {
+    db.results.occasions = {
+      data: [
+        {
+          id: "occasion-1",
+          name: "Graduation",
+          slug: "graduation",
+          description: "For the big day.",
+          image_path: "graduation/hero.png",
+          image_alt: "A graduation cap",
+        },
+      ],
+      error: null,
+    };
+
+    const result = await loadOccasions();
+
+    expect(result).toEqual({
+      ok: true,
+      data: [
+        {
+          id: "occasion-1",
+          name: "Graduation",
+          slug: "graduation",
+          description: "For the big day.",
+          imagePath: "graduation/hero.png",
+          imageAlt: "A graduation cap",
+        },
+      ],
+    });
+
+    const query = db.queries[0];
+    expect(query.table).toBe("occasions");
+    expect(query.select).toBe(
+      "id, name, slug, description, image_path, image_alt",
+    );
+    expect(query.filters).toEqual(["eq:is_active=true"]);
+    expect(query.orders).toEqual(["sort_order:asc", "created_at:asc"]);
+  });
+
+  it("resolves a published occasion by slug without checking redirects", async () => {
+    db.results.occasions = {
+      data: {
+        id: "occasion-1",
+        name: "Graduation",
+        slug: "graduation",
+        description: null,
+        image_path: null,
+        image_alt: null,
+      },
+      error: null,
+    };
+
+    const result = await loadOccasion("graduation");
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        occasion: {
+          id: "occasion-1",
+          name: "Graduation",
+          slug: "graduation",
+          description: null,
+          imagePath: null,
+          imageAlt: null,
+        },
+        redirectFrom: null,
+      },
+    });
+    expect(db.queries.map((query) => query.table)).toEqual(["occasions"]);
+    expect(db.queries[0].filters).toEqual([
+      "eq:slug=graduation",
+      "eq:is_active=true",
+    ]);
+  });
+
+  it("returns an empty collection without querying products when the RPC has no rows", async () => {
+    const result = await loadProductsByOccasion("occasion-1");
+
+    expect(result).toEqual({ ok: true, data: { items: [], total: 0 } });
+    expect(db.rpcCalls).toEqual([
+      {
+        name: "get_occasion_products",
+        args: { p_occasion_id: "occasion-1", p_limit: 60, p_offset: 0 },
+      },
+    ]);
+    expect(db.queries).toEqual([]);
+  });
+
+  it("fetches cards for ranked products and preserves the RPC order", async () => {
+    db.results.rpc = {
+      data: [
+        { id: "product-2", total_count: 2 },
+        { id: "product-1", total_count: 2 },
+      ],
+      error: null,
+    };
+    db.results.products = {
+      data: [
+        {
+          id: "product-1",
+          name: "Rose",
+          slug: "rose",
+          price_minor: 10_000,
+          stock: 1,
+          vendor_id: "vendor-1",
+          vendor: { name: "Shop", slug: "shop" },
+          category: null,
+          product_images: [],
+        },
+        {
+          id: "product-2",
+          name: "Hamper",
+          slug: "hamper",
+          price_minor: 20_000,
+          stock: 2,
+          vendor_id: "vendor-1",
+          vendor: { name: "Shop", slug: "shop" },
+          category: null,
+          product_images: [],
+        },
+      ],
+      error: null,
+    };
+
+    const result = await loadProductsByOccasion("occasion-1", 12);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.total).toBe(2);
+    expect(result.data.items.map((product) => product.id)).toEqual([
+      "product-2",
+      "product-1",
+    ]);
+
+    const query = db.queries[0];
+    expect(query.table).toBe("products");
+    expect(query.select).toContain("vendor:public_vendors!inner(");
+    expect(query.filters).toEqual([
+      "in:id=product-2,product-1",
+      "eq:status=active",
+    ]);
+  });
+
+  it("reports a failed product fetch instead of an empty occasion", async () => {
+    db.results.rpc = {
+      data: [{ id: "product-1", total_count: 1 }],
+      error: null,
+    };
+    db.results.products = { data: null, error: { message: "offline" } };
+
+    const result = await loadProductsByOccasion("occasion-1");
+
+    expect(result).toEqual({ ok: false });
   });
 });

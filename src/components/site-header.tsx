@@ -10,6 +10,7 @@ import { Container } from "@/components/ui/section";
 import { getRequestContext } from "@/lib/auth";
 
 const NAV = [
+  { href: "/occasions", label: "Occasions" },
   { href: "/categories", label: "Categories" },
   { href: "/shops", label: "Shops" },
 ];

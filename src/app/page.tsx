@@ -1,18 +1,18 @@
 import Link from "next/link";
 
-import { CategoryTile } from "@/components/category-tile";
 import {
   BanknoteIcon,
   ShieldIcon,
   TagIcon,
   TruckIcon,
 } from "@/components/icons";
+import { OccasionTile } from "@/components/occasion-tile";
 import { ProductCard } from "@/components/product-card";
 import { ShopCard } from "@/components/shop-card";
 import { Container, EmptyState, Eyebrow, SectionHeading } from "@/components/ui/section";
 import {
-  getCategories,
   getNewArrivals,
+  getOccasions,
   getProductsByBudget,
   getShops,
   type CatalogProduct,
@@ -97,8 +97,8 @@ function ProductRail({
 }
 
 export default async function HomePage() {
-  const [categories, arrivals, shops, ...budgetBands] = await Promise.all([
-    getCategories(),
+  const [occasions, arrivals, shops, ...budgetBands] = await Promise.all([
+    getOccasions(),
     getNewArrivals(8),
     getShops(6),
     ...BUDGET_BANDS.map((band) =>
@@ -136,7 +136,7 @@ export default async function HomePage() {
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
-                href="/categories"
+                href="/occasions"
                 className="inline-flex h-12 items-center rounded-full bg-berry px-6 text-sm font-semibold text-paper transition-colors hover:bg-berry-deep"
               >
                 Shop by occasion
@@ -191,22 +191,18 @@ export default async function HomePage() {
             eyebrow="Find the moment"
             title="Shop by occasion"
             description="From birthdays to weddings, start with the moment you're celebrating."
-            href="/categories"
-            linkLabel="All categories"
+            href="/occasions"
+            linkLabel="All occasions"
           />
-          {categories.length > 0 ? (
+          {occasions.length > 0 ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {categories.slice(0, 6).map((category, index) => (
-                <CategoryTile
-                  key={category.id}
-                  category={category}
-                  index={index}
-                />
+              {occasions.slice(0, 6).map((occasion) => (
+                <OccasionTile key={occasion.id} occasion={occasion} />
               ))}
             </div>
           ) : (
             <EmptyState title="Occasions are on their way">
-              Gifto categories appear here as soon as the platform team adds
+              Gifto occasions appear here as soon as the platform team publishes
               them.
             </EmptyState>
           )}

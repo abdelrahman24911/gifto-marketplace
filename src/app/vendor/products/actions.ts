@@ -153,6 +153,7 @@ export async function saveProduct(
     revalidatePath(`/vendor/products/${data.id}/inventory`);
     revalidatePath("/shops");
     revalidatePath("/categories");
+    revalidatePath("/occasions/[slug]", "page");
     revalidatePath(`/shops/${access.vendorSlug}`);
     revalidatePublicCatalog();
 
@@ -190,6 +191,7 @@ export async function saveProduct(
   revalidatePath("/vendor/products");
   revalidatePath("/shops");
   revalidatePath("/categories");
+  revalidatePath("/occasions/[slug]", "page");
   revalidatePath(`/shops/${access.vendorSlug}`);
   revalidatePublicCatalog();
 
@@ -244,6 +246,7 @@ export async function deleteProduct(
   revalidatePath("/vendor/products");
   revalidatePath("/shops");
   revalidatePath("/categories");
+  revalidatePath("/occasions/[slug]", "page");
   revalidatePath(`/shops/${access.vendorSlug}`);
   revalidatePublicCatalog();
 

@@ -115,6 +115,8 @@ function revalidateOccasionSurfaces({
   revalidatePath("/admin/occasions");
   if (id) revalidatePath(`/admin/occasions/${id}/edit`);
   revalidatePath("/");
+  revalidatePath("/occasions");
+  revalidatePath("/occasions/[slug]", "page");
   if (oldSlug) revalidatePath(`/occasions/${oldSlug}`);
   if (slug) revalidatePath(`/occasions/${slug}`);
   revalidatePublicCatalog([CATALOG_TAGS.occasions]);

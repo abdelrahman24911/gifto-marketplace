@@ -19,6 +19,8 @@ vi.mock("next/cache", () => ({
 
 vi.mock("server-only", () => ({}));
 
+import { revalidatePath, updateTag } from "next/cache";
+
 import {
   deleteOccasion,
   loadProductPickerPageAction,
@@ -354,6 +356,7 @@ const baseFields = {
 };
 
 beforeEach(() => {
+  vi.clearAllMocks();
   state.authRejected = false;
   state.supabase = makeClient();
 });
@@ -442,6 +445,9 @@ describe("saveOccasion create", () => {
       match_mode: "hybrid",
     });
     expect(client.uploads).toEqual([]);
+    expect(revalidatePath).toHaveBeenCalledWith("/occasions");
+    expect(revalidatePath).toHaveBeenCalledWith("/occasions/[slug]", "page");
+    expect(updateTag).toHaveBeenCalledWith("occasions");
   });
 
   it("creates first, uploads into the generated folder, then saves the path", async () => {

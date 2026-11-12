@@ -49,6 +49,7 @@ function revalidateVendorTagSurfaces(productId: string) {
   revalidatePath(`/vendor/products/${productId}`);
   revalidatePath("/admin/tags");
   revalidatePath("/admin/occasions", "layout");
+  revalidatePath("/occasions/[slug]", "page");
   revalidatePublicCatalog([CATALOG_TAGS.catalog, CATALOG_TAGS.occasions]);
 }
 

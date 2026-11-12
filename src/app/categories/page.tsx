@@ -5,7 +5,7 @@ import { Container, EmptyState, Eyebrow } from "@/components/ui/section";
 import { loadCategories } from "@/lib/catalog";
 
 export const metadata = {
-  title: "Shop by occasion",
+  title: "Shop by category",
   description:
     "Browse every gift category on Gifto and jump straight to the gifts you're after.",
 };
@@ -19,10 +19,10 @@ export default async function CategoriesPage() {
         <Container className="py-12 sm:py-16">
           <Eyebrow>Browse</Eyebrow>
           <h1 className="mt-3 font-display text-4xl leading-tight text-ink sm:text-5xl">
-            Shop by occasion
+            Shop by category
           </h1>
           <p className="mt-4 max-w-2xl text-lg text-ink-soft">
-            Categories are set by the Gifto team, so the same occasions work
+            Product categories are set by the Gifto team, so the same groups work
             across every shop you browse.
           </p>
         </Container>

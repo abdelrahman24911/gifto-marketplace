@@ -45,6 +45,25 @@ export type CatalogCategory = {
   description: string | null;
 };
 
+export type CatalogOccasion = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  imagePath: string | null;
+  imageAlt: string | null;
+};
+
+export type CatalogOccasionLookup = {
+  occasion: CatalogOccasion;
+  redirectFrom: string | null;
+};
+
+export type CatalogOccasionProducts = {
+  items: CatalogProduct[];
+  total: number;
+};
+
 export type CatalogShop = {
   id: string;
   name: string;
@@ -92,6 +111,26 @@ function toCatalogShop(row: ShopRow): CatalogShop {
   };
 }
 
+type OccasionRow = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  image_path: string | null;
+  image_alt: string | null;
+};
+
+function toCatalogOccasion(row: OccasionRow): CatalogOccasion {
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    description: row.description,
+    imagePath: row.image_path,
+    imageAlt: row.image_alt,
+  };
+}
+
 type ImageRow = { path: string; alt: string | null; position: number };
 
 type VendorRow = { name: string; slug: string };
@@ -110,6 +149,8 @@ type ProductRow = {
 
 const PRODUCT_SELECT =
   "id, name, slug, price_minor, stock, vendor_id, vendor:public_vendors!inner(name, slug), category:categories(name, slug), product_images(path, alt, position)";
+
+const OCCASION_SELECT = "id, name, slug, description, image_path, image_alt";
 
 function firstOrSelf<T>(value: T | T[] | null | undefined): T | null {
   if (Array.isArray(value)) return value[0] ?? null;
@@ -223,6 +264,149 @@ export async function getCategories(): Promise<CatalogCategory[]> {
   const result = await loadCategories();
   return result.ok ? result.data : [];
 }
+
+export const loadOccasions = cachedCatalogRead(
+  "occasions",
+  async (): Promise<CatalogRead<Load<CatalogOccasion[]>>> => {
+    const supabase = createPublicClient();
+    const { data, error } = await supabase
+      .from("occasions")
+      .select(OCCASION_SELECT)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true })
+      .returns<OccasionRow[]>();
+
+    if (error) return FAILED_LOAD;
+    return {
+      value: { ok: true, data: (data ?? []).map(toCatalogOccasion) },
+      cacheable: true,
+    };
+  },
+  [CATALOG_TAGS.occasions],
+);
+
+export async function getOccasions(): Promise<CatalogOccasion[]> {
+  const result = await loadOccasions();
+  return result.ok ? result.data : [];
+}
+
+const readOccasion = cachedCatalogRead(
+  "occasion",
+  async (
+    slug: string,
+  ): Promise<CatalogRead<Load<CatalogOccasionLookup | null>>> => {
+    const supabase = createPublicClient();
+    const { data, error } = await supabase
+      .from("occasions")
+      .select(OCCASION_SELECT)
+      .eq("slug", slug)
+      .eq("is_active", true)
+      .maybeSingle<OccasionRow>();
+
+    if (error) return FAILED_LOAD;
+    if (data) {
+      return {
+        value: {
+          ok: true,
+          data: { occasion: toCatalogOccasion(data), redirectFrom: null },
+        },
+        cacheable: true,
+      };
+    }
+
+    const { data: redirect, error: redirectError } = await supabase
+      .from("occasion_slug_redirects")
+      .select("occasion_id")
+      .eq("old_slug", slug)
+      .maybeSingle();
+
+    if (redirectError) return FAILED_LOAD;
+    if (!redirect) {
+      // Unknown slugs come straight from the URL; never store them.
+      return { value: { ok: true, data: null }, cacheable: false };
+    }
+
+    const { data: target, error: targetError } = await supabase
+      .from("occasions")
+      .select(OCCASION_SELECT)
+      .eq("id", redirect.occasion_id)
+      .eq("is_active", true)
+      .maybeSingle<OccasionRow>();
+
+    if (targetError) return FAILED_LOAD;
+    if (!target) {
+      return { value: { ok: true, data: null }, cacheable: false };
+    }
+
+    return {
+      value: {
+        ok: true,
+        data: { occasion: toCatalogOccasion(target), redirectFrom: slug },
+      },
+      cacheable: true,
+    };
+  },
+  [CATALOG_TAGS.occasions],
+);
+
+/** Also memoized per request so generateMetadata and the page share one lookup. */
+export const loadOccasion = cache(readOccasion);
+
+export const loadProductsByOccasion = cachedCatalogRead(
+  "products-by-occasion",
+  async (
+    occasionId: string,
+    limit: number = 60,
+  ): Promise<CatalogRead<Load<CatalogOccasionProducts>>> => {
+    const supabase = createPublicClient();
+    const { data: ranking, error } = await supabase.rpc(
+      "get_occasion_products",
+      {
+        p_occasion_id: occasionId,
+        p_limit: limit,
+        p_offset: 0,
+      },
+    );
+
+    if (error) return FAILED_LOAD;
+
+    const rows = ranking ?? [];
+    const ids = rows.map((row) => row.id);
+    if (ids.length === 0) {
+      return {
+        value: { ok: true, data: { items: [], total: 0 } },
+        cacheable: true,
+      };
+    }
+
+    const { data: products, error: productError } = await supabase
+      .from("products")
+      .select(PRODUCT_SELECT)
+      .in("id", ids)
+      .eq("status", "active")
+      .returns<ProductRow[]>();
+
+    if (productError) return FAILED_LOAD;
+
+    const productById = new Map(
+      toCatalogProducts(products ?? []).map((product) => [product.id, product]),
+    );
+    const items = ids.flatMap((id) => {
+      const product = productById.get(id);
+      return product ? [product] : [];
+    });
+
+    return {
+      value: {
+        ok: true,
+        data: { items, total: rows[0]?.total_count ?? items.length },
+      },
+      cacheable: true,
+    };
+  },
+  [CATALOG_TAGS.catalog, CATALOG_TAGS.occasions, CATALOG_TAGS.shops],
+);
 
 export const loadShops = cachedCatalogRead(
   "shops",

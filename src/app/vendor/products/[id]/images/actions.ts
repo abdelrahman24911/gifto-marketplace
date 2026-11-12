@@ -31,6 +31,7 @@ function revalidateProductPaths(vendorId: string, productId: string) {
   revalidatePath("/vendor/products");
   revalidatePath("/shops");
   revalidatePath("/categories");
+  revalidatePath("/occasions/[slug]", "page");
   revalidatePath("/search");
   revalidatePublicCatalog();
 }

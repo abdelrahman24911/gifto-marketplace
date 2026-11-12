@@ -50,6 +50,7 @@ function revalidateTagSurfaces() {
   revalidatePath("/admin/tags");
   revalidatePath("/admin/occasions", "layout");
   revalidatePath("/vendor/products", "layout");
+  revalidatePath("/occasions/[slug]", "page");
   revalidatePublicCatalog([CATALOG_TAGS.catalog, CATALOG_TAGS.occasions]);
 }
 

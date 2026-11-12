@@ -63,8 +63,8 @@ export function cachedCatalogRead<A extends unknown[], R>(
 
 /**
  * Drops cached storefront data so the next visit rebuilds it. Call from Server
- * Actions after a deliberate change to products, shops or categories (create,
- * edit, delete, publish, status change, manual stock adjustment).
+ * Actions after a deliberate change to products, shops, categories or occasions
+ * (create, edit, delete, publish, status change, manual stock adjustment).
  *
  * Do NOT call it per order: orders and cancellations only move stock labels,
  * the database enforces real stock at checkout, and invalidating on every order

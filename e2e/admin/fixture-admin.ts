@@ -438,10 +438,14 @@ export async function resetFixture({
   matchMode = "manual",
   categoryIds = [],
   tagIds = [],
+  isActive = false,
+  sortOrder = 999_999,
 }: {
   matchMode?: "manual" | "automatic" | "hybrid";
   categoryIds?: string[];
   tagIds?: string[];
+  isActive?: boolean;
+  sortOrder?: number;
 } = {}): Promise<{
   id: string;
   slug: string;
@@ -482,8 +486,8 @@ export async function resetFixture({
     slug: FIXTURE_SLUG,
     description: "Temporary occasion used by the local admin E2E lane.",
     image_alt: "A plain test image",
-    is_active: false,
-    sort_order: 999_999,
+    is_active: isActive,
+    sort_order: sortOrder,
     match_mode: matchMode,
   });
 
