@@ -1,3 +1,10 @@
+import {
+  businessDateFromKey,
+  businessDateKey,
+  startOfBusinessDayOffset,
+  startOfBusinessMonth,
+} from "@/lib/business-time";
+
 import type { OrderStatus } from "@/lib/supabase/database.types";
 
 /**
@@ -121,26 +128,14 @@ export function isAnalyticsRange(
   );
 }
 
-function startOfUtcDay(date: Date): Date {
-  return new Date(
-    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
-  );
+function dateFromKey(key: string): Date {
+  const parts = businessDateFromKey(key);
+  if (!parts) return new Date(Number.NaN);
+  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
 }
 
-function startOfUtcWeek(date: Date): Date {
-  const day = startOfUtcDay(date);
-  const daysSinceMonday = (day.getUTCDay() + 6) % 7;
-  return new Date(day.getTime() - daysSinceMonday * DAY_MS);
-}
-
-function startOfUtcMonth(date: Date): Date {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
-}
-
-function bucketStart(date: Date, granularity: AnalyticsGranularity): Date {
-  if (granularity === "day") return startOfUtcDay(date);
-  if (granularity === "week") return startOfUtcWeek(date);
-  return startOfUtcMonth(date);
+function keyFromDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
 }
 
 function granularityFor(range: AnalyticsRange): AnalyticsGranularity {
@@ -155,15 +150,24 @@ function parseDate(value: string | null | undefined): Date | null {
   return Number.isNaN(time) ? null : new Date(time);
 }
 
+function bucketStartKey(key: string, granularity: AnalyticsGranularity) {
+  if (granularity === "day") return key;
+  if (granularity === "month") return `${key.slice(0, 7)}-01`;
+
+  const date = dateFromKey(key);
+  const daysSinceMonday = (date.getUTCDay() + 6) % 7;
+  return keyFromDate(new Date(date.getTime() - daysSinceMonday * DAY_MS));
+}
+
 function bucketKey(date: Date, granularity: AnalyticsGranularity): string {
-  return bucketStart(date, granularity).toISOString().slice(0, 10);
+  return bucketStartKey(businessDateKey(date), granularity);
 }
 
 function bucketLabel(
   key: string,
   granularity: AnalyticsGranularity,
 ): string {
-  const date = new Date(`${key}T00:00:00.000Z`);
+  const date = dateFromKey(key);
   const month = MONTHS[date.getUTCMonth()];
   if (granularity === "month") return `${month} ${date.getUTCFullYear()}`;
   if (granularity === "week") return `Week of ${date.getUTCDate()} ${month}`;
@@ -180,24 +184,26 @@ export function analyticsWindowStart(
   now: Date = new Date(),
 ): Date | null {
   if (range === "all") return null;
-  return startOfUtcDay(
-    new Date(now.getTime() - (RANGE_DAYS[range] - 1) * DAY_MS),
-  );
+  return startOfBusinessDayOffset(now, RANGE_DAYS[range] - 1);
 }
 
 function generateBuckets(
   start: Date,
   end: Date,
   granularity: AnalyticsGranularity,
-): Date[] {
-  const buckets: Date[] = [];
-  let cursor = bucketStart(start, granularity);
-  const endKey = bucketStart(end, granularity).getTime();
+): string[] {
+  const buckets: string[] = [];
+  let cursor = dateFromKey(
+    bucketStartKey(businessDateKey(start), granularity),
+  );
+  const endTime = dateFromKey(
+    bucketStartKey(businessDateKey(end), granularity),
+  ).getTime();
 
-  // Defensive bound: a malformed date must never produce an infinite loop.
   for (let guard = 0; guard < 2_000; guard += 1) {
-    buckets.push(new Date(cursor));
-    if (cursor.getTime() >= endKey) break;
+    buckets.push(keyFromDate(cursor));
+    if (cursor.getTime() >= endTime) break;
+
     if (granularity === "day") {
       cursor = new Date(cursor.getTime() + DAY_MS);
     } else if (granularity === "week") {
@@ -248,7 +254,7 @@ export function computeVendorAnalytics(
   );
 
   const windowStart =
-    requestedStart ?? startOfUtcMonth(oldestCreated ?? now);
+    requestedStart ?? startOfBusinessMonth(oldestCreated ?? now);
 
   const rows = unique.filter(
     (row) => row.createdAt.getTime() >= windowStart.getTime(),
@@ -334,23 +340,17 @@ export function computeVendorAnalytics(
 
   const buckets = generateBuckets(windowStart, latestActivity, granularity);
 
-  const revenueSeries = buckets.map((bucket) => {
-    const key = bucket.toISOString().slice(0, 10);
-    return {
-      key,
-      label: bucketLabel(key, granularity),
-      value: revenueCounts.get(key) ?? 0,
-    };
-  });
+  const revenueSeries = buckets.map((key) => ({
+    key,
+    label: bucketLabel(key, granularity),
+    value: revenueCounts.get(key) ?? 0,
+  }));
 
-  const orderSeries = buckets.map((bucket) => {
-    const key = bucket.toISOString().slice(0, 10);
-    return {
-      key,
-      label: bucketLabel(key, granularity),
-      value: orderCounts.get(key) ?? 0,
-    };
-  });
+  const orderSeries = buckets.map((key) => ({
+    key,
+    label: bucketLabel(key, granularity),
+    value: orderCounts.get(key) ?? 0,
+  }));
 
   const bestSellers = Array.from(bestSellerMap.entries())
     .map(([key, value]) => ({

@@ -181,7 +181,7 @@ describe("computeVendorAnalytics", () => {
     expect(result.totalOrders).toBe(6);
     expect(result.grossSalesMinor).toBe(29_000);
     expect(result.revenueMinor).toBe(22_000);
-    expect(result.windowStart.slice(0, 10)).toBe("2026-09-01");
+    expect(result.windowStart).toBe("2026-08-31T21:00:00.000Z");
     expect(result.revenueSeries.map((point) => point.key)).toEqual([
       "2026-09-01",
       "2026-10-01",
@@ -256,9 +256,9 @@ describe("computeVendorAnalytics", () => {
 });
 
 describe("analyticsWindowStart", () => {
-  it("counts today as one of the seven days", () => {
+  it("counts today as one of the seven Cairo business days", () => {
     expect(analyticsWindowStart("7d", NOW)?.toISOString()).toBe(
-      "2026-10-31T00:00:00.000Z",
+      "2026-10-30T22:00:00.000Z",
     );
   });
 
