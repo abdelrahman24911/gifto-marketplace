@@ -5,7 +5,7 @@ import { useActionState } from "react";
 import { adjustStock, type AdjustStockState } from "./actions";
 
 const inputClass =
-  "rounded-md border border-line-strong px-3 py-2 text-sm text-ink focus:border-berry focus:outline-none focus:ring-1 focus:ring-berry";
+  "w-full rounded-xl border border-line-strong bg-paper px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-mute focus:border-berry focus:outline-none focus:ring-2 focus:ring-berry/20";
 const labelClass = "flex flex-col gap-1 text-sm font-medium text-ink-soft";
 
 export function AdjustStockForm({
@@ -32,7 +32,7 @@ export function AdjustStockForm({
       {state && "error" in state ? (
         <p
           role="alert"
-          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700"
         >
           {state.error}
         </p>
@@ -41,7 +41,7 @@ export function AdjustStockForm({
       {state && "success" in state ? (
         <p
           role="status"
-          className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
+          className="rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-800"
         >
           {state.success} New stock is {state.stock}.
         </p>
@@ -79,7 +79,7 @@ export function AdjustStockForm({
         <button
           type="submit"
           disabled={pending}
-          className="rounded-md bg-berry px-4 py-2 text-sm font-medium text-paper transition-colors hover:bg-berry-deep disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-full bg-berry px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-berry-deep disabled:cursor-not-allowed disabled:opacity-60"
         >
           {pending ? "Updating…" : "Update stock"}
         </button>

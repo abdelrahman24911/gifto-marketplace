@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { Breadcrumb, EmptyState } from "@/components/ui/section";
 import {
   coverageFromJson,
   formatCoverageList,
@@ -8,6 +7,7 @@ import {
 } from "@/lib/vendor-settings";
 import { requireVendorRole } from "@/lib/vendor";
 
+import { VendorNotice, VendorPageHeader } from "../ui";
 import { BrandingUpload } from "./branding-upload";
 import { PauseOrders } from "./pause-orders";
 import { StoreSettingsForm } from "./store-settings-form";
@@ -37,26 +37,23 @@ export default async function VendorSettingsPage({
   if (error || !shop) {
     return (
       <div className="w-full">
-        <Breadcrumb
-          items={[
-            {
-              href: `/vendor/overview?vendor=${access.vendorId}`,
-              label: "Shop dashboard",
-            },
-            { label: "Store settings" },
-          ]}
+        <VendorPageHeader
+          eyebrow="Shop identity"
+          title="Store settings"
+          description="The public details customers see about your shop."
         />
         <div className="mt-6">
-          <EmptyState title="Store settings couldn't load">
-            The shop profile didn&apos;t respond.{" "}
+          <VendorNotice tone="danger" role="alert">
+            Store settings couldn&apos;t load. The shop profile didn&apos;t
+            respond.{" "}
             <Link
               href={`/vendor/settings?vendor=${access.vendorId}`}
-              className="text-berry hover:underline"
+              className="font-medium text-berry hover:underline"
             >
               Try again
             </Link>
             .
-          </EmptyState>
+          </VendorNotice>
         </div>
       </div>
     );
@@ -67,27 +64,28 @@ export default async function VendorSettingsPage({
 
   return (
     <div className="w-full">
-      <Breadcrumb
-        items={[
-          {
-            href: `/vendor/overview?vendor=${access.vendorId}`,
-            label: "Shop dashboard",
-          },
-          { label: "Store settings" },
-        ]}
+      <VendorPageHeader
+        eyebrow="Shop identity"
+        title="Store settings"
+        description={
+          <>
+            The public details customers see about {shop.name}. Changes go live
+            on your shop page as soon as you save.
+          </>
+        }
+        actions={
+          <Link
+            href={`/shops/${shop.slug}`}
+            className="rounded-full border border-line-strong bg-paper px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-berry/40 hover:bg-berry-soft"
+          >
+            View public shop
+          </Link>
+        }
       />
 
-      <div className="mt-4">
-        <h1 className="font-display text-2xl text-ink">Store settings</h1>
-        <p className="mt-1 max-w-2xl text-sm text-ink-soft">
-          The public details customers see about {shop.name}. Changes go live on
-          your shop page as soon as you save.
-        </p>
-      </div>
-
-      <div className="mt-6 grid gap-3 sm:grid-cols-3">
+      <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className="rounded-xl border border-line bg-paper-soft px-4 py-3">
-          <p className="text-xs uppercase tracking-wide text-ink-mute">
+          <p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-ink-mute">
             Public URL
           </p>
           <Link
@@ -98,7 +96,7 @@ export default async function VendorSettingsPage({
           </Link>
         </div>
         <div className="rounded-xl border border-line bg-paper-soft px-4 py-3">
-          <p className="text-xs uppercase tracking-wide text-ink-mute">
+          <p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-ink-mute">
             Shop status
           </p>
           <p className="mt-1 flex items-center gap-2 text-sm font-medium text-ink">
@@ -108,7 +106,15 @@ export default async function VendorSettingsPage({
           </p>
         </div>
         <div className="rounded-xl border border-line bg-paper-soft px-4 py-3">
-          <p className="text-xs uppercase tracking-wide text-ink-mute">
+          <p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-ink-mute">
+            Order intake
+          </p>
+          <p className="mt-1 text-sm font-medium text-ink">
+            {shop.is_accepting_orders ? "Accepting orders" : "Paused"}
+          </p>
+        </div>
+        <div className="rounded-xl border border-line bg-paper-soft px-4 py-3">
+          <p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-ink-mute">
             Your role
           </p>
           <p className="mt-1 text-sm font-medium capitalize text-ink">

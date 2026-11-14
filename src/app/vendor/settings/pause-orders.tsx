@@ -5,7 +5,7 @@ import { useActionState } from "react";
 import { setVendorAcceptingOrders, type PauseActionState } from "./actions";
 
 const buttonClass =
-  "rounded-md bg-berry px-4 py-2 text-sm font-medium text-paper transition-colors hover:bg-berry-deep disabled:cursor-not-allowed disabled:opacity-60";
+  "rounded-full bg-berry px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-berry-deep disabled:cursor-not-allowed disabled:opacity-60";
 
 export function PauseOrders({
   vendorId,
@@ -62,7 +62,7 @@ export function PauseOrders({
             disabled={pending}
             className={
               accepting
-                ? "rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                ? "rounded-full border border-warning/30 bg-warning-soft px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
                 : buttonClass
             }
           >

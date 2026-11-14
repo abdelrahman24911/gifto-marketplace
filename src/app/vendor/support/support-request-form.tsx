@@ -7,7 +7,7 @@ import { SUPPORT_CATEGORIES } from "@/lib/support-requests";
 import { createSupportRequest, type SupportRequestState } from "./actions";
 
 const fieldClass =
-  "mt-1 w-full rounded-md border border-line-strong bg-paper px-3 py-2 text-sm text-ink outline-none transition focus:border-berry focus:ring-2 focus:ring-berry/20";
+  "mt-1 w-full rounded-xl border border-line-strong bg-paper px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-berry focus:ring-2 focus:ring-berry/20";
 
 export function SupportRequestForm({ vendorId }: { vendorId: string }) {
   const [state, submit, pending] = useActionState<
@@ -76,18 +76,24 @@ export function SupportRequestForm({ vendorId }: { vendorId: string }) {
       <button
         type="submit"
         disabled={pending}
-        className="mt-4 w-full rounded-md bg-berry px-4 py-2 text-sm font-medium text-paper transition-colors hover:bg-berry-deep disabled:cursor-not-allowed disabled:opacity-60"
+        className="mt-4 w-full rounded-full bg-berry px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-berry-deep disabled:cursor-not-allowed disabled:opacity-60"
       >
         {pending ? "Sending…" : "Send support request"}
       </button>
 
       {state && "error" in state ? (
-        <p role="alert" className="mt-3 text-sm text-red-700">
+        <p
+          role="alert"
+          className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700"
+        >
           {state.error}
         </p>
       ) : null}
       {state && "success" in state ? (
-        <p role="status" className="mt-3 text-sm text-emerald-700">
+        <p
+          role="status"
+          className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-800"
+        >
           {state.success}
         </p>
       ) : null}

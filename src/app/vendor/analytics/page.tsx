@@ -1,7 +1,7 @@
 import Link from "next/link";
 
-import { BarChart } from "@/app/vendor/analytics/bar-chart";
-import { Breadcrumb, EmptyState } from "@/components/ui/section";
+import { BarChart } from "@/components/bar-chart";
+import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { formatEgp } from "@/lib/money";
 import {
@@ -21,6 +21,13 @@ import {
 } from "@/lib/vendor-analytics";
 import { requireVendorRole } from "@/lib/vendor";
 
+import {
+  VendorEmpty,
+  VendorFilterPill,
+  VendorPageHeader,
+  VendorStatStrip,
+} from "../ui";
+
 export const metadata = { title: "Analytics — Gifto" };
 
 const LOW_STOCK_THRESHOLD = 5;
@@ -37,7 +44,7 @@ function formatDate(iso: string): string {
     day: "numeric",
     month: "short",
     year: "numeric",
-    timeZone: "UTC",
+    timeZone: BUSINESS_TIME_ZONE,
   });
 }
 
@@ -148,48 +155,39 @@ export default async function VendorAnalyticsPage({
 
   return (
     <div className="w-full">
-      <Breadcrumb
-        items={[
-          {
-            href: `/vendor/overview?vendor=${access.vendorId}`,
-            label: "Shop dashboard",
-          },
-          { label: "Analytics" },
-        ]}
-      />
-
-      <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl text-ink">Analytics</h1>
-          <p className="mt-1 max-w-2xl text-sm text-ink-soft">
+      <VendorPageHeader
+        eyebrow="Performance"
+        title="Analytics"
+        description={
+          <>
             Sales performance for {access.vendorName}. Revenue counts delivered
             shop lines only, matching the finance ledger.
-          </p>
-        </div>
+          </>
+        }
+        actions={
+          <Link
+            href={`/vendor/finance?vendor=${access.vendorId}`}
+            className="rounded-full border border-line-strong bg-paper px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-berry/40 hover:bg-berry-soft"
+          >
+            Commission ledger
+          </Link>
+        }
+      />
 
-        <nav
-          aria-label="Analytics date range"
-          className="flex flex-wrap gap-1 rounded-full border border-line bg-paper-soft p-1"
-        >
-          {ANALYTICS_RANGES.map((option) => {
-            const active = option.value === range;
-            return (
-              <Link
-                key={option.value}
-                href={`/vendor/analytics?vendor=${access.vendorId}&range=${option.value}`}
-                aria-current={active ? "page" : undefined}
-                className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-berry/40 ${
-                  active
-                    ? "bg-berry text-paper"
-                    : "text-ink-soft hover:bg-berry-soft hover:text-berry-deep"
-                }`}
-              >
-                {option.label}
-              </Link>
-            );
-          })}
-        </nav>
-      </div>
+      <nav
+        aria-label="Analytics date range"
+        className="mt-5 flex flex-wrap gap-2"
+      >
+        {ANALYTICS_RANGES.map((option) => (
+          <VendorFilterPill
+            key={option.value}
+            href={`/vendor/analytics?vendor=${access.vendorId}&range=${option.value}`}
+            active={option.value === range}
+          >
+            {option.label}
+          </VendorFilterPill>
+        ))}
+      </nav>
 
       <p className="mt-3 text-xs text-ink-mute">
         {formatDate(analytics.windowStart)} – {formatDate(analytics.windowEnd)}
@@ -237,37 +235,44 @@ export default async function VendorAnalyticsPage({
         </div>
       ) : (
         <>
-          <dl className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Metric
-              label="Recognised revenue"
-              value={formatEgp(analytics.revenueMinor)}
-              hint="Delivered shop lines"
-              tone="revenue"
+          <div className="mt-6">
+            <VendorStatStrip
+              items={[
+                {
+                  label: "Recognised revenue",
+                  value: formatEgp(analytics.revenueMinor),
+                  hint: "Delivered shop lines",
+                  emphasis: "positive",
+                },
+                {
+                  label: "Shop lines placed",
+                  value: analytics.totalOrders.toLocaleString("en-GB"),
+                  hint:
+                    analytics.totalOrders === 1
+                      ? "1 order line"
+                      : "order lines",
+                },
+                {
+                  label: "Delivered",
+                  value: analytics.completedOrders.toLocaleString("en-GB"),
+                  hint: `${analytics.openOrders} still open`,
+                },
+                {
+                  label: "Average order value",
+                  value: formatEgp(analytics.averageOrderValueMinor),
+                  hint: "Delivered lines only",
+                },
+              ]}
             />
-            <Metric
-              label="Shop lines placed"
-              value={String(analytics.totalOrders)}
-              hint={
-                analytics.totalOrders === 1 ? "1 order line" : "order lines"
-              }
-            />
-            <Metric
-              label="Delivered"
-              value={String(analytics.completedOrders)}
-              hint={`${analytics.openOrders} still open`}
-            />
-            <Metric
-              label="Average order value"
-              value={formatEgp(analytics.averageOrderValueMinor)}
-              hint="Delivered lines only"
-            />
-          </dl>
+          </div>
 
           {analytics.totalOrders === 0 ? (
-            <EmptyState title="No shop lines in this period">
-              Nothing was placed in the selected window. Try a longer range to
-              see earlier activity.
-            </EmptyState>
+            <div className="mt-6">
+              <VendorEmpty title="No shop lines in this period">
+                Nothing was placed in the selected window. Try a longer range
+                to see earlier activity.
+              </VendorEmpty>
+            </div>
           ) : null}
 
           <section

@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { Breadcrumb } from "@/components/ui/section";
+import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
 import { SUPPORT_FAQS } from "@/lib/support-content";
 import {
   SUPPORT_STATUS_LABELS,
@@ -8,6 +8,7 @@ import {
 } from "@/lib/support-requests";
 import { requireVendorRole } from "@/lib/vendor";
 
+import { VendorPageHeader } from "../ui";
 import { SupportFaqSearch } from "./support-faq";
 import { SupportRequestForm } from "./support-request-form";
 
@@ -71,23 +72,16 @@ export default async function VendorSupportPage({
 
   return (
     <div className="w-full">
-      <Breadcrumb
-        items={[
-          {
-            href: `/vendor/overview?vendor=${access.vendorId}`,
-            label: "Shop dashboard",
-          },
-          { label: "Help & support" },
-        ]}
+      <VendorPageHeader
+        eyebrow="Help centre"
+        title="Help & support"
+        description={
+          <>
+            Answers for running {access.vendorName} on Gifto. Every guide below
+            describes what this dashboard actually does.
+          </>
+        }
       />
-
-      <div className="mt-4">
-        <h1 className="font-display text-2xl text-ink">Help &amp; support</h1>
-        <p className="mt-1 max-w-2xl text-sm text-ink-soft">
-          Answers for running {access.vendorName} on Gifto. Every guide below
-          describes what this dashboard actually does.
-        </p>
-      </div>
 
       <nav
         aria-label="Help topics"
@@ -174,7 +168,15 @@ export default async function VendorSupportPage({
                     </div>
                     <p className="mt-1 text-xs text-ink-mute">
                       {supportCategoryLabel(request.category)} ·{" "}
-                      {new Date(request.created_at).toLocaleDateString()}
+                      {new Date(request.created_at).toLocaleDateString(
+                        "en-GB",
+                        {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                          timeZone: BUSINESS_TIME_ZONE,
+                        },
+                      )}
                     </p>
                   </li>
                 ))}

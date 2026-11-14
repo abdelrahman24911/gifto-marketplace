@@ -15,7 +15,7 @@ import {
 } from "./actions";
 
 const inputClass =
-  "w-full rounded-md border border-line-strong bg-paper px-3 py-2 text-sm text-ink placeholder:text-ink-mute focus:border-berry focus:outline-none focus:ring-1 focus:ring-berry disabled:cursor-not-allowed disabled:bg-paper-deep/60 disabled:text-ink-mute";
+  "w-full rounded-xl border border-line-strong bg-paper px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-mute focus:border-berry focus:outline-none focus:ring-2 focus:ring-berry/20 disabled:cursor-not-allowed disabled:bg-paper-deep/60 disabled:text-ink-mute";
 const labelClass = "flex flex-col gap-1 text-sm font-medium text-ink-soft";
 
 export function StoreSettingsForm({
@@ -46,7 +46,7 @@ export function StoreSettingsForm({
       {state && "error" in state ? (
         <p
           role="alert"
-          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700"
         >
           {state.error}
         </p>
@@ -54,7 +54,7 @@ export function StoreSettingsForm({
       {state && "success" in state ? (
         <p
           role="status"
-          className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
+          className="rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-800"
         >
           {state.success}
         </p>
@@ -302,19 +302,19 @@ export function StoreSettingsForm({
           <button
             type="submit"
             disabled={pending}
-            className="rounded-md bg-berry px-4 py-2 text-sm font-medium text-paper transition-colors hover:bg-berry-deep disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-full bg-berry px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-berry-deep disabled:cursor-not-allowed disabled:opacity-60"
           >
             {pending ? "Saving…" : "Save settings"}
           </button>
           <Link
             href={`/shops/${vendorSlug}`}
-            className="rounded-md border border-line-strong bg-paper-soft px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-paper-deep"
+            className="rounded-full border border-line-strong bg-paper-soft px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-paper-deep"
           >
             View public shop
           </Link>
         </div>
       ) : (
-        <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <p className="rounded-xl border border-warning/30 bg-warning-soft px-4 py-3 text-sm text-ink">
           You are a staff member of this shop. Only the owner can edit the store
           profile.
         </p>

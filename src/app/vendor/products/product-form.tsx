@@ -14,7 +14,7 @@ import type { ProductStatus } from "@/lib/supabase/database.types";
 type Category = { id: string; name: string };
 
 const inputClass =
-  "w-full rounded-md border border-line-strong px-3 py-2 text-sm text-ink placeholder:text-ink-mute focus:border-berry focus:outline-none focus:ring-1 focus:ring-berry";
+  "w-full rounded-xl border border-line-strong bg-paper px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-mute focus:border-berry focus:outline-none focus:ring-2 focus:ring-berry/20";
 const labelClass = "flex flex-col gap-1 text-sm font-medium text-ink-soft";
 
 const STATUS_HELP: Record<ProductStatus, string> = {
@@ -56,13 +56,13 @@ export function ProductForm({
         <div className="flex flex-wrap gap-3">
           <Link
             href={`/vendor/products/${state.productId}?vendor=${vendorId}`}
-            className="rounded-md bg-berry px-4 py-2 text-sm font-medium text-paper transition-colors hover:bg-berry-deep"
+            className="rounded-full bg-berry px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-berry-deep"
           >
             Edit product
           </Link>
           <Link
             href={`/vendor/products?vendor=${vendorId}`}
-            className="rounded-md border border-line-strong bg-paper-soft px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-paper-deep"
+            className="rounded-full border border-line-strong bg-paper-soft px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-paper-deep"
           >
             Back to products
           </Link>
@@ -81,7 +81,7 @@ export function ProductForm({
       {state && "error" in state ? (
         <p
           role="alert"
-          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700"
         >
           {state.error}
         </p>
@@ -198,13 +198,13 @@ export function ProductForm({
         <button
           type="submit"
           disabled={pending}
-          className="rounded-md bg-berry px-4 py-2 text-sm font-medium text-paper transition-colors hover:bg-berry-deep disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-full bg-berry px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-berry-deep disabled:cursor-not-allowed disabled:opacity-60"
         >
           {pending ? "Saving…" : "Save product"}
         </button>
         <Link
           href={`/vendor/products?vendor=${vendorId}`}
-          className="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-paper-deep"
+          className="rounded-full border border-line-strong px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-paper-deep"
         >
           Cancel
         </Link>

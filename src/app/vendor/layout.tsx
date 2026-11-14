@@ -7,10 +7,14 @@ export default async function VendorLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { shops, isPlatformAdmin } = await requireVendorRole();
+  const { shops, isPlatformAdmin, user } = await requireVendorRole();
 
   return (
-    <VendorShell shops={shops} isPlatformAdmin={isPlatformAdmin}>
+    <VendorShell
+      shops={shops}
+      isPlatformAdmin={isPlatformAdmin}
+      email={user.email}
+    >
       {children}
     </VendorShell>
   );

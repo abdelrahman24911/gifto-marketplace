@@ -17,7 +17,7 @@ import {
 } from "./actions";
 
 const buttonClass =
-  "rounded-md bg-berry px-4 py-2 text-sm font-medium text-paper transition-colors hover:bg-berry-deep disabled:cursor-not-allowed disabled:opacity-60";
+  "rounded-full bg-berry px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-berry-deep disabled:cursor-not-allowed disabled:opacity-60";
 
 const BRANDING = {
   logo: {
@@ -114,7 +114,7 @@ export function BrandingUpload({
           {uploadState && "error" in uploadState ? (
             <p
               role="alert"
-              className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+              className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700"
             >
               {uploadState.error}
             </p>
@@ -122,7 +122,7 @@ export function BrandingUpload({
           {uploadState && "success" in uploadState ? (
             <p
               role="status"
-              className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
+              className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-800"
             >
               {uploadState.success}
             </p>
@@ -130,7 +130,7 @@ export function BrandingUpload({
           {removeState && "error" in removeState ? (
             <p
               role="alert"
-              className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+              className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700"
             >
               {removeState.error}
             </p>
@@ -138,7 +138,7 @@ export function BrandingUpload({
           {removeState && "success" in removeState ? (
             <p
               role="status"
-              className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
+              className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-800"
             >
               {removeState.success}
             </p>
@@ -157,7 +157,7 @@ export function BrandingUpload({
                 name={spec.field}
                 accept="image/jpeg,image/png,image/webp,image/avif"
                 required
-                className="block w-full text-sm text-ink-soft file:mr-3 file:rounded-md file:border file:border-line-strong file:bg-paper file:px-3 file:py-2 file:text-sm file:font-medium file:text-ink hover:file:bg-paper-deep"
+                className="block w-full text-sm text-ink-soft file:mr-3 file:rounded-full file:border file:border-line-strong file:bg-paper file:px-3 file:py-2 file:text-sm file:font-medium file:text-ink hover:file:bg-paper-deep"
               />
             </label>
             <div>
