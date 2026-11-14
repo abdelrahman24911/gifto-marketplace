@@ -95,7 +95,7 @@ test("breadcrumb navigation is guarded only after a real change", async ({
   await expect(page).toHaveURL(/\/admin\/occasions$/);
 });
 
-test("header and footer links prompt before leaving", async ({ page }) => {
+test("dashboard navigation prompts before leaving", async ({ page }) => {
   await openFixture(page);
 
   const description = page.locator('textarea[name="description"]');
@@ -103,9 +103,12 @@ test("header and footer links prompt before leaving", async ({ page }) => {
   await description.fill(changedDescription);
   await waitForDirtyGuard(page);
 
-  await page
-    .getByRole("banner")
-    .getByRole("link", { name: "Categories", exact: true })
+  const dashboardNav = page.getByRole("navigation", {
+    name: "Admin dashboard",
+  });
+
+  await dashboardNav
+    .getByRole("link", { name: "Orders", exact: true })
     .click();
   await expect(leaveDialog(page)).toBeVisible();
   await leaveDialog(page).getByRole("button", { name: "Keep editing" }).click();
@@ -113,42 +116,33 @@ test("header and footer links prompt before leaving", async ({ page }) => {
   await expect(page).toHaveURL(new RegExp(`${EDIT_PATH}$`));
   await expect(description).toHaveValue(changedDescription);
 
-  await page
-    .getByRole("contentinfo")
-    .getByRole("link", { name: "Search gifts", exact: true })
-    .click();
+  await dashboardNav.getByRole("link", { name: "Tags", exact: true }).click();
   await expect(leaveDialog(page)).toBeVisible();
   await leaveDialog(page)
     .getByRole("button", { name: "Discard changes" })
     .click();
 
-  await expect(page).toHaveURL(/\/search$/);
+  await expect(page).toHaveURL(/\/admin\/tags$/);
 });
 
-test("search submission respects the guard", async ({ page }) => {
+test("dashboard storefront link respects the guard", async ({ page }) => {
   await openFixture(page);
-  await page.locator('input[name="name"]').fill(`${FIXTURE_NAME} search`);
+  await page.locator('input[name="name"]').fill(`${FIXTURE_NAME} storefront`);
   await waitForDirtyGuard(page);
 
-  const search = page
-    .getByRole("banner")
-    .getByRole("search")
-    .getByRole("searchbox");
-  await search.fill("gift");
-  await search.press("Enter");
-
+  await page.getByRole("link", { name: "View storefront" }).click();
   await expect(leaveDialog(page)).toBeVisible();
   await leaveDialog(page).getByRole("button", { name: "Keep editing" }).click();
   await expect(leaveDialog(page)).toHaveCount(0);
   await expect(page).toHaveURL(new RegExp(`${EDIT_PATH}$`));
 
-  await search.press("Enter");
+  await page.getByRole("link", { name: "View storefront" }).click();
   await expect(leaveDialog(page)).toBeVisible();
   await leaveDialog(page)
     .getByRole("button", { name: "Discard changes" })
     .click();
 
-  await expect(page).toHaveURL(/\/search\?q=gift$/);
+  await expect(page).toHaveURL(/\/$/);
 });
 
 test("browser Back is guarded and discards only after confirmation", async ({
@@ -247,6 +241,35 @@ test("selecting a new image makes the form dirty until cleared", async ({
   await page.getByRole("link", { name: "Cancel", exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/occasions$/);
   await expect(leaveDialog(page)).toHaveCount(0);
+});
+
+test("admin nav reaches each management surface", async ({ page }) => {
+  await page.goto("/admin");
+  const dashboardNav = page.getByRole("navigation", {
+    name: "Admin dashboard",
+  });
+
+  const destinations = [
+    { link: "Shops", heading: "Shops" },
+    { link: "Categories", heading: "Categories" },
+    { link: "Products", heading: "Products" },
+    { link: "Commissions", heading: "Commissions" },
+    { link: "Analytics", heading: "Analytics" },
+    { link: "Overview", heading: "Overview" },
+  ] as const;
+
+  for (const destination of destinations) {
+    await dashboardNav
+      .getByRole("link", { name: destination.link, exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", {
+        level: 1,
+        name: destination.heading,
+        exact: true,
+      }),
+    ).toBeVisible();
+  }
 });
 
 test("image removal is immediate and does not dirty the form", async ({
