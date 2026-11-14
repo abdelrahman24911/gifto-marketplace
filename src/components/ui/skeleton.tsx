@@ -1,6 +1,16 @@
-export function Skeleton({ className = "" }: { className?: string }) {
+export function Skeleton({
+  className = "",
+  tone = "default",
+}: {
+  className?: string;
+  tone?: "default" | "light";
+}) {
   return (
-    <div className={`animate-pulse rounded-xl bg-line/60 ${className}`} />
+    <div
+      className={`animate-pulse rounded-xl ${
+        tone === "light" ? "bg-paper/20" : "bg-line/60"
+      } ${className}`}
+    />
   );
 }
 

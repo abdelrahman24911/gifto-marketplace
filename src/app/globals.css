@@ -30,6 +30,24 @@
 
   --color-line: oklch(0.9 0.012 80);
   --color-line-strong: oklch(0.84 0.016 78);
+
+  /*
+   * Dashboard layer. Kept additive so the storefront palette above remains the
+   * source of truth for the public shop. The sidebar uses the deeper wine tone;
+   * rose is reserved for secondary highlights, and status colours stay muted.
+   */
+  --color-canvas: oklch(0.975 0.008 82);
+  --color-wine: oklch(0.32 0.105 18);
+  --color-wine-deep: oklch(0.25 0.085 18);
+  --color-wine-soft: oklch(0.93 0.035 18);
+  --color-rose: oklch(0.7 0.13 8);
+  --color-rose-soft: oklch(0.955 0.03 10);
+  --color-success: oklch(0.52 0.09 155);
+  --color-success-soft: oklch(0.95 0.035 155);
+  --color-warning: oklch(0.66 0.12 70);
+  --color-warning-soft: oklch(0.96 0.035 80);
+  --color-danger: oklch(0.55 0.16 25);
+  --color-danger-soft: oklch(0.95 0.03 20);
 }
 
 :root {
