@@ -36,7 +36,7 @@ export function SupportStatusForm({
         id={`support-status-${id}`}
         name="status"
         defaultValue={status}
-        className="rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-xs text-zinc-900"
+        className="rounded-full border border-line-strong bg-paper px-3 py-1.5 text-xs text-ink focus:border-berry focus:outline-none focus:ring-2 focus:ring-berry/15"
       >
         {SUPPORT_STATUSES.map((value) => (
           <option key={value} value={value}>
@@ -47,17 +47,17 @@ export function SupportStatusForm({
       <button
         type="submit"
         disabled={pending}
-        className="rounded-md border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-900 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+        className="rounded-full border border-line-strong bg-paper-soft px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:border-berry/40 hover:bg-berry-soft disabled:cursor-not-allowed disabled:opacity-60"
       >
         {pending ? "Saving…" : "Update"}
       </button>
       {state && "error" in state ? (
-        <span role="alert" className="text-xs text-red-700">
+        <span role="alert" className="text-xs text-danger">
           {state.error}
         </span>
       ) : null}
       {state && "success" in state ? (
-        <span role="status" className="text-xs text-emerald-700">
+        <span role="status" className="text-xs text-success">
           {state.success}
         </span>
       ) : null}

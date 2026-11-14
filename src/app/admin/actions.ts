@@ -51,6 +51,7 @@ export async function setVendorStatus(
   if (error) return { vendorId, error: error.message };
 
   revalidatePath("/admin");
+  revalidatePath("/admin/shops");
   revalidatePath("/shops");
   revalidatePath("/account");
   revalidatePublicCatalog();
@@ -87,6 +88,7 @@ export async function setCommissionRate(
   if (error) return { vendorId, error: error.message };
 
   revalidatePath("/admin");
+  revalidatePath("/admin/shops");
 
   return { vendorId, success: `Commission set to ${percentValue}%.` };
 }
@@ -252,6 +254,7 @@ export async function createVendor(
   }
 
   revalidatePath("/admin");
+  revalidatePath("/admin/shops");
   revalidatePath("/shops");
   revalidatePath("/account");
 
@@ -305,6 +308,7 @@ export async function createCategory(
   }
 
   revalidatePath("/admin");
+  revalidatePath("/admin/categories");
   revalidatePath("/categories");
   revalidatePath("/");
   revalidatePublicCatalog();

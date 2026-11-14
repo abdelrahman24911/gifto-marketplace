@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { Breadcrumb } from "@/components/ui/section";
 import { requirePlatformAdmin } from "@/lib/auth";
 import {
   commissionEntriesById,
@@ -10,6 +10,12 @@ import {
 } from "@/lib/finance";
 import { formatEgp } from "@/lib/money";
 
+import {
+  AdminActionLink,
+  AdminNotice,
+  AdminPageHeader,
+  AdminStatStrip,
+} from "../../ui";
 import { SettlementPaidButton } from "./settlement-paid-button";
 import { SettlementVoidButton } from "./settlement-void-button";
 
@@ -193,118 +199,128 @@ export default async function SettlementDetailPage({
 
   const effectiveStatus = settlementEffectiveStatus(settlement);
 
-  return (
-    <div className="mx-auto w-full max-w-4xl px-4 py-10">
-      <Link
-        href="/admin/settlements"
-        className="text-sm font-medium text-zinc-500 hover:text-zinc-900"
-      >
-        ← Back to settlements
-      </Link>
+  const statusBadge = (
+    <span
+      className={`rounded-full border px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-wide ${
+        effectiveStatus === "paid"
+          ? "border-success/25 bg-success-soft text-ink"
+          : effectiveStatus === "voided"
+            ? "border-danger/25 bg-danger-soft text-ink"
+            : "border-berry/25 bg-berry-soft text-ink"
+      }`}
+    >
+      {effectiveStatus}
+    </span>
+  );
 
-      <div className="mt-1 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
-            {row.vendor?.name ?? "Unknown shop"}
-          </h1>
-          <p className="mt-1 text-sm text-zinc-600">
-            Settlement opened {formatDate(row.created_at)} ·{" "}
-            {totals.count} delivered{" "}
-            {totals.count === 1 ? "suborder" : "suborders"}
-          </p>
-        </div>
-        {!totals.complete ? (
-          <p
-            role="alert"
-            className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
-          >
-            {totalsResult.state === "read_failed"
-              ? "Gross and shop net are unavailable because commission data could not be read."
-              : "Gross and shop net are unavailable because one or more commission entries are missing."}
-          </p>
-        ) : null}
-        <span
-          className={`rounded-full border px-3 py-1 text-xs font-medium ${
-            effectiveStatus === "paid"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-              : effectiveStatus === "voided"
-                ? "border-red-200 bg-red-50 text-red-800"
-                : "border-sky-200 bg-sky-50 text-sky-800"
+  return (
+    <div className="w-full">
+      <Breadcrumb
+        items={[
+          { href: "/admin", label: "Administration" },
+          { href: "/admin/settlements", label: "Settlements" },
+          { label: row.vendor?.name ?? "Settlement" },
+        ]}
+      />
+
+      <div className="mt-4">
+        <AdminPageHeader
+          eyebrow="Settlement detail"
+          title={row.vendor?.name ?? "Unknown shop"}
+          description={`Opened ${formatDate(row.created_at)} · ${totals.count} delivered ${
+            totals.count === 1 ? "suborder" : "suborders"
           }`}
-        >
-          {effectiveStatus}
-        </span>
+          actions={
+            <>
+              {statusBadge}
+              <AdminActionLink href="/admin/settlements">
+                All settlements
+              </AdminActionLink>
+            </>
+          }
+        />
       </div>
 
-      <dl className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
-          <dt className="text-xs uppercase tracking-wide text-zinc-500">
-            Delivered gross
-          </dt>
-          <dd className="mt-1 text-xl font-semibold text-zinc-900">
-            {totals.grossMinor === null
-              ? "Unavailable"
-              : formatEgp(totals.grossMinor)}
-          </dd>
+      {!totals.complete ? (
+        <div className="mt-4">
+          <AdminNotice tone="warning" role="alert">
+            {totalsResult.state === "read_failed"
+              ? "Gross and shop net are unavailable because commission data could not be read."
+              : totalsResult.state === "truncated"
+                ? "Gross and shop net are unavailable because commission history was truncated."
+                : "Gross and shop net are unavailable because one or more commission entries are missing."}
+          </AdminNotice>
         </div>
-        <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
-          <dt className="text-xs uppercase tracking-wide text-zinc-500">
-            Commission
-          </dt>
-          <dd className="mt-1 text-xl font-semibold text-zinc-900">
-            {formatEgp(totals.commissionMinor)}
-          </dd>
-        </div>
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-          <dt className="text-xs uppercase tracking-wide text-emerald-800">
-            Shop net
-          </dt>
-          <dd className="mt-1 text-xl font-semibold text-emerald-950">
-            {totals.netMinor === null
-              ? "Unavailable"
-              : formatEgp(totals.netMinor)}
-          </dd>
-        </div>
-        <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
-          <dt className="text-xs uppercase tracking-wide text-zinc-500">
-            {effectiveStatus === "voided"
-              ? "Original total"
-              : "Recorded total"}
-          </dt>
-          <dd className="mt-1 text-xl font-semibold text-zinc-900">
-            {formatEgp(row.total_minor)}
-          </dd>
-          <p className="mt-1 text-xs text-zinc-500">
-            {effectiveStatus === "voided"
-              ? "Released for re-settlement"
-              : "Commission only"}
-          </p>
-        </div>
-      </dl>
+      ) : null}
+
+      <div className="mt-6">
+        <AdminStatStrip
+          items={[
+            {
+              label: "Delivered gross",
+              value:
+                totals.grossMinor === null
+                  ? "Unavailable"
+                  : formatEgp(totals.grossMinor),
+              hint: "Shop subtotal on delivered lines",
+            },
+            {
+              label: "Commission",
+              value: formatEgp(totals.commissionMinor),
+              hint: "Gifto's share",
+              emphasis: "accent",
+            },
+            {
+              label: "Shop net",
+              value:
+                totals.netMinor === null
+                  ? "Unavailable"
+                  : formatEgp(totals.netMinor),
+              hint: "Amount due to the shop",
+              emphasis: "positive",
+            },
+            {
+              label:
+                effectiveStatus === "voided"
+                  ? "Original total"
+                  : "Recorded total",
+              value: formatEgp(row.total_minor),
+              hint:
+                effectiveStatus === "voided"
+                  ? "Released for re-settlement"
+                  : "Commission only",
+            },
+          ]}
+        />
+      </div>
 
       <section className="mt-6 grid gap-4 sm:grid-cols-2">
-        <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm">
-          <h2 className="font-semibold text-zinc-900">Opened by</h2>
-          <p className="mt-1 text-zinc-700">
+        <div className="rounded-xl border border-line bg-paper-soft p-4 text-sm">
+          <h2 className="text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-ink-mute">
+            Opened by
+          </h2>
+          <p className="mt-1.5 font-medium text-ink">
             {actorLabel(row.created_by, actors)}
           </p>
-          <p className="text-zinc-500">{formatDate(row.created_at)}</p>
+          <p className="text-xs text-ink-mute">{formatDate(row.created_at)}</p>
         </div>
-        <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm">
-          <h2 className="font-semibold text-zinc-900">Paid by</h2>
+        <div className="rounded-xl border border-line bg-paper-soft p-4 text-sm">
+          <h2 className="text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-ink-mute">
+            Paid by
+          </h2>
           {effectiveStatus === "paid" ? (
             <>
-              <p className="mt-1 text-zinc-700">
+              <p className="mt-1.5 font-medium text-ink">
                 {actorLabel(row.paid_by, actors)}
               </p>
-              <p className="text-zinc-500">
+              <p className="text-xs text-ink-mute">
                 {row.paid_at
                   ? formatDate(row.paid_at)
                   : "Payment date not recorded"}
               </p>
             </>
           ) : (
-            <p className="mt-1 text-zinc-600">
+            <p className="mt-1.5 text-ink-soft">
               {effectiveStatus === "voided"
                 ? "This batch was voided before payment."
                 : "Not paid yet. Confirm the external payout before recording it."}
@@ -312,18 +328,22 @@ export default async function SettlementDetailPage({
           )}
         </div>
         {effectiveStatus === "voided" ? (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm">
-            <h2 className="font-semibold text-red-900">Voided by</h2>
-            <p className="mt-1 text-red-800">
+          <div className="rounded-xl border border-danger/25 bg-danger-soft p-4 text-sm">
+            <h2 className="text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-ink-mute">
+              Voided by
+            </h2>
+            <p className="mt-1.5 font-medium text-ink">
               {actorLabel(row.voided_by, actors)}
             </p>
-            <p className="text-red-700">
+            <p className="text-xs text-ink-mute">
               {row.voided_at
                 ? formatDate(row.voided_at)
                 : "Void date not recorded"}
             </p>
-            <p className="mt-3 font-medium text-red-900">Reason</p>
-            <p className="mt-1 whitespace-pre-wrap text-red-800">
+            <p className="mt-3 text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-ink-mute">
+              Reason
+            </p>
+            <p className="mt-1 whitespace-pre-wrap text-ink-soft">
               {row.void_reason ?? "No reason was recorded for this legacy void."}
             </p>
           </div>
@@ -331,17 +351,17 @@ export default async function SettlementDetailPage({
       </section>
 
       {row.note ? (
-        <p className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
+        <p className="mt-4 rounded-xl border border-line bg-paper-soft px-4 py-3 text-sm text-ink-soft">
           {row.note}
         </p>
       ) : null}
 
       {effectiveStatus === "open" ? (
-        <section className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
-          <h2 className="font-semibold text-emerald-950">Record payout</h2>
-          <p className="mt-1 text-sm text-emerald-800">
+        <section className="mt-6 rounded-2xl border border-success/25 bg-success-soft p-5">
+          <h2 className="font-display text-2xl text-ink">Record payout</h2>
+          <p className="mt-1 text-sm leading-relaxed text-ink-soft">
             Transfer or hand over{" "}
-            <strong>
+            <strong className="text-ink">
               {totals.netMinor === null
                 ? "an unavailable amount"
                 : formatEgp(totals.netMinor)}
@@ -354,16 +374,14 @@ export default async function SettlementDetailPage({
               <SettlementPaidButton settlementId={row.id} />
             </div>
           ) : (
-            <p className="mt-3 text-sm text-emerald-900">
+            <p className="mt-3 text-sm text-warning">
               Payout recording is disabled until the complete commission
               statement is available.
             </p>
           )}
-          <div className="mt-6 border-t border-emerald-200 pt-4">
-            <h3 className="font-semibold text-emerald-950">
-              Opened by mistake?
-            </h3>
-            <p className="mt-1 text-sm text-emerald-800">
+          <div className="mt-6 border-t border-success/20 pt-4">
+            <h3 className="font-display text-xl text-ink">Opened by mistake?</h3>
+            <p className="mt-1 text-sm leading-relaxed text-ink-soft">
               Voiding keeps this batch and its lines for audit, releases the
               commission so it can be settled again, and cannot be undone. A
               reason is required.
@@ -376,22 +394,22 @@ export default async function SettlementDetailPage({
       ) : null}
 
       <section className="mt-8">
-        <h2 className="text-lg font-semibold text-zinc-900">
+        <h2 className="font-display text-2xl text-ink">
           Included suborders ({lines.length})
         </h2>
-        <p className="mt-1 text-sm text-zinc-600">
+        <p className="mt-1 text-xs text-ink-mute">
           Each line is a delivered shop suborder and the commission snapshot
-          taken when that order was placed.
+          taken when that suborder was delivered.
         </p>
 
         {lines.length === 0 ? (
-          <p className="mt-3 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-8 text-center text-sm text-zinc-600">
+          <p className="mt-3 rounded-2xl border border-dashed border-line-strong bg-paper-soft px-4 py-8 text-center text-sm text-ink-soft">
             {effectiveStatus === "voided"
               ? "This legacy void has no preserved settlement lines."
               : "This settlement has no lines."}
           </p>
         ) : (
-          <ul className="mt-3 flex flex-col divide-y divide-zinc-100 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+          <ul className="mt-3 flex flex-col divide-y divide-line overflow-hidden rounded-2xl border border-line bg-paper-soft">
             {lines.map((line) => {
               const entry = detailEntriesById.get(line.commission_entry_id);
               const lineGrossMinor = settlementLineGrossMinor(
@@ -409,19 +427,21 @@ export default async function SettlementDetailPage({
                 <li key={line.commission_entry_id} className="px-5 py-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-medium text-zinc-900">
+                      <p className="font-medium text-ink">
                         {orderReference(suborder)}
                       </p>
-                      <p className="mt-1 text-sm text-zinc-600">
+                      <p className="mt-1 text-sm text-ink-soft">
                         {items || "Line items unavailable"}
                       </p>
-                      <p className="mt-1 text-xs text-zinc-500">
+                      <p className="mt-1 text-xs text-ink-mute">
                         Delivered{" "}
-                        {entry ? formatDate(entry.earned_at) : "date unavailable"}
+                        {entry
+                          ? formatDate(entry.earned_at)
+                          : "date unavailable"}
                         {entry ? ` · rate ${formatRate(entry.rate)}` : ""}
                       </p>
                       {line.released_at ? (
-                        <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+                        <p className="mt-2 rounded-lg border border-danger/20 bg-danger-soft px-3 py-2 text-xs text-ink-soft">
                           Released {formatDate(line.released_at)} by{" "}
                           {actorLabel(line.released_by, actors)}. Reason:{" "}
                           {line.release_reason ?? "not recorded"}.
@@ -429,17 +449,17 @@ export default async function SettlementDetailPage({
                       ) : null}
                     </div>
                     <div className="text-right text-sm">
-                      <p className="text-zinc-500">
+                      <p className="text-ink-mute">
                         Gross{" "}
-                        <span className="font-medium text-zinc-900">
+                        <span className="font-medium tabular-nums text-ink">
                           {lineGrossMinor === null
                             ? "Unavailable"
                             : formatEgp(lineGrossMinor)}
                         </span>
                       </p>
-                      <p className="text-zinc-500">
+                      <p className="text-ink-mute">
                         Commission{" "}
-                        <span className="font-medium text-zinc-900">
+                        <span className="font-medium tabular-nums text-ink">
                           {formatEgp(line.amount_minor)}
                         </span>
                       </p>

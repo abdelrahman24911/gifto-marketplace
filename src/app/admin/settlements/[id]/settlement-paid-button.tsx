@@ -33,18 +33,18 @@ export function SettlementPaidButton({
       <button
         type="submit"
         disabled={pending || Boolean(state && "success" in state)}
-        className="self-start rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+        className="self-start rounded-full bg-berry px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-berry-deep disabled:cursor-not-allowed disabled:opacity-60"
       >
         {pending ? "Recording payout…" : "Mark settlement paid"}
       </button>
       {state && "error" in state ? (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="text-sm text-danger">
           {state.error}
         </p>
       ) : state && "success" in state ? (
         <p
           role="status"
-          className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
+          className="rounded-xl border border-success/25 bg-success-soft px-3 py-2 text-sm text-ink"
         >
           {state.success}
         </p>
