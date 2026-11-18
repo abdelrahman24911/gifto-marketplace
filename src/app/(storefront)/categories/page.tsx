@@ -1,14 +1,17 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { CategoryTile } from "@/components/category-tile";
 import { Container, EmptyState, Eyebrow } from "@/components/ui/section";
 import { loadCategories } from "@/lib/catalog";
+import { pageMetadata } from "@/lib/metadata";
 
-export const metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Shop by category",
   description:
     "Browse every gift category on Gifto and jump straight to the gifts you're after.",
-};
+  path: "/categories",
+});
 
 export default async function CategoriesPage() {
   const result = await loadCategories();

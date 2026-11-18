@@ -1,17 +1,20 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { OccasionEmpty } from "@/components/occasion-empty";
 import { OccasionHero } from "@/components/occasion-hero";
 import { Container } from "@/components/ui/section";
 import { loadOccasions } from "@/lib/catalog";
+import { pageMetadata } from "@/lib/metadata";
 
 import { OccasionBrowser } from "./occasion-browser";
 
-export const metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Shop by occasion",
   description:
     "Browse gifts by the moment you're celebrating — birthdays, weddings, graduations and more.",
-};
+  path: "/occasions",
+});
 
 const primaryLinkClass =
   "inline-flex min-h-11 items-center justify-center rounded-full bg-berry px-5 text-sm font-semibold text-paper transition-colors hover:bg-berry-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry";

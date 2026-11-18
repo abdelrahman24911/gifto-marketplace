@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Fraunces, Geist, Geist_Mono } from "next/font/google";
 
 import { NavigationGuardProvider } from "@/components/navigation-guard";
+import { SOCIAL_IMAGE } from "@/lib/metadata";
+import { getSiteUrl } from "@/lib/site-url";
 
 import "./globals.css";
 
@@ -23,20 +25,13 @@ const fraunces = Fraunces({
   subsets: ["latin"],
 });
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
-
 const title = "Gifto — Gifts in Egypt, wrapped properly";
 const description =
   "Discover gifts from independent gift shops across Egypt. Browse by occasion, find the right gift, and order with cash on delivery.";
-const ogImage = {
-  url: "/og-image.png",
-  width: 1200,
-  height: 630,
-  alt: "Gifto — gifts from independent gift shops across Egypt",
-};
-
 export const metadata: Metadata = {
-  metadataBase: siteUrl ? new URL(siteUrl) : undefined,
+  metadataBase: new URL(
+    getSiteUrl({ fallbackToProductionOnLocalhost: true }),
+  ),
   title: {
     default: title,
     template: "%s — Gifto",
@@ -48,13 +43,13 @@ export const metadata: Metadata = {
     locale: "en_EG",
     title,
     description,
-    images: [ogImage],
+    images: [SOCIAL_IMAGE],
   },
   twitter: {
     card: "summary_large_image",
     title,
     description,
-    images: [{ url: ogImage.url, alt: ogImage.alt }],
+    images: [{ url: SOCIAL_IMAGE.url, alt: SOCIAL_IMAGE.alt }],
   },
 };
 

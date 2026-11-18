@@ -12,7 +12,11 @@ export function CartLink({ className }: { className?: string }) {
     <GuardedLink
       href="/cart"
       className={className}
-      aria-label={ready && count > 0 ? `Cart, ${count} items` : "Cart"}
+      aria-label={
+        ready && count > 0
+          ? `Cart, ${count} ${count === 1 ? "item" : "items"}`
+          : "Cart"
+      }
     >
       <CartIcon className="h-5 w-5" />
       <span className="hidden sm:inline">Cart</span>

@@ -53,7 +53,7 @@ export function SectionHeading({
       {href && linkLabel ? (
         <GuardedLink
           href={href}
-          className="group inline-flex items-center gap-1.5 text-sm font-medium text-berry hover:text-berry-deep"
+          className="group inline-flex items-center gap-1.5 rounded-sm text-sm font-medium text-berry hover:text-berry-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
         >
           {linkLabel}
           <ArrowRightIcon className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
@@ -79,6 +79,37 @@ export function EmptyState({
           {children}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Section-level failure state. Catalogue reads distinguish an empty result
+ * from a failed read, so the homepage can say "try again" instead of pretending
+ * the catalogue is empty.
+ */
+export function SectionError({
+  title = "We couldn't load this section",
+  children = "Refresh the page to try again.",
+}: {
+  title?: string;
+  children?: ReactNode;
+}) {
+  return (
+    <div
+      role="status"
+      className="rounded-2xl border border-line-strong bg-paper-soft px-6 py-10 text-center"
+    >
+      <p className="font-display text-xl text-ink">{title}</p>
+      <p className="mx-auto mt-2 max-w-md break-words text-sm text-ink-soft">
+        {children}
+      </p>
+      <a
+        href=""
+        className="mt-4 inline-flex h-10 items-center rounded-full border border-line-strong px-4 text-sm font-medium text-berry transition-colors hover:border-berry/40 hover:text-berry-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
+      >
+        Try again
+      </a>
     </div>
   );
 }

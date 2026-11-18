@@ -1,15 +1,19 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { ProductCard } from "@/components/product-card";
 import { SearchForm } from "@/components/search-form";
 import { Container, EmptyState, Eyebrow } from "@/components/ui/section";
 import { getCategories, searchProducts } from "@/lib/catalog";
+import { pageMetadata } from "@/lib/metadata";
 import { parseEgpToMinor } from "@/lib/money";
 
-export const metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Search gifts",
   description: "Search gifts across every shop on Gifto.",
-};
+  path: "/search",
+  noIndex: true,
+});
 
 type SearchPageProps = {
   searchParams: Promise<{

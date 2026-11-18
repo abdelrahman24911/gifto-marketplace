@@ -6,6 +6,7 @@ import { CloseIcon, SearchIcon } from "@/components/icons";
 import { OccasionEmpty } from "@/components/occasion-empty";
 import { OccasionTile } from "@/components/occasion-tile";
 import type { CatalogOccasion } from "@/lib/catalog";
+import { occasionDisplayName } from "@/lib/occasion-display";
 
 export function OccasionBrowser({
   occasions,
@@ -22,7 +23,7 @@ export function OccasionBrowser({
     if (!needle) return occasions;
 
     return occasions.filter((occasion) =>
-      `${occasion.name} ${occasion.description ?? ""}`
+      `${occasionDisplayName(occasion.slug, occasion.name)} ${occasion.description ?? ""}`
         .toLocaleLowerCase()
         .includes(needle),
     );

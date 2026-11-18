@@ -20,6 +20,7 @@ import {
   Eyebrow,
 } from "@/components/ui/section";
 import { loadProductsByShop } from "@/lib/catalog";
+import { pageMetadata } from "@/lib/metadata";
 import { formatEgp } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/database.types";
@@ -112,19 +113,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug, productSlug } = await params;
   const data = await getProductPageData(slug, productSlug);
 
-  if (!data) return { title: "Product" };
+  if (!data) notFound();
 
   const description = data.product.description
     ?.replace(/\s+/g, " ")
     .trim()
     .slice(0, 160);
 
-  return {
+  return pageMetadata({
     title: data.product.name,
     description:
       description ||
       `Buy ${data.product.name} from ${data.shop.name} on Gifto.`,
-  };
+    path: `/shops/${encodeURIComponent(data.shop.slug)}/${encodeURIComponent(data.product.slug)}`,
+  });
 }
 
 const TRUST_ITEMS = [

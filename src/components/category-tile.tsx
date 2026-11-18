@@ -1,12 +1,14 @@
 import Link from "next/link";
 
+import { CategoryGlyph } from "@/components/category-glyph";
 import { ArrowRightIcon } from "@/components/icons";
 import type { CatalogCategory } from "@/lib/catalog";
 
 const TONES = [
-  "from-berry-soft to-paper-deep",
-  "from-gold-soft to-paper-deep",
-  "from-paper-deep to-berry-soft",
+  "from-berry-soft via-paper to-gold-soft/55",
+  "from-gold-soft/70 via-paper to-berry-soft/55",
+  "from-peach/80 via-paper to-paper-deep",
+  "from-paper-deep via-paper to-berry-soft/70",
 ];
 
 export function CategoryTile({
@@ -21,23 +23,32 @@ export function CategoryTile({
   return (
     <Link
       href={`/categories/${category.slug}`}
-      className="group relative flex min-h-44 flex-col justify-between overflow-hidden rounded-2xl border border-line p-5 transition duration-300 hover:-translate-y-1 hover:border-berry/30 hover:shadow-[0_22px_50px_-30px_oklch(0.33_0.13_12/0.55)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
+      className={`group relative flex min-h-44 flex-col overflow-hidden rounded-[1.5rem] border border-line/80 bg-gradient-to-br ${tone} p-5 shadow-[0_16px_38px_-34px_oklch(0.33_0.13_12/0.6)] transition duration-300 hover:-translate-y-1 hover:border-berry/25 hover:shadow-[0_26px_56px_-34px_oklch(0.33_0.13_12/0.6)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry motion-reduce:transition-none motion-reduce:hover:translate-y-0`}
     >
       <span
         aria-hidden
-        className={`absolute inset-0 bg-gradient-to-br ${tone} opacity-70 transition-opacity duration-300 group-hover:opacity-90`}
-      />
+        className="pointer-events-none absolute -right-2 -top-9 font-display text-[7.5rem] leading-none text-ink/[0.045]"
+      >
+        {String(index + 1).padStart(2, "0")}
+      </span>
+
       <span className="relative flex items-start justify-between gap-3">
-        <span className="font-display text-2xl leading-tight text-ink">
+        <span className="flex h-11 w-11 items-center justify-center rounded-full border border-berry/15 bg-paper/75 text-berry shadow-[0_8px_18px_-14px_oklch(0.33_0.13_12/0.7)] transition-transform duration-300 group-hover:-rotate-6 motion-reduce:transition-none motion-reduce:group-hover:rotate-0">
+          <CategoryGlyph slug={category.slug} />
+        </span>
+        <ArrowRightIcon className="mt-2 h-5 w-5 shrink-0 text-berry/80 transition-transform duration-300 group-hover:translate-x-1 motion-reduce:transition-none" />
+      </span>
+
+      <span className="relative mt-auto block pt-7">
+        <span className="block font-display text-[1.35rem] leading-tight text-ink">
           {category.name}
         </span>
-        <ArrowRightIcon className="mt-1 h-5 w-5 shrink-0 text-berry transition-transform duration-300 group-hover:translate-x-1" />
+        {category.description ? (
+          <span className="mt-1.5 block line-clamp-2 text-[0.8rem] leading-relaxed text-ink-soft">
+            {category.description}
+          </span>
+        ) : null}
       </span>
-      {category.description ? (
-        <span className="relative line-clamp-2 text-sm text-ink-soft">
-          {category.description}
-        </span>
-      ) : null}
     </Link>
   );
 }

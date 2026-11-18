@@ -22,6 +22,8 @@ import {
   loadProductsByOccasion,
   type CatalogOccasion,
 } from "@/lib/catalog";
+import { pageMetadata } from "@/lib/metadata";
+import { occasionDisplayName } from "@/lib/occasion-display";
 import { OCCASION_IMAGES_BUCKET } from "@/lib/supabase/database.types";
 
 type Props = { params: Promise<{ slug: string }> };
@@ -35,25 +37,36 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const result = await loadOccasion(slug);
 
-  if (!result.ok || !result.data) {
-    return { title: "Occasion" };
+  if (!result.ok) {
+    return {
+      title: "Occasion unavailable",
+      robots: { index: false, follow: false },
+    };
   }
+  if (!result.data) notFound();
 
-  return {
-    title: result.data.occasion.name,
+  const name = occasionDisplayName(
+    result.data.occasion.slug,
+    result.data.occasion.name,
+  );
+
+  return pageMetadata({
+    title: name,
     description:
-      result.data.occasion.description ??
-      `Gifts for ${result.data.occasion.name} on Gifto.`,
-  };
+      result.data.occasion.description ?? `Gifts for ${name} on Gifto.`,
+    path: `/occasions/${encodeURIComponent(result.data.occasion.slug)}`,
+  });
 }
 
 function OccasionDetailMedia({ occasion }: { occasion: CatalogOccasion }) {
+  const name = occasionDisplayName(occasion.slug, occasion.name);
+
   return (
     <div className="relative h-32 overflow-hidden rounded-[1.5rem] border border-line/70 bg-berry-soft/60 shadow-[0_24px_55px_-36px_rgba(121,13,43,0.5)] sm:h-44 md:h-auto md:aspect-[4/3] md:rounded-[1.75rem]">
       <ProductImage
         path={occasion.imagePath}
-        alt={occasion.imageAlt ?? occasion.name}
-        name={occasion.name}
+        alt={occasion.imageAlt ?? name}
+        name={name}
         bucket={OCCASION_IMAGES_BUCKET}
         className="h-full w-full object-cover"
         rounded="rounded-none"
@@ -61,7 +74,7 @@ function OccasionDetailMedia({ occasion }: { occasion: CatalogOccasion }) {
         preload={!!occasion.imagePath}
         fallback={
           <OccasionFallbackArt
-            initial={occasion.name.trim().charAt(0).toUpperCase() || "?"}
+            initial={name.trim().charAt(0).toUpperCase() || "?"}
             tone={occasion.slug.length}
           />
         }
@@ -111,6 +124,7 @@ export default async function OccasionPage({ params }: Props) {
   }
 
   const occasion = lookup.occasion;
+  const occasionName = occasionDisplayName(occasion.slug, occasion.name);
   const [productsResult, occasions] = await Promise.all([
     loadProductsByOccasion(occasion.id),
     getOccasions(),
@@ -139,7 +153,7 @@ export default async function OccasionPage({ params }: Props) {
             items={[
               { href: "/", label: "Home" },
               { href: "/occasions", label: "Occasions" },
-              { label: occasion.name },
+              { label: occasionName },
             ]}
           />
 
@@ -157,7 +171,7 @@ export default async function OccasionPage({ params }: Props) {
               </div>
 
               <h1 className="mt-3 font-display text-[clamp(2.65rem,7.2vw,4.9rem)] leading-[0.94] tracking-[-0.04em] text-ink">
-                {occasion.name}
+                {occasionName}
               </h1>
               {occasion.description ? (
                 <p className="mt-4 max-w-xl text-base leading-relaxed text-ink-soft sm:text-lg">
@@ -181,7 +195,7 @@ export default async function OccasionPage({ params }: Props) {
                 id="occasion-gifts"
                 className="font-display text-2xl leading-tight text-ink sm:text-3xl"
               >
-                Gifts for {occasion.name}
+                Gifts for {occasionName}
               </h2>
               {productsResult.ok ? (
                 <span className="rounded-full bg-paper-deep px-3 py-1 text-xs font-medium text-ink-mute">
@@ -255,7 +269,7 @@ export default async function OccasionPage({ params }: Props) {
                   href={`/occasions/${other.slug}`}
                   className="group inline-flex min-h-11 items-center gap-2 rounded-full border border-line bg-paper-soft/80 px-4 py-2 text-sm font-medium text-ink transition-colors hover:border-berry/35 hover:bg-berry-soft/60 hover:text-berry-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
                 >
-                  {other.name}
+                  {occasionDisplayName(other.slug, other.name)}
                   <ArrowRightIcon className="h-3.5 w-3.5 text-berry/60 transition-transform duration-300 group-hover:translate-x-0.5 motion-reduce:transition-none" />
                 </Link>
               ))}

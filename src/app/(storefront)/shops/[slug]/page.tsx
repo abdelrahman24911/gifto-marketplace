@@ -12,6 +12,7 @@ import {
   Eyebrow,
 } from "@/components/ui/section";
 import { loadProductsByShop, loadShop } from "@/lib/catalog";
+import { pageMetadata } from "@/lib/metadata";
 import { formatPrepTime, formatWorkingHours } from "@/lib/vendor-settings";
 
 type Props = { params: Promise<{ slug: string }> };
@@ -20,20 +21,25 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const result = await loadShop(slug);
 
-  if (!result.ok || !result.data) {
-    return { title: "Shop" };
+  if (!result.ok) {
+    return {
+      title: "Shop unavailable",
+      robots: { index: false, follow: false },
+    };
   }
+  if (!result.data) notFound();
 
   const location = [result.data.city, result.data.governorate]
     .filter(Boolean)
     .join(", ");
 
-  return {
+  return pageMetadata({
     title: result.data.name,
     description:
       result.data.description ??
       `Gifts from ${result.data.name}${location ? ` in ${location}` : ""} on Gifto.`,
-  };
+    path: `/shops/${encodeURIComponent(result.data.slug)}`,
+  });
 }
 
 export default async function ShopPage({ params }: Props) {

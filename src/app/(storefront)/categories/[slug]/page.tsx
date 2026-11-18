@@ -14,6 +14,7 @@ import {
   loadCategory,
   loadProductsByCategory,
 } from "@/lib/catalog";
+import { pageMetadata } from "@/lib/metadata";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -21,15 +22,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const result = await loadCategory(slug);
 
-  if (!result.ok || !result.data) {
-    return { title: "Category" };
+  if (!result.ok) {
+    return {
+      title: "Category unavailable",
+      robots: { index: false, follow: false },
+    };
   }
+  if (!result.data) notFound();
 
-  return {
+  return pageMetadata({
     title: result.data.name,
     description:
       result.data.description ?? `Gifts in ${result.data.name} on Gifto.`,
-  };
+    path: `/categories/${encodeURIComponent(result.data.slug)}`,
+  });
 }
 
 export default async function CategoryPage({ params }: Props) {

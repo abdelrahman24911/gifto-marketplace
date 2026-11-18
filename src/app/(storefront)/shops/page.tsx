@@ -1,14 +1,17 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { ShopCard } from "@/components/shop-card";
 import { Container, EmptyState, Eyebrow } from "@/components/ui/section";
 import { loadShops } from "@/lib/catalog";
+import { pageMetadata } from "@/lib/metadata";
 
-export const metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Shops",
   description:
     "Browse approved, independent gift shops across Egypt on Gifto. Order with cash on delivery.",
-};
+  path: "/shops",
+});
 
 export default async function ShopsPage() {
   const result = await loadShops();

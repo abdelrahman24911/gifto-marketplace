@@ -1,7 +1,16 @@
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "0.0.0.0", "[::1]"]);
 export const PRODUCTION_SITE_URL = "https://gifto-marketplace.vercel.app";
 
-export function getSiteUrl(): string {
+type SiteUrlOptions = {
+  /**
+   * Public metadata must never advertise localhost. Local production builds use
+   * a localhost override in `.env.local`, so metadata can fall back to the
+   * canonical deployment origin while runtime guards keep rejecting it.
+   */
+  fallbackToProductionOnLocalhost?: boolean;
+};
+
+export function getSiteUrl(options: SiteUrlOptions = {}): string {
   const configured = process.env.NEXT_PUBLIC_SITE_URL?.trim();
 
   if (!configured) {
@@ -23,6 +32,10 @@ export function getSiteUrl(): string {
   }
 
   if (process.env.NODE_ENV === "production" && LOCAL_HOSTNAMES.has(parsed.hostname)) {
+    if (options.fallbackToProductionOnLocalhost) {
+      return PRODUCTION_SITE_URL;
+    }
+
     throw new Error(
       "NEXT_PUBLIC_SITE_URL must not point to localhost in production.",
     );

@@ -19,9 +19,9 @@ export function ShopCard({ shop }: { shop: Shop }) {
   return (
     <Link
       href={`/shops/${shop.slug}`}
-      className="group flex h-full flex-col gap-3 rounded-2xl border border-line bg-paper-soft p-5 transition duration-300 hover:-translate-y-1 hover:border-berry/30 hover:shadow-[0_22px_50px_-30px_oklch(0.33_0.13_12/0.55)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
+      className="group flex h-full min-w-0 flex-col gap-3 rounded-2xl border border-line bg-paper-soft p-5 transition duration-300 hover:-translate-y-1 hover:border-berry/30 hover:shadow-[0_22px_50px_-30px_oklch(0.33_0.13_12/0.55)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
     >
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         <ShopLogo name={shop.name} path={shop.logoPath} />
         <div className="min-w-0">
           <p className="truncate font-display text-lg text-ink">

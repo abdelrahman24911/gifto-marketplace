@@ -9,6 +9,14 @@ import { createPublicClient } from "@/lib/supabase/public";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/database.types";
 import {
+  emptyGiftFinderPage,
+  giftFinderBudgetRange,
+  planGiftFinderCategories,
+  toGiftFinderProduct,
+  type GiftFinderPage,
+  type GiftFinderQuery,
+} from "@/lib/gift-finder";
+import {
   workingHoursFromJson,
   type WorkingHours,
 } from "@/lib/vendor-settings";
@@ -32,8 +40,10 @@ export type CatalogProduct = {
   stock: number;
   imagePath: string | null;
   imageAlt: string | null;
+  vendorId: string;
   vendorName: string | null;
   vendorSlug: string;
+  vendorIsAcceptingOrders: boolean;
   categoryName: string | null;
   categorySlug: string | null;
 };
@@ -133,7 +143,12 @@ function toCatalogOccasion(row: OccasionRow): CatalogOccasion {
 
 type ImageRow = { path: string; alt: string | null; position: number };
 
-type VendorRow = { name: string; slug: string };
+type VendorRow = {
+  id: string;
+  name: string;
+  slug: string;
+  is_accepting_orders: boolean;
+};
 
 type ProductRow = {
   id: string;
@@ -148,7 +163,7 @@ type ProductRow = {
 };
 
 const PRODUCT_SELECT =
-  "id, name, slug, price_minor, stock, vendor_id, vendor:public_vendors!inner(name, slug), category:categories(name, slug), product_images(path, alt, position)";
+  "id, name, slug, price_minor, stock, vendor_id, vendor:public_vendors!inner(id, name, slug, is_accepting_orders), category:categories(name, slug), product_images(path, alt, position)";
 
 const OCCASION_SELECT = "id, name, slug, description, image_path, image_alt";
 
@@ -176,8 +191,10 @@ function toCatalogProducts(rows: ProductRow[]): CatalogProduct[] {
         stock: row.stock,
         imagePath: images[0]?.path ?? null,
         imageAlt: images[0]?.alt ?? null,
+        vendorId: vendor.id,
         vendorName: vendor.name,
         vendorSlug: vendor.slug,
+        vendorIsAcceptingOrders: vendor.is_accepting_orders,
         categoryName: category?.name ?? null,
         categorySlug: category?.slug ?? null,
       },
@@ -484,7 +501,7 @@ export async function getShops(limit?: number): Promise<CatalogShop[]> {
 
 const readNewArrivals = cachedCatalogRead(
   "new-arrivals",
-  async (limit: number): Promise<CatalogRead<CatalogProduct[]>> => {
+  async (limit: number): Promise<CatalogRead<Load<CatalogProduct[]>>> => {
     const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("products")
@@ -494,17 +511,147 @@ const readNewArrivals = cachedCatalogRead(
       .limit(limit)
       .returns<ProductRow[]>();
 
+    if (error) return FAILED_LOAD;
     return {
-      value: toCatalogProducts(data ?? []),
-      cacheable: !error,
+      value: { ok: true, data: toCatalogProducts(data ?? []) },
+      cacheable: true,
     };
   },
   [CATALOG_TAGS.catalog, CATALOG_TAGS.categories, CATALOG_TAGS.shops],
 );
 
 /** Newest active products across every shop, newest first. */
-export function getNewArrivals(limit = 8): Promise<CatalogProduct[]> {
+export async function loadNewArrivals(
+  limit = 8,
+): Promise<Load<CatalogProduct[]>> {
   return readNewArrivals(limit);
+}
+
+/** Convenience wrapper that preserves the empty-on-failure behaviour. */
+export async function getNewArrivals(limit = 8): Promise<CatalogProduct[]> {
+  const result = await loadNewArrivals(limit);
+  return result.ok ? result.data : [];
+}
+
+type GiftFinderCategoryRow = {
+  id: string;
+  slug: string;
+};
+
+/**
+ * One server-side page of Gift Finder matches. Filtering, counting and
+ * pagination all happen in the database so no eligible product is hidden by a
+ * client-side pool cap.
+ */
+export async function loadGiftFinderPage(
+  query: GiftFinderQuery,
+): Promise<Load<GiftFinderPage>> {
+  const plan = planGiftFinderCategories(query);
+  if (plan.occasionUnsupported) {
+    return {
+      ok: true,
+      data: emptyGiftFinderPage(query, true),
+    };
+  }
+
+  const supabase = createPublicClient();
+  let categoryIds: string[] | null = null;
+
+  if (plan.categorySlugs) {
+    if (plan.categorySlugs.length === 0) {
+      return { ok: true, data: emptyGiftFinderPage(query) };
+    }
+
+    const { data: categories, error: categoryError } = await supabase
+      .from("categories")
+      .select("id, slug")
+      .in("slug", plan.categorySlugs)
+      .eq("is_active", true)
+      .returns<GiftFinderCategoryRow[]>();
+
+    if (categoryError) return { ok: false };
+
+    categoryIds = (categories ?? []).map((category) => category.id);
+    if (categoryIds.length === 0) {
+      return { ok: true, data: emptyGiftFinderPage(query) };
+    }
+  }
+
+  const budget = giftFinderBudgetRange(query.budget);
+  let productsQuery = supabase
+    .from("products")
+    .select(PRODUCT_SELECT, { count: "exact" })
+    .eq("status", "active");
+
+  if (categoryIds) {
+    productsQuery = productsQuery.in("category_id", categoryIds);
+  }
+  if (budget.minMinor !== null) {
+    productsQuery = productsQuery.gte("price_minor", budget.minMinor);
+  }
+  if (budget.maxMinor !== null) {
+    productsQuery = productsQuery.lt("price_minor", budget.maxMinor);
+  }
+
+  const { data, error, count } = await productsQuery
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .range(query.offset, query.offset + query.limit - 1)
+    .returns<ProductRow[]>();
+
+  if (error || count === null) return { ok: false };
+
+  const rows = data ?? [];
+  const products = toCatalogProducts(rows).flatMap((product) => {
+    const mapped = toGiftFinderProduct(product);
+    return mapped ? [mapped] : [];
+  });
+
+  return {
+    ok: true,
+    data: {
+      products,
+      total: count,
+      offset: query.offset,
+      limit: query.limit,
+      hasMore: query.offset + rows.length < count,
+      occasionUnsupported: false,
+    },
+  };
+}
+
+type SitemapProductRow = {
+  slug: string;
+  vendor: { slug: string } | { slug: string }[] | null;
+};
+
+export type SitemapProduct = {
+  slug: string;
+  vendorSlug: string;
+};
+
+/**
+ * Public product URLs for the sitemap. The join is `!inner`, so products whose
+ * shop is not publicly visible cannot create an orphaned sitemap entry.
+ */
+export async function loadSitemapProducts(
+  limit = 1_000,
+): Promise<SitemapProduct[]> {
+  const supabase = createPublicClient();
+  const { data, error } = await supabase
+    .from("products")
+    .select("slug, vendor:public_vendors!inner(slug)")
+    .eq("status", "active")
+    .order("created_at", { ascending: false })
+    .limit(Math.max(1, Math.min(Math.floor(limit), 5_000)))
+    .returns<SitemapProductRow[]>();
+
+  if (error) return [];
+
+  return (data ?? []).flatMap((row) => {
+    const vendor = firstOrSelf(row.vendor);
+    return vendor ? [{ slug: row.slug, vendorSlug: vendor.slug }] : [];
+  });
 }
 
 const readProductsByBudget = cachedCatalogRead(

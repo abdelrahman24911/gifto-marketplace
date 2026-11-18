@@ -17,7 +17,7 @@
 
   --color-ink: oklch(0.28 0.03 40);
   --color-ink-soft: oklch(0.45 0.025 45);
-  --color-ink-mute: oklch(0.58 0.02 50);
+  --color-ink-mute: oklch(0.52 0.02 50);
 
   --color-berry: oklch(0.45 0.16 12);
   --color-berry-deep: oklch(0.33 0.13 12);
@@ -72,6 +72,15 @@ body {
 @media (prefers-reduced-motion: no-preference) {
   html {
     scroll-behavior: smooth;
+  }
+}
+
+@keyframes gifto-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
   }
 }
 

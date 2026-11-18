@@ -6,22 +6,30 @@ type QueryRecord = {
   filters: string[];
   orders: string[];
   limit?: number;
+  countRequested?: boolean;
+  range?: [number, number];
 };
 
 type QueryChain = {
-  select(columns: string): QueryChain;
+  select(columns: string, options?: { count?: string }): QueryChain;
   eq(column: string, value: unknown): QueryChain;
   in(column: string, values: readonly unknown[]): QueryChain;
   ilike(column: string, value: string): QueryChain;
   gte(column: string, value: unknown): QueryChain;
   lte(column: string, value: unknown): QueryChain;
+  lt(column: string, value: unknown): QueryChain;
   order(column: string, options: { ascending: boolean }): QueryChain;
   limit(value: number): QueryChain;
+  range(from: number, to: number): QueryChain;
   maybeSingle(): Promise<{ data: unknown; error: unknown }>;
-  returns(): Promise<{ data: unknown; error: unknown }>;
+  returns(): Promise<{ data: unknown; error: unknown; count?: number | null }>;
 };
 
-type FakeResult = { data: unknown; error: unknown };
+type FakeResult = {
+  data: unknown;
+  error: unknown;
+  count?: number | null;
+};
 
 const db = vi.hoisted(() => ({
   queries: [] as QueryRecord[],
@@ -36,8 +44,9 @@ function fakeClient() {
       db.queries.push(record);
 
       const chain: QueryChain = {
-        select(columns) {
+        select(columns, options) {
           record.select = columns;
+          if (options?.count) record.countRequested = true;
           return chain;
         },
         eq(column, value) {
@@ -60,12 +69,20 @@ function fakeClient() {
           record.filters.push(`lte:${column}=${String(value)}`);
           return chain;
         },
+        lt(column, value) {
+          record.filters.push(`lt:${column}=${String(value)}`);
+          return chain;
+        },
         order(column, options) {
           record.orders.push(`${column}:${options.ascending ? "asc" : "desc"}`);
           return chain;
         },
         limit(value) {
           record.limit = value;
+          return chain;
+        },
+        range(from, to) {
+          record.range = [from, to];
           return chain;
         },
         maybeSingle: async () =>
@@ -100,6 +117,7 @@ vi.mock("next/cache", () => ({
 
 import {
   getNewArrivals,
+  loadGiftFinderPage,
   loadOccasion,
   loadOccasions,
   loadProductsByCategory,
@@ -312,6 +330,112 @@ describe("public occasion queries", () => {
     db.results.products = { data: null, error: { message: "offline" } };
 
     const result = await loadProductsByOccasion("occasion-1");
+
+    expect(result).toEqual({ ok: false });
+  });
+});
+
+describe("public gift finder page", () => {
+  it("filters, counts, and pages in the database", async () => {
+    db.results.categories = {
+      data: [{ id: "category-1", slug: "personalized-gifts" }],
+      error: null,
+    };
+    db.results.products = { data: [], error: null, count: 13 };
+
+    const result = await loadGiftFinderPage({
+      recipient: "her",
+      occasionSlug: "graduation",
+      budget: "750-1000",
+      offset: 8,
+      limit: 8,
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        products: [],
+        total: 13,
+        offset: 8,
+        limit: 8,
+        hasMore: true,
+        occasionUnsupported: false,
+      },
+    });
+
+    const [categoryQuery, productQuery] = db.queries;
+    expect(categoryQuery.table).toBe("categories");
+    expect(categoryQuery.filters).toEqual([
+      "in:slug=flowers,personalized-gifts,gift-boxes",
+      "eq:is_active=true",
+    ]);
+    expect(productQuery.table).toBe("products");
+    expect(productQuery.select).toContain("vendor:public_vendors!inner(");
+    expect(productQuery.filters).toEqual([
+      "eq:status=active",
+      "in:category_id=category-1",
+      "gte:price_minor=75000",
+      "lt:price_minor=100000",
+    ]);
+    expect(productQuery.orders).toEqual([
+      "created_at:desc",
+      "id:desc",
+    ]);
+    expect(productQuery.range).toEqual([8, 15]);
+    expect(productQuery.countRequested).toBe(true);
+  });
+
+  it("returns an honest empty result for an unmapped occasion without querying", async () => {
+    const result = await loadGiftFinderPage({
+      recipient: "any",
+      occasionSlug: "birthday",
+      budget: "any",
+      offset: 0,
+      limit: 8,
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        products: [],
+        total: 0,
+        offset: 0,
+        limit: 8,
+        hasMore: false,
+        occasionUnsupported: true,
+      },
+    });
+    expect(db.queries).toEqual([]);
+  });
+
+  it("returns an empty page when no mapped category is active", async () => {
+    db.results.categories = { data: [], error: null };
+
+    const result = await loadGiftFinderPage({
+      recipient: "kids",
+      occasionSlug: null,
+      budget: "any",
+      offset: 0,
+      limit: 8,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { total: 0, occasionUnsupported: false },
+    });
+    expect(db.queries.map((query) => query.table)).toEqual(["categories"]);
+  });
+
+  it("fails honestly when the exact count is unavailable", async () => {
+    db.results.products = { data: [], error: null, count: null };
+
+    const result = await loadGiftFinderPage({
+      recipient: "any",
+      occasionSlug: null,
+      budget: "any",
+      offset: 0,
+      limit: 8,
+    });
 
     expect(result).toEqual({ ok: false });
   });
