@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 /**
  * Server-only helpers for guest checkout.
@@ -9,6 +9,9 @@ import { createHash } from "node:crypto";
  */
 
 export const GUEST_TOKEN_PATTERN = /^[0-9a-f]{64}$/;
+export const PUBLIC_REFERENCE_PATTERN = /^GFT-[0-9A-F]{12}$/;
+/** Server-side guest token lifetime, mirrored by the DB trigger (P1-02). */
+export const GUEST_TOKEN_LIFETIME_DAYS = 7;
 export const IDEMPOTENCY_KEY_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -17,6 +20,14 @@ export const GUEST_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 
 export function sha256Hex(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+/**
+ * Generates a fresh guest token server-side (P1-02 recovery rotation).
+ * Same shape as the browser-generated token: 32 random bytes as hex.
+ */
+export function createGuestToken(): string {
+  return randomBytes(32).toString("hex");
 }
 
 export function isValidGuestToken(value: unknown): value is string {

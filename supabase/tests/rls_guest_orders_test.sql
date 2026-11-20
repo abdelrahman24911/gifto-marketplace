@@ -881,6 +881,352 @@ begin
   raise notice 'TEST 19 PASSED: second call on a cancelled order is a no-op, no double restock';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST 20: guest token expiry is stamped at placement and enforced (P1-02)
+-- ---------------------------------------------------------------------------
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_hash text := encode(digest('guest-token-expiry', 'sha256'), 'hex');
+  v_oid uuid;
+begin
+  v_oid := public.place_guest_order(
+    '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
+    'Expiry Guest', '01001112233', 'expiry@guest.gifto.test',
+    '12 Main Street', 'Alexandria', 'Alexandria', null,
+    gen_random_uuid(), v_hash);
+  perform set_config('gifto_test.expiry_order_id', v_oid::text, false);
+  perform set_config('gifto_test.expiry_hash', v_hash, false);
+end $$;
+
+reset role;
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.expiry_order_id')::uuid;
+  v_expires timestamptz;
+begin
+  select guest_token_expires_at into v_expires
+    from public.orders where id = v_oid;
+  if v_expires is null then
+    raise exception 'TEST 20 FAILED: no expiry stamped at placement';
+  end if;
+  if v_expires <= now() or v_expires > now() + interval '7 days 1 minute' then
+    raise exception 'TEST 20 FAILED: expiry is not now()+7d (got %)', v_expires;
+  end if;
+  raise notice 'TEST 20a PASSED: placement stamps a 7-day token expiry';
+end $$;
+
+-- Expire the token; every guest path must now reject it.
+reset role;
+do $$
+begin
+  update public.orders
+     set guest_token_expires_at = now() - interval '1 day'
+   where id = current_setting('gifto_test.expiry_order_id')::uuid;
+end $$;
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_view jsonb;
+  v_rejected boolean := false;
+begin
+  select public.get_guest_order(
+    current_setting('gifto_test.expiry_order_id')::uuid,
+    current_setting('gifto_test.expiry_hash'))
+    into v_view;
+  if v_view is not null then
+    raise exception 'TEST 20 FAILED: expired token can still view the order';
+  end if;
+
+  begin
+    perform public.cancel_guest_order(
+      current_setting('gifto_test.expiry_order_id')::uuid,
+      current_setting('gifto_test.expiry_hash'));
+  exception when sqlstate '42501' then
+    v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'TEST 20 FAILED: expired token can still cancel the order';
+  end if;
+  raise notice 'TEST 20b PASSED: expired token rejected on view and cancel';
+end $$;
+
+-- Restore the expiry; the same token works again (no rotation needed).
+reset role;
+do $$
+begin
+  update public.orders
+     set guest_token_expires_at = now() + interval '7 days'
+   where id = current_setting('gifto_test.expiry_order_id')::uuid;
+end $$;
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_view jsonb;
+begin
+  select public.get_guest_order(
+    current_setting('gifto_test.expiry_order_id')::uuid,
+    current_setting('gifto_test.expiry_hash'))
+    into v_view;
+  if v_view is null then
+    raise exception 'TEST 20 FAILED: live token cannot view the order';
+  end if;
+  raise notice 'TEST 20 PASSED: expiry stamped and enforced, live token still works';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 21: recovery by reference + phone/email, single-use, rotation (P1-02)
+-- ---------------------------------------------------------------------------
+reset role;
+do $$
+declare
+  v_ref text;
+begin
+  select public_reference into v_ref from public.orders
+   where id = current_setting('gifto_test.expiry_order_id')::uuid;
+  perform set_config('gifto_test.expiry_reference', v_ref, false);
+end $$;
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_rows int;
+  v_token text;
+  v_oid uuid;
+  v_email text;
+begin
+  -- Wrong phone: silent empty result, no token issued.
+  select count(*) into v_rows
+    from public.request_guest_order_recovery(
+      current_setting('gifto_test.expiry_reference'), '01999999999');
+  if v_rows <> 0 then
+    raise exception 'TEST 21 FAILED: wrong phone issued a recovery token';
+  end if;
+
+  -- Correct phone: one token, emailed to the checkout address.
+  select order_id, recovery_token, contact_email
+    into v_oid, v_token, v_email
+    from public.request_guest_order_recovery(
+      current_setting('gifto_test.expiry_reference'), '01001112233');
+  if v_oid is null or v_token is null or v_token !~ '^[0-9a-f]{64}$' then
+    raise exception 'TEST 21 FAILED: correct recovery issued no usable token';
+  end if;
+  if v_email <> 'expiry@guest.gifto.test' then
+    raise exception 'TEST 21 FAILED: recovery email address is wrong';
+  end if;
+  perform set_config('gifto_test.recovery_token', v_token, false);
+
+  -- A second request invalidates the first token.
+  perform public.request_guest_order_recovery(
+    current_setting('gifto_test.expiry_reference'), 'expiry@guest.gifto.test');
+  if exists (
+    select 1 from public.guest_recovery_tokens
+     where order_id = v_oid
+       and token_hash = encode(digest(v_token, 'sha256'), 'hex')
+  ) then
+    raise exception 'TEST 21 FAILED: re-issue did not invalidate the old token';
+  end if;
+  select recovery_token into v_token
+    from public.request_guest_order_recovery(
+      current_setting('gifto_test.expiry_reference'), '01001112233');
+  perform set_config('gifto_test.recovery_token', v_token, false);
+  raise notice 'TEST 21a PASSED: recovery needs reference + contact, re-issue invalidates';
+end $$;
+
+-- Redeem once: old guest token dies, new one works, expiry refreshes.
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.expiry_order_id')::uuid;
+  v_old_hash text := current_setting('gifto_test.expiry_hash');
+  v_new_token text := encode(gen_random_bytes(32), 'hex');
+  v_new_hash text := encode(digest(v_new_token, 'sha256'), 'hex');
+  v_view jsonb;
+  v_reused boolean := false;
+begin
+  perform public.redeem_guest_recovery_token(
+    v_oid,
+    encode(digest(current_setting('gifto_test.recovery_token'), 'sha256'), 'hex'),
+    v_new_hash);
+
+  select public.get_guest_order(v_oid, v_old_hash) into v_view;
+  if v_view is not null then
+    raise exception 'TEST 21 FAILED: old guest token still works after recovery';
+  end if;
+
+  select public.get_guest_order(v_oid, v_new_hash) into v_view;
+  if v_view is null then
+    raise exception 'TEST 21 FAILED: rotated guest token cannot view the order';
+  end if;
+
+  -- The same recovery link cannot be used twice.
+  begin
+    perform public.redeem_guest_recovery_token(
+      v_oid,
+      encode(digest(current_setting('gifto_test.recovery_token'), 'sha256'), 'hex'),
+      encode(digest('another-token', 'sha256'), 'hex'));
+  exception when sqlstate '42501' then
+    v_reused := true;
+  end;
+  if not v_reused then
+    raise exception 'TEST 21 FAILED: recovery link was reusable';
+  end if;
+
+  perform set_config('gifto_test.expiry_hash', v_new_hash, false);
+  raise notice 'TEST 21 PASSED: recovery rotates the token once and refreshes expiry';
+end $$;
+
+-- Table reads run as the superuser (service_role holds no SELECT on orders).
+reset role;
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.expiry_order_id')::uuid;
+begin
+  if (select guest_token_expires_at from public.orders where id = v_oid)
+     <= now() + interval '6 days' then
+    raise exception 'TEST 21 FAILED: recovery did not refresh the expiry';
+  end if;
+end $$;
+
+-- An expired recovery link is rejected.
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.expiry_order_id')::uuid;
+  v_token text;
+begin
+  select recovery_token into v_token
+    from public.request_guest_order_recovery(
+      current_setting('gifto_test.expiry_reference'), '01001112233');
+  perform set_config('gifto_test.expired_recovery_token', v_token, false);
+end $$;
+
+reset role;
+do $$
+begin
+  update public.guest_recovery_tokens
+     set expires_at = now() - interval '1 minute'
+   where order_id = current_setting('gifto_test.expiry_order_id')::uuid
+     and used_at is null;
+end $$;
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.expiry_order_id')::uuid;
+  v_expired boolean := false;
+begin
+  begin
+    perform public.redeem_guest_recovery_token(
+      v_oid,
+      encode(digest(current_setting('gifto_test.expired_recovery_token'), 'sha256'), 'hex'),
+      encode(digest('fresh-token', 'sha256'), 'hex'));
+  exception when sqlstate '42501' then
+    v_expired := true;
+  end;
+  if not v_expired then
+    raise exception 'TEST 21 FAILED: expired recovery link was accepted';
+  end if;
+  raise notice 'TEST 21b PASSED: expired recovery link rejected';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 22: claiming a guest order attaches it to the account (P1-02)
+-- ---------------------------------------------------------------------------
+-- Earlier tests placed (and mostly kept) orders against the shared G One
+-- stock of 5; restore it so this test is independent of their consumption.
+reset role;
+update public.products set stock = 5
+ where id = '51100000-0000-0000-0000-000000000101';
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_hash text := encode(digest('guest-token-claim', 'sha256'), 'hex');
+  v_oid uuid;
+begin
+  v_oid := public.place_guest_order(
+    '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
+    'Claim Guest', '01001112234', null,
+    '12 Main Street', 'Alexandria', 'Alexandria', null,
+    gen_random_uuid(), v_hash);
+  perform set_config('gifto_test.claim_order_id', v_oid::text, false);
+  perform set_config('gifto_test.claim_hash', v_hash, false);
+end $$;
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.claim_order_id')::uuid;
+  v_wrong boolean := false;
+begin
+  -- Wrong token cannot claim.
+  begin
+    perform public.claim_guest_order(
+      v_oid,
+      encode(digest('not-the-token', 'sha256'), 'hex'),
+      '11100000-0000-0000-0000-000000000101');
+  exception when sqlstate '42501' then
+    v_wrong := true;
+  end;
+  if not v_wrong then
+    raise exception 'TEST 22 FAILED: wrong token claimed the order';
+  end if;
+
+  perform public.claim_guest_order(
+    v_oid,
+    current_setting('gifto_test.claim_hash'),
+    '11100000-0000-0000-0000-000000000101');
+end $$;
+
+-- Table reads run as the superuser (service_role holds no SELECT on orders).
+reset role;
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.claim_order_id')::uuid;
+begin
+  if (select user_id from public.orders where id = v_oid)
+     <> '11100000-0000-0000-0000-000000000101' then
+    raise exception 'TEST 22 FAILED: order was not attached to the account';
+  end if;
+  if (select guest_token_hash from public.orders where id = v_oid) is not null then
+    raise exception 'TEST 22 FAILED: guest token was not cleared on claim';
+  end if;
+end $$;
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.claim_order_id')::uuid;
+begin
+  if (select public.get_guest_order(v_oid, current_setting('gifto_test.claim_hash'))) is not null then
+    raise exception 'TEST 22 FAILED: old guest token still opens a claimed order';
+  end if;
+  raise notice 'TEST 22 PASSED: claim attaches the order and clears the guest token';
+end $$;
+
 reset role;
 
 rollback;

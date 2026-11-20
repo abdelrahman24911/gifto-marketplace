@@ -529,6 +529,37 @@ export async function notifyRefundCaseResolved(caseId: string): Promise<void> {
   }
 }
 
+export function guestOrderRecoveryEmail(input: {
+  reference: string;
+  recoveryUrl: string;
+}): MailMessage {
+  const text =
+    `You asked to recover access to your Gifto order ${input.reference}.\n\n` +
+    `Use this link to open your order again (it expires after one hour and can be used once):\n${input.recoveryUrl}\n\n` +
+    `If you did not ask for this, ignore this email — your order link stays unchanged.`;
+  return {
+    to: "",
+    subject: `Recover access to your Gifto order ${input.reference}`,
+    text,
+    html: htmlWrap(
+      `Recover access to your Gifto order ${input.reference}`,
+      text,
+    ),
+  };
+}
+
+/** Sends the guest-order recovery link through the same mail module. */
+export async function sendGuestOrderRecoveryEmail(
+  email: string,
+  reference: string,
+  recoveryUrl: string,
+): Promise<MailSendResult> {
+  return sendMail({
+    ...guestOrderRecoveryEmail({ reference, recoveryUrl }),
+    to: email,
+  });
+}
+
 /** Sends the Supabase password-reset link through the same mail module. */
 export async function sendPasswordResetEmail(
   email: string,

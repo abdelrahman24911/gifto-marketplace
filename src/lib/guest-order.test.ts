@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  GUEST_TOKEN_LIFETIME_DAYS,
+  PUBLIC_REFERENCE_PATTERN,
   checkoutRateBucket,
   clientIpFromHeaders,
+  createGuestToken,
   guestCookieName,
   isValidEmail,
   isValidGuestToken,
@@ -144,5 +147,27 @@ describe("safeCheckoutError", () => {
     expect(safeCheckoutError("").length).toBeGreaterThan(0);
     expect(safeCheckoutError(undefined)).toBe(generic);
     expect(safeCheckoutError({ message: "boom" })).toBe(generic);
+  });
+});
+
+describe("guest token expiry and recovery (P1-02)", () => {
+  it("generates a valid 64-hex guest token, different every time", () => {
+    const first = createGuestToken();
+    const second = createGuestToken();
+    expect(isValidGuestToken(first)).toBe(true);
+    expect(isValidGuestToken(second)).toBe(true);
+    expect(first).not.toBe(second);
+    expect(sha256Hex(first)).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("keeps the 7-day token lifetime", () => {
+    expect(GUEST_TOKEN_LIFETIME_DAYS).toBe(7);
+  });
+
+  it("validates public references (GFT- + 12 hex)", () => {
+    expect(PUBLIC_REFERENCE_PATTERN.test("GFT-ABCDEF123456")).toBe(true);
+    expect(PUBLIC_REFERENCE_PATTERN.test("GFT-abcdef123456")).toBe(false);
+    expect(PUBLIC_REFERENCE_PATTERN.test("GFT-ABC123")).toBe(false);
+    expect(PUBLIC_REFERENCE_PATTERN.test("ABCDEF123456")).toBe(false);
   });
 });

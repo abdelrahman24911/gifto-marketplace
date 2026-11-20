@@ -224,4 +224,88 @@ begin
   raise notice 'TEST 5 PASSED: active settlement blocks automatic adjustment';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST 6: an expired guest token is rejected by the guest refund RPCs (P1-02)
+-- ---------------------------------------------------------------------------
+reset role;
+insert into public.orders (
+  id, user_id, status, subtotal_minor, total_minor, recipient_name,
+  contact_phone, contact_email, address_line, city, governorate,
+  guest_token_hash, public_reference
+) values (
+  '62200000-0000-0000-0000-000000000002',
+  null, 'delivered', 10000, 10000, 'Guest Refund Buyer', '01001112233',
+  'guest@refunds.gifto.test', '12 Road 9, Maadi', 'Maadi', 'Cairo',
+  encode(digest('guest-refund-token', 'sha256'), 'hex'), 'GFT-ABCDEF123456'
+);
+
+insert into public.order_vendors (
+  id, order_id, vendor_id, status, subtotal_minor, commission_rate, delivered_at
+) values (
+  '72200000-0000-0000-0000-000000000002',
+  '62200000-0000-0000-0000-000000000002',
+  '42200000-0000-0000-0000-000000000001',
+  'delivered', 10000, 0.1000, now()
+);
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_hash text := encode(digest('guest-refund-token', 'sha256'), 'hex');
+  v_case uuid;
+begin
+  -- Live token: a guest case opens.
+  v_case := public.open_guest_refund_case(
+    '62200000-0000-0000-0000-000000000002', v_hash,
+    '72200000-0000-0000-0000-000000000002', 'Item arrived damaged', 5000);
+  if v_case is null then
+    raise exception 'TEST 6 FAILED: live guest token could not open a case';
+  end if;
+  raise notice 'TEST 6a PASSED: live guest token opens a refund case';
+end $$;
+
+-- Expire the token (as superuser; service_role holds no UPDATE on orders).
+reset role;
+update public.orders
+   set guest_token_expires_at = now() - interval '1 day'
+ where id = '62200000-0000-0000-0000-000000000002';
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_hash text := encode(digest('guest-refund-token', 'sha256'), 'hex');
+  v_rejected boolean := false;
+begin
+  -- Expire the token: opening and listing are both rejected.
+  begin
+    perform public.open_guest_refund_case(
+      '62200000-0000-0000-0000-000000000002', v_hash,
+      '72200000-0000-0000-0000-000000000002', 'Second attempt', 1000);
+  exception when sqlstate '42501' then
+    v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'TEST 6 FAILED: expired token opened a guest refund case';
+  end if;
+
+  v_rejected := false;
+  begin
+    perform public.get_guest_refund_cases(
+      '62200000-0000-0000-0000-000000000002', v_hash);
+  exception when sqlstate '42501' then
+    v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'TEST 6 FAILED: expired token listed guest refund cases';
+  end if;
+
+  raise notice 'TEST 6 PASSED: expired guest token rejected on refund open and list';
+end $$;
+
+reset role;
+
 rollback;

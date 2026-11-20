@@ -21,6 +21,7 @@
  * Phase 28: order status audit events and vendor status transition RPC.
  * Phase 29: delivery coverage helper and order_vendors trigger.
  * Phase 30: refund cases, commission adjustments, refund RPCs.
+ * P1-02: guest token expiry, recovery tokens, claim_guest_order.
  *
  * Regenerate from the live database once the Gifto project exists:
  *   supabase gen types typescript --project-id <ref> > src/lib/supabase/database.types.ts
@@ -443,6 +444,7 @@ export type Database = {
           governorate: string;
           notes: string | null;
           guest_token_hash: string | null;
+          guest_token_expires_at: string | null;
           idempotency_key: string | null;
           public_reference: string | null;
           created_at: string;
@@ -465,6 +467,7 @@ export type Database = {
           governorate: string;
           notes?: string | null;
           guest_token_hash?: string | null;
+          guest_token_expires_at?: string | null;
           idempotency_key?: string | null;
           public_reference?: string | null;
           created_at?: string;
@@ -487,6 +490,7 @@ export type Database = {
           governorate?: string;
           notes?: string | null;
           guest_token_hash?: string | null;
+          guest_token_expires_at?: string | null;
           idempotency_key?: string | null;
           public_reference?: string | null;
           created_at?: string;
@@ -1553,6 +1557,34 @@ export type Database = {
       cancel_guest_order: {
         Args: { p_order_id: string; p_token_hash: string };
         Returns: undefined;
+      };
+      request_guest_order_recovery: {
+        Args: { p_public_reference: string; p_contact: string };
+        Returns: {
+          order_id: string;
+          recovery_token: string;
+          contact_email: string | null;
+        }[];
+      };
+      redeem_guest_recovery_token: {
+        Args: {
+          p_order_id: string;
+          p_token_hash: string;
+          p_new_token_hash: string;
+        };
+        Returns: undefined;
+      };
+      claim_guest_order: {
+        Args: {
+          p_order_id: string;
+          p_token_hash: string;
+          p_user_id: string;
+        };
+        Returns: undefined;
+      };
+      guest_token_expired: {
+        Args: { p_order_id: string; p_token_hash: string };
+        Returns: boolean;
       };
       set_order_vendor_status: {
         Args: {

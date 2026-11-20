@@ -14,10 +14,12 @@ import {
   REFUND_CASE_STATUS_STYLES,
   canRequestRefund,
 } from "@/lib/refunds";
+import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 
 import { GuestRefundRequestForm } from "./refund-request-form";
 import { GuestCancelOrderButton } from "./cancel-order-form";
+import { ClaimOrderButton } from "./claim-order-button";
 
 import type {
   OrderStatus,
@@ -118,7 +120,38 @@ export default async function GuestOrderPage({
     p_token_hash: sha256Hex(token),
   });
 
-  if (error || !isGuestOrder(data)) notFound();
+  if (error || !isGuestOrder(data)) {
+    // P1-02: distinguish an expired token (recovery is possible) from an
+    // unknown one. This check needs the token itself, so it reveals nothing
+    // to a caller who does not already hold it.
+    const { data: expired } = await service.rpc("guest_token_expired", {
+      p_order_id: id,
+      p_token_hash: sha256Hex(token),
+    });
+    if (expired === true) {
+      return (
+        <div className="mx-auto w-full max-w-3xl px-4 py-10">
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
+            <h1 className="text-2xl font-semibold tracking-tight text-amber-900">
+              This order link has expired
+            </h1>
+            <p className="mt-1 text-sm text-amber-800">
+              Guest order links work for 7 days after ordering. Recover
+              access with your order reference and the phone number or email
+              used at checkout.
+            </p>
+            <Link
+              href="/orders/recover"
+              className="mt-3 inline-block rounded-md bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
+            >
+              Recover your order
+            </Link>
+          </div>
+        </div>
+      );
+    }
+    notFound();
+  }
 
   const order = data;
   const reference = order.reference ?? `#${order.id.slice(0, 8)}`;
@@ -134,6 +167,13 @@ export default async function GuestOrderPage({
   const refundCases = refundError
     ? []
     : ((refundData ?? []) as GuestRefundCase[]);
+
+  // P1-02: a signed-in viewer holding the guest token can claim the order
+  // onto their account.
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-10">
@@ -159,12 +199,19 @@ export default async function GuestOrderPage({
 
       <p className="mt-4 text-sm text-zinc-600">
         {ORDER_STATUS_HELP[status]} A copy of this confirmation stays available
-        in this browser; keep the reference above for your records.
+        in this browser; keep the reference above for your records. This order
+        link works for 7 days after ordering — if it expires,{" "}
+        <Link href="/orders/recover" className="font-medium text-zinc-900 underline">
+          recover your order
+        </Link>{" "}
+        with the reference and the phone or email used at checkout.
       </p>
 
       {status === "placed" ? (
         <GuestCancelOrderButton orderId={order.id} />
       ) : null}
+
+      {user ? <ClaimOrderButton orderId={order.id} /> : null}
 
       <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
