@@ -27,6 +27,7 @@ npm run dev
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Supabase anon key (RLS-scoped) |
 | `SUPABASE_SERVICE_ROLE_KEY` | **no** | Server-only. Never expose or commit. |
 | `NEXT_PUBLIC_SITE_URL` | yes | Public site URL (auth redirects). |
+| `NEXT_PUBLIC_SEO_INDEXING` | yes | Set to `true` only when public search indexing is approved; otherwise pages and `robots.txt` stay noindex. |
 
 Never commit `.env*`. Only variable *names* belong in `.env.example`.
 
@@ -53,7 +54,7 @@ npm run dev       # local dev server
 npm run build     # production build (webpack; --webpack works everywhere)
 npm run build:turbo  # production build via Turbopack (needs native SWC bindings)
 npm run lint      # eslint
-npm test          # vitest run — unit tests (money, cart, catalog, cart-store, slugify, site-url, guest-order, orders)
+npm test          # vitest run — unit tests (money, cart, catalog, cart-store, slugify, site-url, guest-order, orders, indexing, product JSON-LD, refunds, vendor settings)
 ```
 
 On win32/x64 this machine cannot load the native SWC bindings, so Turbopack builds
@@ -62,7 +63,7 @@ fail and `build` is pinned to `--webpack`.
 Type check: `npm run typecheck` (alias for `npx tsc --noEmit`, TypeScript strict mode).
 
 Unit tests live next to the modules they cover (`src/lib/*.test.ts`) and run in a
-plain Node environment via Vitest — no browser, no database. The RLS suites below
+plain Node environment via Vitest - no browser, no database. The RLS suites below
 cover the database side.
 
 ## Database / Migrations
@@ -77,7 +78,7 @@ supabase migration list   # verify applied migrations
 
 Only ever apply migrations to the **Gifto** project. Do not link or push to the FL Tase3 project.
 
-Migrations 1–19 are the verified hosted state for the Gifto project
+Migrations 1–27 are the verified hosted state for the Gifto project
 (`hqusykdyjpruysxezsrn`) and are recorded in `supabase_migrations.schema_migrations`. Migration 11
 adds guest COD checkout; migration 12 hardens the order tables to least-privilege grants; migration
 13 adds failed-COD-delivery handling and the parent-only `partially_completed` status. Migration 14
@@ -86,8 +87,14 @@ email uniqueness and the atomic vendor-creation RPC; 16 adds settlement audit ac
 one-open-per-vendor uniqueness; 17 adds the `voided` status and release/void metadata; 18 adds the
 append-only void lifecycle, active-allocation uniqueness and the reason-required void RPC; 19
 removes Supabase's default-ACL write grants from the `public_vendors` view so it stays read-only for
-API roles. Apply 14 through 19 in order. Pushing requires a valid CLI login (`supabase login`) and
-the project database password for `db push`.
+API roles. Migrations 20-25 add vendor profile privacy, vendor media, checkout pause, support
+requests, analytics indexes, and atomic settlement payout; 26-27 add occasion discovery and atomic
+occasion matching-rule replacement; 28 adds order status history, the audited status RPC, and
+delivered-at indexes; 29 enforces vendor delivery coverage at checkout and on direct suborder
+inserts; 30 adds refund cases, an append-only commission-adjustment ledger, guest/customer/admin
+refund RPCs, and net-commission settlement creation. Migrations 28-30 are applied locally only and
+have not been pushed to the hosted project. Apply migrations in order. Pushing requires a valid CLI
+login (`supabase login`) and the project database password for `db push`.
 
 See `docs/PHASE_2A_MANAGED_VENDOR_ONBOARDING.md` for the managed onboarding setup, Supabase Auth
 redirect requirements, verification steps and rollback notes. Executable rollback files for
@@ -98,7 +105,7 @@ pre-19 broad write grants on the security-definer view would reopen the exposure
 
 ### Verifying RLS locally
 
-Eight suites exercise the policies against a disposable `supabase/postgres` container
+Thirteen suites exercise the policies against a disposable `supabase/postgres` container
 (which already ships the `auth` schema, `auth.users`, `auth.uid()`, and the
 `anon`/`authenticated`/`service_role` roles). They simulate Supabase request context the
 way PostgREST does and abort non-zero on any failure. Each test sets both
@@ -118,6 +125,11 @@ transaction and ends with `rollback`, even on success.
 | `supabase/tests/rls_inventory_test.sql` | Phase 7/15: manual stock adjustments are audited and role-gated, no direct movement or stock-column writes, validation and history isolation |
 | `supabase/tests/rls_hardening_test.sql` | Phase 8: admin self-provisioning INSERT guard, dropped `is_vendor_staff`, last-owner demotion/deletion guard, service-role bootstrap path |
 | `supabase/tests/rls_guest_orders_test.sql` | Phase 11: guest COD checkout with no Auth user, service-role-only RPCs, catalog pricing, idempotent retries, token-gated confirmation, checkout quota, authenticated path unchanged |
+| `supabase/tests/rls_occasions_test.sql` | Phase 26/27: occasion/tag curation, vendor suggestions, slug redirects, matching modes, storage policies, least-privilege grants |
+| `supabase/tests/rls_vendor_dashboard_test.sql` | Migrations 20-25: vendor profile privacy, media isolation, checkout pause, support queue, analytics index |
+| `supabase/tests/rls_order_audit_test.sql` | Migration 28: audited status RPC, stale-page protection, required admin reasons, actor resolution, event read isolation |
+| `supabase/tests/rls_delivery_coverage_test.sql` | Migration 29: exact governorate matching, city/address area matching, empty-list allow behavior, trigger enforcement on direct suborder inserts |
+| `supabase/tests/rls_refunds_test.sql` | Migration 30: customer/guest case creation, buyer isolation, admin approval, commission-adjustment ledger, net settlement and active-settlement guard |
 
 Three details matter when running them:
 
@@ -130,18 +142,18 @@ Three details matter when running them:
    first migration can fail intermittently.
 3. **Run each suite against a fresh schema.** Some assertions use exact row counts
    (`anon sees 1 vendor`), so fixtures from another suite would make them fail. Reset
-    `public` and re-apply migrations 1–19 before each suite.
+    `public` and re-apply all migrations before each suite.
 
 ```bash
 docker run -d --name gifto-rls-test -e POSTGRES_PASSWORD=postgres \
   -p 65432:5432 public.ecr.aws/supabase/postgres:17.11.0.003
-# wait for the init gate described above, then for each of the eight suites:
+# wait for the init gate described above, then for each of the thirteen suites:
 docker exec gifto-rls-test psql -U postgres -c \
   'drop schema public cascade; create schema public; grant usage on schema public to anon, authenticated, service_role;'
 docker cp supabase/tests/storage_stub.sql gifto-rls-test:/tmp/storage_stub.sql
 docker exec -e PGPASSWORD=postgres gifto-rls-test \
   psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -f /tmp/storage_stub.sql
-for s in rls_foundation rls_onboarding rls_catalog rls_orders rls_commissions rls_inventory rls_hardening rls_guest_orders; do
+for s in rls_foundation rls_onboarding rls_catalog rls_orders rls_commissions rls_inventory rls_hardening rls_guest_orders rls_occasions rls_vendor_dashboard rls_order_audit rls_delivery_coverage rls_refunds; do
   docker exec gifto-rls-test psql -U postgres -c \
     'drop schema public cascade; create schema public; grant usage on schema public to anon, authenticated, service_role;'
   docker cp supabase/migrations gifto-rls-test:/tmp/migrations
@@ -299,6 +311,24 @@ Running it through the API requires platform-admin — it is a development conve
 - RLS: vendor members read only their own entries/settlements/lines; platform admins read everything;
   there is **no** `INSERT`/`UPDATE`/`DELETE` grant — the ledger is written only by the triggers and RPCs.
 
+### Refunds and delivery coverage (migrations 29-30, implemented locally)
+
+- `refund_cases` records a request against one vendor suborder, with customer, guest,
+  or admin source and `open`/`approved`/`rejected`/`cancelled` status.
+- Customers and guests can request a refund after a suborder ships. Admins resolve
+  the case with approve/reject, a refund amount, and an optional note.
+- `commission_adjustments` is an append-only negative ledger keyed to one approved
+  case. It reduces the shop's earned commission proportionally and caps at the
+  commission still available.
+- Approval is blocked while the commission is allocated to an active settlement;
+  void or release the settlement first. Fully adjusted entries become `reversed`.
+- `create_settlement` snapshots the net commission after adjustments, and
+  `mark_settlement_paid` verifies the line still equals the entry plus adjustments.
+- Guest refund RPCs are service-role-only and require the order token hash. Direct
+  writes to the refund tables are not granted; all changes go through RPCs.
+- Migration 29 adds delivery coverage at checkout and a trigger on
+  `order_vendors`, so direct suborder inserts cannot bypass the address check.
+
 ### Phase 7 inventory adjustments (implemented)
 
 `supabase/migrations/00000000000007_inventory_adjustment.sql`:
@@ -431,9 +461,11 @@ aspirational.
 |---|---|
 | `npm run lint` | 0 errors, 0 warnings |
 | `npm run typecheck` | clean |
-| `npm test` | 75 passing unit tests across 9 files |
+| `npm test` | 357 passing unit tests across 37 files |
 | `npm run build` | exit 0 (all routes), including Tailwind CSS verification |
-| DB suites in disposable container | All eight suites passed on fresh schemas after migrations 1-19, including `rls_guest_orders_test.sql`, the Phase 9B `rls_orders_test.sql` TEST 16 and foundation TEST H4 (view is read-only for API roles) |
+| DB suites in disposable container | All thirteen suites passed on a fresh schema after migrations 1-30, including `rls_order_audit_test.sql`, `rls_delivery_coverage_test.sql`, and `rls_refunds_test.sql` |
+| Migration 30 settlement regression | Full suite caught a zero-value payout regression in `mark_settlement_paid`; fixed and re-ran all thirteen suites successfully |
+| Phase 1 dashboard validation | `npm run lint`, `npm run typecheck`, `npm test` (356), and `npm run build` pass; admin orders list/detail, vendor/admin analytics, category edit/delete, and support pagination/search are implemented |
 | Migrations 14-15 local apply + suites | `supabase start` applied migrations 1-15 and `seed.sql` successfully; all eight guarded suites then passed against the local Supabase CLI stack |
 | Migrations 16-18 local apply + commissions suite | `supabase db reset --local` applied migrations 1-18 and `seed.sql`; updated `rls_commissions_test.sql` passed all 15 tests in the disposable container, including preserved lines, required reasons, active-allocation uniqueness, re-settlement and reversal after release |
 | Phase 2B app checks | vendor finance and admin settlement list/detail/create/paid/void actions typecheck, lint, pass unit tests and build |
