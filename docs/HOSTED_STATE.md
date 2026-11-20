@@ -336,3 +336,25 @@ file and the comment at the top of `globals.css` are the record.
   tested and committed (see commits below). Vitest 466 (was 435 at
   base), RLS suites 16 (was 15), migrations 49 (was 46). UI/UX rating
   is not re-scored here — that is the re-audit's job (v4).
+
+## R-01 — voided settlement restores consumed clawbacks (2026-11-21)
+
+- Migration 50 redefines `void_settlement(uuid, text)` only: before the
+  batch is marked voided, every `clawback_applications` row for the
+  settlement is deleted and any clawback it had flipped to `consumed`
+  is restored to `outstanding` with `consumed_at` cleared. Partially
+  applied clawbacks stay `outstanding`; deleting their application
+  restores the un-applied portion. `direct_repayment` clawbacks are
+  never restored. The voided batch's `total_minor` / `clawback_minor`
+  are unchanged (historical snapshot; rls_commissions TEST 14 asserts
+  void never changes the original total).
+- Regression test: `rls_refunds_test.sql` TEST 16 — create a settlement
+  netting a -500 clawback (total 1500), void it (clawback outstanding
+  again, no applications left, voided total unchanged), create the
+  next settlement (total 1500, clawback re-netted exactly once), pay
+  the net 1500 with proof. Rollback in
+  `supabase/rollbacks/00000000000050_void_settlement_restore_clawbacks_rollback.sql`
+  restores the migration-18 definition; verified to apply.
+- Verification: lint, typecheck, Vitest 466, full RLS 16/16, build —
+  all pass. Migrations now 50. R-01 is CLOSED in code; hosted apply
+  is still UNVERIFIED (no hosted access).

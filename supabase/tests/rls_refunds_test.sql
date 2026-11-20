@@ -2582,6 +2582,209 @@ begin
   raise notice 'TEST 15d PASSED: guest cancels with a valid token; resolved_by stays null';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST 16 (R-01, HIGH): voiding a settlement restores the clawbacks it
+-- consumed, so they are re-netted by the next settlement instead of
+-- being silently burned.
+-- ---------------------------------------------------------------------------
+-- Vendor G: settle 1000, pay, post-payment refund 5000 -> clawback -500.
+reset role;
+insert into public.vendors (id, name, slug, status, commission_rate)
+values (
+  '42200000-0000-0000-0000-000000000017',
+  'Void Clawback Shop', 'void-clawback-shop', 'active', 0.1000
+);
+
+insert into public.orders (
+  id, user_id, status, subtotal_minor, total_minor, recipient_name,
+  contact_phone, address_line, city, governorate
+) values (
+  '62200000-0000-0000-0000-000000000017',
+  '12200000-0000-0000-0000-000000000001',
+  'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+  '12 Road 9, Maadi', 'Maadi', 'Cairo'
+);
+
+insert into public.order_vendors (
+  id, order_id, vendor_id, status, subtotal_minor, commission_rate, delivered_at
+) values (
+  '72200000-0000-0000-0000-000000000017',
+  '62200000-0000-0000-0000-000000000017',
+  '42200000-0000-0000-0000-000000000017',
+  'delivered', 10000, 0.1000, now()
+);
+
+insert into public.commission_entries (
+  id, order_vendor_id, vendor_id, rate, base_minor, amount_minor, earned_at
+) values (
+  '82200000-0000-0000-0000-000000000017',
+  '72200000-0000-0000-0000-000000000017',
+  '42200000-0000-0000-0000-000000000017',
+  0.1000, 10000, 1000, now()
+);
+
+set role authenticated;
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+insert into refund_test_ids
+select 'r01_settlement_1', public.create_settlement(
+  '42200000-0000-0000-0000-000000000017', 'R-01 first batch');
+
+do $$
+begin
+  perform public.mark_settlement_paid(
+    (select id from refund_test_ids where name = 'r01_settlement_1'),
+    1000, 'bank_transfer', 'R01-TEST16-001');
+end $$;
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000001"}';
+insert into refund_test_ids
+select 'r01_case', public.open_refund_case(
+  '72200000-0000-0000-0000-000000000017', 'R-01 paid-return issue', 5000);
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+do $$
+begin
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'r01_case'), true, 5000, 'R-01 refund approved');
+
+  if not exists (
+    select 1 from public.commission_clawbacks
+     where refund_case_id = (select id from refund_test_ids where name = 'r01_case')
+       and amount_minor = -500
+       and status = 'outstanding'
+       and consumed_at is null
+  ) then
+    raise exception 'TEST 16 FAILED: clawback is wrong (expected -500 outstanding)';
+  end if;
+  raise notice 'TEST 16a PASSED: paid-return refund records a -500 outstanding clawback';
+end $$;
+
+-- New earnings 2000: the next settlement nets the clawback (total 1500).
+reset role;
+insert into public.orders (
+  id, user_id, status, subtotal_minor, total_minor, recipient_name,
+  contact_phone, address_line, city, governorate
+) values (
+  '62200000-0000-0000-0000-000000000018',
+  '12200000-0000-0000-0000-000000000001',
+  'delivered', 20000, 20000, 'Refund Buyer', '01001112233',
+  '12 Road 9, Maadi', 'Maadi', 'Cairo'
+);
+
+insert into public.order_vendors (
+  id, order_id, vendor_id, status, subtotal_minor, commission_rate, delivered_at
+) values (
+  '72200000-0000-0000-0000-000000000018',
+  '62200000-0000-0000-0000-000000000018',
+  '42200000-0000-0000-0000-000000000017',
+  'delivered', 20000, 0.1000, now()
+);
+
+insert into public.commission_entries (
+  id, order_vendor_id, vendor_id, rate, base_minor, amount_minor, earned_at
+) values (
+  '82200000-0000-0000-0000-000000000018',
+  '72200000-0000-0000-0000-000000000018',
+  '42200000-0000-0000-0000-000000000017',
+  0.1000, 20000, 2000, now()
+);
+
+set role authenticated;
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+insert into refund_test_ids
+select 'r01_settlement_2', public.create_settlement(
+  '42200000-0000-0000-0000-000000000017', 'R-01 second batch nets the clawback');
+
+do $$
+declare
+  v_sid uuid := (select id from refund_test_ids where name = 'r01_settlement_2');
+  v_voided_total int;
+begin
+  if (select total_minor from public.settlements where id = v_sid) <> 1500 then
+    raise exception 'TEST 16 FAILED: second settlement total is not 1500 (2000 - 500)';
+  end if;
+
+  if (select clawback_minor from public.settlements where id = v_sid) <> 500 then
+    raise exception 'TEST 16 FAILED: second settlement clawback_minor is not 500';
+  end if;
+
+  if (select count(*) from public.clawback_applications
+       where settlement_id = v_sid) <> 1 then
+    raise exception 'TEST 16 FAILED: clawback was not applied exactly once to the second batch';
+  end if;
+
+  if not exists (
+    select 1 from public.commission_clawbacks
+     where refund_case_id = (select id from refund_test_ids where name = 'r01_case')
+       and status = 'consumed'
+       and consumed_at is not null
+  ) then
+    raise exception 'TEST 16 FAILED: fully applied clawback is not consumed';
+  end if;
+  raise notice 'TEST 16b PASSED: second settlement nets the -500 clawback (total 1500)';
+
+  -- Void the batch: the clawback must come back to outstanding, its
+  -- application must be gone, and the voided batch keeps its totals.
+  v_voided_total := (select total_minor from public.settlements where id = v_sid);
+  perform public.void_settlement(v_sid, 'Voided by mistake');
+
+  if (select status from public.settlements where id = v_sid) <> 'voided' then
+    raise exception 'TEST 16 FAILED: voided settlement status is not voided';
+  end if;
+
+  if (select total_minor from public.settlements where id = v_sid) <> v_voided_total then
+    raise exception 'TEST 16 FAILED: void changed the voided settlement total';
+  end if;
+
+  if (select count(*) from public.clawback_applications
+       where settlement_id = v_sid) <> 0 then
+    raise exception 'TEST 16 FAILED: void left clawback applications on the voided batch';
+  end if;
+
+  if not exists (
+    select 1 from public.commission_clawbacks
+     where refund_case_id = (select id from refund_test_ids where name = 'r01_case')
+       and status = 'outstanding'
+       and consumed_at is null
+  ) then
+    raise exception 'TEST 16 FAILED: void did not restore the clawback to outstanding';
+  end if;
+  raise notice 'TEST 16c PASSED: voiding restores the clawback to outstanding';
+
+  -- The next settlement re-batches the released entry and re-nets the
+  -- restored clawback exactly once, and the net pays.
+  insert into refund_test_ids
+  select 'r01_settlement_3', public.create_settlement(
+    '42200000-0000-0000-0000-000000000017', 'R-01 third batch re-nets the clawback');
+
+  v_sid := (select id from refund_test_ids where name = 'r01_settlement_3');
+
+  if (select total_minor from public.settlements where id = v_sid) <> 1500 then
+    raise exception 'TEST 16 FAILED: third settlement total is not 1500 (2000 - 500)';
+  end if;
+
+  if (select clawback_minor from public.settlements where id = v_sid) <> 500 then
+    raise exception 'TEST 16 FAILED: third settlement clawback_minor is not 500';
+  end if;
+
+  if (select count(*) from public.clawback_applications
+       where clawback_id = (
+         select id from public.commission_clawbacks
+          where refund_case_id = (select id from refund_test_ids where name = 'r01_case')
+       )) <> 1 then
+    raise exception 'TEST 16 FAILED: restored clawback was not applied exactly once to the third batch';
+  end if;
+
+  perform public.mark_settlement_paid(
+    v_sid, 1500, 'bank_transfer', 'R01-TEST16-002', 'Third batch, net of restored clawback');
+  raise notice 'TEST 16d PASSED: restored clawback is re-netted once and the net 1500 pays';
+  raise notice 'TEST 16 PASSED: voided settlement restores its clawbacks';
+end $$;
+
 reset role;
 
 rollback;
