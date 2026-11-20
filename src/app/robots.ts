@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 
+import { isIndexingEnabled } from "@/lib/indexing";
 import { getSiteUrl } from "@/lib/site-url";
 
 const PRIVATE_PREFIXES = [
@@ -17,6 +18,13 @@ const PRIVATE_PREFIXES = [
 
 export default function robots(): MetadataRoute.Robots {
   const siteUrl = getSiteUrl({ fallbackToProductionOnLocalhost: true });
+
+  if (!isIndexingEnabled()) {
+    return {
+      rules: [{ userAgent: "*", disallow: "/" }],
+      host: siteUrl,
+    };
+  }
 
   return {
     rules: [

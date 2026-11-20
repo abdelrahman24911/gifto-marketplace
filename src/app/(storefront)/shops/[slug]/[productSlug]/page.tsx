@@ -22,8 +22,14 @@ import {
 import { loadProductsByShop } from "@/lib/catalog";
 import { pageMetadata } from "@/lib/metadata";
 import { formatEgp } from "@/lib/money";
-import { createClient } from "@/lib/supabase/server";
-import type { Json } from "@/lib/supabase/database.types";
+import { productJsonLd, serializeJsonLd } from "@/lib/product-json-ld";
+import {
+  createClient,
+} from "@/lib/supabase/server";
+import {
+  PRODUCT_IMAGES_BUCKET,
+  type Json,
+} from "@/lib/supabase/database.types";
 import {
   formatPrepTime,
   formatWorkingHours,
@@ -375,6 +381,24 @@ export default async function ProductPage({ params }: Props) {
     shop.prep_time_max_days,
   );
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const imageUrls = supabaseUrl
+    ? images.map(
+        (image) =>
+          `${supabaseUrl}/storage/v1/object/public/${PRODUCT_IMAGES_BUCKET}/${image.path}`,
+      )
+    : [];
+  const structuredData = productJsonLd({
+    name: product.name,
+    description: product.description,
+    imageUrls,
+    priceMinor: product.price_minor,
+    stock: product.stock,
+    shopName: shop.name,
+    shopSlug: shop.slug,
+    productSlug: product.slug,
+  });
+
   const detailsTabs = [
     ...(product.description?.trim()
       ? [
@@ -404,6 +428,10 @@ export default async function ProductPage({ params }: Props) {
 
   return (
     <div className={purchasable ? "pb-28 lg:pb-8" : "pb-8"}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
+      />
       <Container className="py-8 sm:py-10 lg:py-12">
         <Breadcrumb
           items={[

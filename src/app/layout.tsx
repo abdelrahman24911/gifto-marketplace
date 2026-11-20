@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Fraunces, Geist, Geist_Mono } from "next/font/google";
 
 import { NavigationGuardProvider } from "@/components/navigation-guard";
+import { isIndexingEnabled } from "@/lib/indexing";
 import { SOCIAL_IMAGE } from "@/lib/metadata";
 import { getSiteUrl } from "@/lib/site-url";
 
@@ -37,6 +38,10 @@ export const metadata: Metadata = {
     template: "%s — Gifto",
   },
   description,
+  robots: {
+    index: isIndexingEnabled(),
+    follow: isIndexingEnabled(),
+  },
   openGraph: {
     type: "website",
     siteName: "Gifto",
