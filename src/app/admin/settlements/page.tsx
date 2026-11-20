@@ -452,7 +452,7 @@ export default async function AdminSettlementsPage({
         <section className="mt-8 rounded-2xl border border-line bg-paper-soft p-5">
           <AdminSectionHeading
             title={`Outstanding paid-return clawbacks (${outstandingClawbacks.length})`}
-            description="Commission Gifto already paid out that a shop owes back after a paid return (D-08). A clawback is netted against the shop's next settlement automatically; when a shop has no new commission to settle, record the direct repayment here instead — the shop repays Gifto directly and the reference is the proof."
+            description="Commission Gifto already paid out that a shop owes back after a paid return (D-08). A clawback is netted against the shop's next settlement automatically; when a shop has no new commission to settle, record the direct repayment here instead — the shop repays Gifto directly and the reference is the proof. A clawback already being recovered through an open settlement cannot be repaid directly until that settlement is paid or voided."
           />
           {clawbacksFailed ? (
             <div className="mt-4">

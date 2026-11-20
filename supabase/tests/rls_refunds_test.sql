@@ -3252,6 +3252,273 @@ begin
   raise notice 'TEST 18 PASSED: clawback-only vendors are routed to direct repayment, never an empty batch';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST 19 (R-07, MEDIUM, financial): a direct repayment must not
+-- double-recover a clawback that is already being recovered through an
+-- OPEN settlement. The repayment is refused while the batch is open;
+-- voiding the batch restores the full clawback and unblocks it; an
+-- application in a PAID batch does not block — its remainder is exactly
+-- what the direct repayment covers.
+-- ---------------------------------------------------------------------------
+-- Vendor A: settle 1000 and pay, refund 5000 claws back 500, then a
+-- 300 batch nets 300 of it (partial application, batch total 0).
+reset role;
+insert into public.vendors (id, name, slug, status, commission_rate)
+values (
+  '42200000-0000-0000-0000-000000000019',
+  'R07 Open Shop', 'r07-open-shop', 'active', 0.1000
+),
+(
+  '42200000-0000-0000-0000-000000000020',
+  'R07 Paid Shop', 'r07-paid-shop', 'active', 0.1000
+);
+
+insert into public.orders (
+  id, user_id, status, subtotal_minor, total_minor, recipient_name,
+  contact_phone, address_line, city, governorate
+) values (
+  '62200000-0000-0000-0000-000000000035',
+  '12200000-0000-0000-0000-000000000001',
+  'delivered', 10000, 10000, 'Refund Buyer', '01001912233',
+  '12 Road 9, Maadi', 'Maadi', 'Cairo'
+),
+(
+  '62200000-0000-0000-0000-000000000037',
+  '12200000-0000-0000-0000-000000000001',
+  'delivered', 10000, 10000, 'Refund Buyer', '01001912233',
+  '12 Road 9, Maadi', 'Maadi', 'Cairo'
+);
+
+insert into public.order_vendors (
+  id, order_id, vendor_id, status, subtotal_minor, commission_rate, delivered_at
+) values (
+  '72200000-0000-0000-0000-000000000035',
+  '62200000-0000-0000-0000-000000000035',
+  '42200000-0000-0000-0000-000000000019',
+  'delivered', 10000, 0.1000, now()
+),
+(
+  '72200000-0000-0000-0000-000000000037',
+  '62200000-0000-0000-0000-000000000037',
+  '42200000-0000-0000-0000-000000000020',
+  'delivered', 10000, 0.1000, now()
+);
+
+insert into public.commission_entries (
+  id, order_vendor_id, vendor_id, rate, base_minor, amount_minor, earned_at
+) values (
+  '82200000-0000-0000-0000-000000000035',
+  '72200000-0000-0000-0000-000000000035',
+  '42200000-0000-0000-0000-000000000019',
+  0.1000, 10000, 1000, now()
+),
+(
+  '82200000-0000-0000-0000-000000000037',
+  '72200000-0000-0000-0000-000000000037',
+  '42200000-0000-0000-0000-000000000020',
+  0.1000, 10000, 1000, now()
+);
+
+set role authenticated;
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+insert into refund_test_ids
+select 'r07a_first_settlement', public.create_settlement(
+  '42200000-0000-0000-0000-000000000019', 'R-07 vendor A first batch');
+insert into refund_test_ids
+select 'r07b_first_settlement', public.create_settlement(
+  '42200000-0000-0000-0000-000000000020', 'R-07 vendor B first batch');
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000001"}';
+insert into refund_test_ids
+select 'r07a_case', public.open_refund_case(
+  '72200000-0000-0000-0000-000000000035', 'Paid-return issue', 5000);
+insert into refund_test_ids
+select 'r07b_case', public.open_refund_case(
+  '72200000-0000-0000-0000-000000000037', 'Paid-return issue', 5000);
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+do $$
+declare
+  v_claw_a uuid;
+  v_claw_b uuid;
+  v_sid_a uuid;
+  v_sid_b uuid;
+  v_blocked boolean := false;
+begin
+  perform public.mark_settlement_paid(
+    (select id from refund_test_ids where name = 'r07a_first_settlement'),
+    1000, 'bank_transfer', 'R07-TEST19-A1');
+  perform public.mark_settlement_paid(
+    (select id from refund_test_ids where name = 'r07b_first_settlement'),
+    1000, 'bank_transfer', 'R07-TEST19-B1');
+
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'r07a_case'),
+    true, 5000, 'Refund approved');
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'r07b_case'),
+    true, 5000, 'Refund approved');
+
+  select id into v_claw_a from public.commission_clawbacks
+   where refund_case_id = (select id from refund_test_ids where name = 'r07a_case');
+  select id into v_claw_b from public.commission_clawbacks
+   where refund_case_id = (select id from refund_test_ids where name = 'r07b_case');
+  if v_claw_a is null or v_claw_b is null then
+    raise exception 'TEST 19 FAILED: R-07 clawbacks were not recorded';
+  end if;
+  perform set_config('gifto_test.r07_claw_a', v_claw_a::text, false);
+  perform set_config('gifto_test.r07_claw_b', v_claw_b::text, false);
+  raise notice 'TEST 19 SETUP PASSED: two -500 clawbacks recorded';
+end $$;
+
+-- Second orders (3000 each, commission 300) so the next batches net
+-- only 300 of each 500 clawback — the partial-application shape.
+reset role;
+insert into public.orders (
+  id, user_id, status, subtotal_minor, total_minor, recipient_name,
+  contact_phone, address_line, city, governorate
+) values (
+  '62200000-0000-0000-0000-000000000036',
+  '12200000-0000-0000-0000-000000000001',
+  'delivered', 3000, 3000, 'Refund Buyer', '01001912233',
+  '12 Road 9, Maadi', 'Maadi', 'Cairo'
+),
+(
+  '62200000-0000-0000-0000-000000000038',
+  '12200000-0000-0000-0000-000000000001',
+  'delivered', 3000, 3000, 'Refund Buyer', '01001912233',
+  '12 Road 9, Maadi', 'Maadi', 'Cairo'
+);
+
+insert into public.order_vendors (
+  id, order_id, vendor_id, status, subtotal_minor, commission_rate, delivered_at
+) values (
+  '72200000-0000-0000-0000-000000000036',
+  '62200000-0000-0000-0000-000000000036',
+  '42200000-0000-0000-0000-000000000019',
+  'delivered', 3000, 0.1000, now()
+),
+(
+  '72200000-0000-0000-0000-000000000038',
+  '62200000-0000-0000-0000-000000000038',
+  '42200000-0000-0000-0000-000000000020',
+  'delivered', 3000, 0.1000, now()
+);
+
+insert into public.commission_entries (
+  id, order_vendor_id, vendor_id, rate, base_minor, amount_minor, earned_at
+) values (
+  '82200000-0000-0000-0000-000000000036',
+  '72200000-0000-0000-0000-000000000036',
+  '42200000-0000-0000-0000-000000000019',
+  0.1000, 3000, 300, now()
+),
+(
+  '82200000-0000-0000-0000-000000000038',
+  '72200000-0000-0000-0000-000000000038',
+  '42200000-0000-0000-0000-000000000020',
+  0.1000, 3000, 300, now()
+);
+
+set role authenticated;
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+insert into refund_test_ids
+select 'r07a_second_settlement', public.create_settlement(
+  '42200000-0000-0000-0000-000000000019', 'R-07 vendor A second batch');
+insert into refund_test_ids
+select 'r07b_second_settlement', public.create_settlement(
+  '42200000-0000-0000-0000-000000000020', 'R-07 vendor B second batch');
+
+do $$
+declare
+  v_claw_a uuid := current_setting('gifto_test.r07_claw_a')::uuid;
+  v_claw_b uuid := current_setting('gifto_test.r07_claw_b')::uuid;
+  v_sid_a uuid := (select id from refund_test_ids where name = 'r07a_second_settlement');
+  v_sid_b uuid := (select id from refund_test_ids where name = 'r07b_second_settlement');
+  v_blocked boolean := false;
+begin
+  -- Both batches netted 300 and sit at total 0, open.
+  if (select total_minor from public.settlements where id = v_sid_a) <> 0
+     or (select clawback_minor from public.settlements where id = v_sid_a) <> 300 then
+    raise exception 'TEST 19 FAILED: vendor A second batch did not net 300';
+  end if;
+  if (select total_minor from public.settlements where id = v_sid_b) <> 0
+     or (select clawback_minor from public.settlements where id = v_sid_b) <> 300 then
+    raise exception 'TEST 19 FAILED: vendor B second batch did not net 300';
+  end if;
+
+  -- 19a: direct repayment is refused while the batch is open, and
+  -- nothing about the clawback or its application changes.
+  begin
+    perform public.record_clawback_direct_repayment(v_claw_a, 'BANK-REPAY-R07-A');
+  exception when check_violation then
+    if sqlerrm like '%open settlement%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 19 FAILED: wrong error for open-batch repayment: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 19 FAILED: direct repayment was accepted while an open settlement held the clawback';
+  end if;
+  if not exists (
+    select 1 from public.commission_clawbacks
+     where id = v_claw_a and status = 'outstanding'
+  ) then
+    raise exception 'TEST 19 FAILED: blocked repayment changed the clawback status';
+  end if;
+  if (select coalesce(sum(amount_minor), 0) from public.clawback_applications
+       where clawback_id = v_claw_a and settlement_id = v_sid_a) <> 300 then
+    raise exception 'TEST 19 FAILED: blocked repayment changed the application';
+  end if;
+  raise notice 'TEST 19a PASSED: direct repayment refused while an open settlement holds the clawback';
+
+  -- 19b: voiding the open batch restores the clawback (R-01) and the
+  -- direct repayment then succeeds for the full amount.
+  perform public.void_settlement(v_sid_a, 'R-07 test void');
+  if exists (select 1 from public.clawback_applications where clawback_id = v_claw_a) then
+    raise exception 'TEST 19 FAILED: void did not delete the application';
+  end if;
+  perform public.record_clawback_direct_repayment(v_claw_a, 'BANK-REPAY-R07-A');
+  if not exists (
+    select 1 from public.commission_clawbacks
+     where id = v_claw_a
+       and status = 'direct_repayment'
+       and direct_repayment_reference = 'BANK-REPAY-R07-A'
+  ) then
+    raise exception 'TEST 19 FAILED: repayment after void was not recorded';
+  end if;
+  raise notice 'TEST 19b PASSED: void restores the clawback and unblocks the direct repayment';
+
+  -- 19c: paying the other (zero-net) batch does NOT block — the 200
+  -- remainder is exactly what the direct repayment covers.
+  perform public.mark_settlement_paid(v_sid_b, 0, null, null, null);
+  if not exists (
+    select 1 from public.commission_clawbacks
+     where id = v_claw_b and status = 'outstanding'
+  ) then
+    raise exception 'TEST 19 FAILED: partially applied clawback did not stay outstanding after its batch paid';
+  end if;
+  perform public.record_clawback_direct_repayment(v_claw_b, 'BANK-REPAY-R07-B');
+  if not exists (
+    select 1 from public.commission_clawbacks
+     where id = v_claw_b
+       and status = 'direct_repayment'
+       and direct_repayment_reference = 'BANK-REPAY-R07-B'
+  ) then
+    raise exception 'TEST 19 FAILED: repayment of a paid-batch remainder was not recorded';
+  end if;
+  if (select clawback_minor from public.settlements where id = v_sid_b) <> 300 then
+    raise exception 'TEST 19 FAILED: paid batch clawback total changed after repayment';
+  end if;
+  raise notice 'TEST 19c PASSED: a paid batch does not block direct repayment of the remainder';
+  raise notice 'TEST 19 PASSED: R-07 direct repayment cannot double-recover an open-batch clawback';
+end $$;
+
 reset role;
 
 rollback;

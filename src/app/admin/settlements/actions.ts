@@ -43,7 +43,8 @@ function attemptFrom(prev: { attempt?: number } | null): number {
  * with no new commission). Nothing here moves money: the repayment
  * happened outside the dashboard, and the reference is the proof. The
  * RPC is the authority — it refuses a non-admin caller, a bad reference,
- * and a clawback that is already resolved.
+ * a clawback that is already resolved, and (R-07) a clawback that is
+ * already being recovered through an open settlement.
  */
 export async function recordDirectRepayment(
   prev: DirectRepaymentState,
