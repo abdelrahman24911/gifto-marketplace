@@ -9,7 +9,9 @@ import {
 
 // P1-04 (D-09): manual restock after the vendor confirmed receipt. Shown
 // only on approved physical-return cases with a recorded receipt that have
-// not been restocked yet. The RPC restocks exactly once.
+// not been restocked yet, and only when the inspection found the item in
+// good condition — a damaged or wrong item is never restocked (R-05).
+// The RPC restocks exactly once.
 export function RestockRefundForm({ caseId }: { caseId: string }) {
   const [state, formAction, pending] = useActionState<
     RestockRefundState,

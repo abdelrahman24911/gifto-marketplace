@@ -25,6 +25,60 @@ export function ConfirmReceiptForm({
       <input type="hidden" name="case_id" value={caseId} />
       <input type="hidden" name="vendor_id" value={vendorId} />
       <div>
+        <span className="block text-xs font-semibold uppercase tracking-wide text-ink-mute">
+          What arrived
+        </span>
+        <div className="mt-2 grid gap-2">
+          <label className="flex items-start gap-2 text-sm text-ink">
+            <input
+              type="radio"
+              name="condition"
+              value="good"
+              defaultChecked
+              className="mt-0.5"
+            />
+            <span>
+              Good condition
+              <span className="block text-xs text-ink-mute">
+                The customer pays the return courier; the item can be
+                restocked after inspection.
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2 text-sm text-ink">
+            <input
+              type="radio"
+              name="condition"
+              value="wrong_item"
+              className="mt-0.5"
+            />
+            <span>
+              Wrong item
+              <span className="block text-xs text-ink-mute">
+                The shop pays the return courier; the item is not the
+                product ordered, so it is never restocked against this
+                order.
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2 text-sm text-ink">
+            <input
+              type="radio"
+              name="condition"
+              value="damaged"
+              className="mt-0.5"
+            />
+            <span>
+              Damaged
+              <span className="block text-xs text-ink-mute">
+                The shop pays the return courier; a damaged item is never
+                restocked.
+              </span>
+            </span>
+          </label>
+        </div>
+      </div>
+      <div>
         <label
           htmlFor={`${id}-note`}
           className="block text-xs font-semibold uppercase tracking-wide text-ink-mute"

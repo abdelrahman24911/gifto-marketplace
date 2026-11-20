@@ -979,6 +979,8 @@ export type Database = {
           received_at: string | null;
           received_by: string | null;
           receipt_note: string | null;
+          inspection_condition: "good" | "wrong_item" | "damaged" | null;
+          return_courier_paid_by: "customer" | "vendor" | null;
           acknowledged_at: string | null;
           acknowledged_by: string | null;
           restocked_at: string | null;
@@ -1010,6 +1012,8 @@ export type Database = {
           received_at?: string | null;
           received_by?: string | null;
           receipt_note?: string | null;
+          inspection_condition?: "good" | "wrong_item" | "damaged" | null;
+          return_courier_paid_by?: "customer" | "vendor" | null;
           acknowledged_at?: string | null;
           acknowledged_by?: string | null;
           restocked_at?: string | null;
@@ -1041,6 +1045,8 @@ export type Database = {
           received_at?: string | null;
           received_by?: string | null;
           receipt_note?: string | null;
+          inspection_condition?: "good" | "wrong_item" | "damaged" | null;
+          return_courier_paid_by?: "customer" | "vendor" | null;
           acknowledged_at?: string | null;
           acknowledged_by?: string | null;
           restocked_at?: string | null;
@@ -1976,7 +1982,11 @@ export type Database = {
         Returns: undefined;
       };
       confirm_refund_receipt: {
-        Args: { p_case_id: string; p_note?: string | null };
+        Args: {
+          p_case_id: string;
+          p_note?: string | null;
+          p_condition?: "good" | "wrong_item" | "damaged" | null;
+        };
         Returns: undefined;
       };
       restock_refund_case: {

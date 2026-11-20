@@ -52,6 +52,8 @@ type RefundQueueRow = {
   return_path: RefundReturnPath | null;
   received_at: string | null;
   receipt_note: string | null;
+  inspection_condition: "good" | "wrong_item" | "damaged" | null;
+  return_courier_paid_by: "customer" | "vendor" | null;
   acknowledged_at: string | null;
   restocked_at: string | null;
   escalation_count: number;
@@ -108,7 +110,7 @@ export default async function AdminRefundsPage({
   let listQuery = supabase
     .from("refund_cases")
     .select(
-      "id, order_id, order_vendor_id, vendor_id, source, status, reason, requested_amount_minor, refund_amount_minor, resolution_note, created_at, resolved_at, resolved_by, return_path, received_at, receipt_note, acknowledged_at, restocked_at, escalation_count, escalated_at, escalation_note, first_resolved_at, order:orders(public_reference, recipient_name, contact_phone), order_vendor:order_vendors(status, subtotal_minor, vendor:vendors(name, slug))",
+      "id, order_id, order_vendor_id, vendor_id, source, status, reason, requested_amount_minor, refund_amount_minor, resolution_note, created_at, resolved_at, resolved_by, return_path, received_at, receipt_note, inspection_condition, return_courier_paid_by, acknowledged_at, restocked_at, escalation_count, escalated_at, escalation_note, first_resolved_at, order:orders(public_reference, recipient_name, contact_phone), order_vendor:order_vendors(status, subtotal_minor, vendor:vendors(name, slug))",
       { count: "exact" },
     );
 
@@ -524,6 +526,12 @@ export default async function AdminRefundsPage({
                         {refundCase.received_at
                           ? " · shop confirmed receipt"
                           : " · waiting for the shop to confirm receipt"}
+                        {refundCase.inspection_condition
+                          ? ` · inspection: ${refundCase.inspection_condition === "good" ? "good condition" : refundCase.inspection_condition === "wrong_item" ? "wrong item" : "damaged"}`
+                          : null}
+                        {refundCase.return_courier_paid_by
+                          ? ` · return courier paid by ${refundCase.return_courier_paid_by === "vendor" ? "the shop (wrong/damaged)" : "the customer"}`
+                          : null}
                         {refundCase.receipt_note
                           ? ` · “${refundCase.receipt_note}”`
                           : null}
@@ -579,8 +587,32 @@ export default async function AdminRefundsPage({
                     {refundCase.status === "approved" &&
                     refundCase.return_path === "physical_return" &&
                     refundCase.received_at &&
-                    !refundCase.restocked_at ? (
+                    !refundCase.restocked_at &&
+                    refundCase.inspection_condition !== "damaged" &&
+                    refundCase.inspection_condition !== "wrong_item" ? (
                       <RestockRefundForm caseId={refundCase.id} />
+                    ) : null}
+                    {refundCase.status === "approved" &&
+                    refundCase.return_path === "physical_return" &&
+                    refundCase.received_at &&
+                    !refundCase.restocked_at &&
+                    refundCase.inspection_condition === "damaged" ? (
+                      <p className="mt-3 text-sm text-ink-mute">
+                        Damaged return — never restocked (D-09). The item
+                        stays out of stock.
+                      </p>
+                    ) : null}
+                    {refundCase.status === "approved" &&
+                    refundCase.return_path === "physical_return" &&
+                    refundCase.received_at &&
+                    !refundCase.restocked_at &&
+                    refundCase.inspection_condition === "wrong_item" ? (
+                      <p className="mt-3 text-sm text-ink-mute">
+                        Wrong item — it is not the product the customer
+                        ordered, so it cannot be restocked against this
+                        order. Restock the actual item manually if it is
+                        saleable.
+                      </p>
                     ) : null}
 
                     {refundCase.status === "open" ? (

@@ -192,7 +192,12 @@ approval in step (c) already raised and the case is still open.
   exactly once — and the movement note names the refund case.
 - **Damaged, wrong, used, or not inspected:** do **not** press it. Stock
   stays decremented; the unit is not sellable. A damaged item is simply
-  never restocked.
+  never restocked. Since migration 52 (R-05) this is enforced in the
+  database, not just in this runbook: the vendor records the inspection
+  condition (good / wrong item / damaged) at receipt, which also sets who
+  pays the return courier (customer for good, the shop for wrong/damaged),
+  and `restock_refund_case` refuses a damaged or wrong-item case — the
+  admin page does not even show the restock button for those cases.
 - **Never** restock automatically, and never restock before inspection.
   There is no quarantine state in the system — an uninspected restock
   overstates sellable stock.

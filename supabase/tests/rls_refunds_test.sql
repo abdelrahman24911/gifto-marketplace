@@ -2785,6 +2785,321 @@ begin
   raise notice 'TEST 16 PASSED: voided settlement restores its clawbacks';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST 17 (R-05, D-09): damaged is never restocked; the return-courier
+-- payer follows the inspection condition
+-- ---------------------------------------------------------------------------
+-- Five fresh delivered suborders on the Refund Gift (stock reset to 10 so
+-- the restock assertions are absolute, not order-dependent).
+reset role;
+update public.products set stock = 10
+ where id = '52200000-0000-0000-0000-000000000001';
+
+insert into public.orders (
+  id, user_id, status, subtotal_minor, total_minor, recipient_name,
+  contact_phone, address_line, city, governorate
+) values
+  ('62200000-0000-0000-0000-000000000041',
+   '12200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+   '12 Road 9, Maadi', 'Maadi', 'Cairo'),
+  ('62200000-0000-0000-0000-000000000042',
+   '12200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+   '12 Road 9, Maadi', 'Maadi', 'Cairo'),
+  ('62200000-0000-0000-0000-000000000043',
+   '12200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+   '12 Road 9, Maadi', 'Maadi', 'Cairo'),
+  ('62200000-0000-0000-0000-000000000044',
+   '12200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+   '12 Road 9, Maadi', 'Maadi', 'Cairo'),
+  ('62200000-0000-0000-0000-000000000045',
+   '12200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+   '12 Road 9, Maadi', 'Maadi', 'Cairo');
+
+insert into public.order_vendors (
+  id, order_id, vendor_id, status, subtotal_minor, commission_rate, delivered_at
+) values
+  ('72200000-0000-0000-0000-000000000041',
+   '62200000-0000-0000-0000-000000000041',
+   '42200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 0.1000, now()),
+  ('72200000-0000-0000-0000-000000000042',
+   '62200000-0000-0000-0000-000000000042',
+   '42200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 0.1000, now()),
+  ('72200000-0000-0000-0000-000000000043',
+   '62200000-0000-0000-0000-000000000043',
+   '42200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 0.1000, now()),
+  ('72200000-0000-0000-0000-000000000044',
+   '62200000-0000-0000-0000-000000000044',
+   '42200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 0.1000, now()),
+  ('72200000-0000-0000-0000-000000000045',
+   '62200000-0000-0000-0000-000000000045',
+   '42200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 0.1000, now());
+
+insert into public.order_items (
+  order_vendor_id, product_id, product_name, product_slug,
+  unit_price_minor, quantity, line_total_minor
+) values
+  ('72200000-0000-0000-0000-000000000041',
+   '52200000-0000-0000-0000-000000000001', 'Refund Gift', 'refund-gift',
+   10000, 1, 10000),
+  ('72200000-0000-0000-0000-000000000042',
+   '52200000-0000-0000-0000-000000000001', 'Refund Gift', 'refund-gift',
+   10000, 1, 10000),
+  ('72200000-0000-0000-0000-000000000043',
+   '52200000-0000-0000-0000-000000000001', 'Refund Gift', 'refund-gift',
+   10000, 1, 10000),
+  ('72200000-0000-0000-0000-000000000044',
+   '52200000-0000-0000-0000-000000000001', 'Refund Gift', 'refund-gift',
+   10000, 1, 10000),
+  ('72200000-0000-0000-0000-000000000045',
+   '52200000-0000-0000-0000-000000000001', 'Refund Gift', 'refund-gift',
+   10000, 1, 10000);
+
+insert into public.commission_entries (
+  id, order_vendor_id, vendor_id, rate, base_minor, amount_minor, earned_at
+) values
+  ('82200000-0000-0000-0000-000000000041',
+   '72200000-0000-0000-0000-000000000041',
+   '42200000-0000-0000-0000-000000000001',
+   0.1000, 10000, 1000, now()),
+  ('82200000-0000-0000-0000-000000000042',
+   '72200000-0000-0000-0000-000000000042',
+   '42200000-0000-0000-0000-000000000001',
+   0.1000, 10000, 1000, now()),
+  ('82200000-0000-0000-0000-000000000043',
+   '72200000-0000-0000-0000-000000000043',
+   '42200000-0000-0000-0000-000000000001',
+   0.1000, 10000, 1000, now()),
+  ('82200000-0000-0000-0000-000000000044',
+   '72200000-0000-0000-0000-000000000044',
+   '42200000-0000-0000-0000-000000000001',
+   0.1000, 10000, 1000, now()),
+  ('82200000-0000-0000-0000-000000000045',
+   '72200000-0000-0000-0000-000000000045',
+   '42200000-0000-0000-0000-000000000001',
+   0.1000, 10000, 1000, now());
+
+-- The buyer opens one case per suborder.
+set role authenticated;
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000001"}';
+insert into refund_test_ids
+select 'case_r05_damaged', public.open_refund_case(
+  '72200000-0000-0000-0000-000000000041', 'Arrived shattered', 1000);
+insert into refund_test_ids
+select 'case_r05_wrong', public.open_refund_case(
+  '72200000-0000-0000-0000-000000000042', 'Sent the wrong gift', 1000);
+insert into refund_test_ids
+select 'case_r05_good', public.open_refund_case(
+  '72200000-0000-0000-0000-000000000043', 'Changed my mind', 1000);
+insert into refund_test_ids
+select 'case_r05_default', public.open_refund_case(
+  '72200000-0000-0000-0000-000000000044', 'No longer wanted', 1000);
+insert into refund_test_ids
+select 'case_r05_bad_condition', public.open_refund_case(
+  '72200000-0000-0000-0000-000000000045', 'Something is off', 1000);
+
+-- The admin approves all five as physical returns.
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+do $$
+begin
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'case_r05_damaged'),
+    true, 1000, 'Approved, send it back');
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'case_r05_wrong'),
+    true, 1000, 'Approved, send it back');
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'case_r05_good'),
+    true, 1000, 'Approved, send it back');
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'case_r05_default'),
+    true, 1000, 'Approved, send it back');
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'case_r05_bad_condition'),
+    true, 1000, 'Approved, send it back');
+end $$;
+
+-- The vendor records the inspection condition at receipt. An invalid
+-- condition is rejected and records nothing.
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000004';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000004"}';
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  perform public.confirm_refund_receipt(
+    (select id from refund_test_ids where name = 'case_r05_damaged'),
+    'Shattered in transit', 'damaged');
+  perform public.confirm_refund_receipt(
+    (select id from refund_test_ids where name = 'case_r05_wrong'),
+    'This is not the ordered gift', 'wrong_item');
+  perform public.confirm_refund_receipt(
+    (select id from refund_test_ids where name = 'case_r05_good'),
+    'Back in good condition', 'good');
+  -- No condition given: the old 2-argument call still means good.
+  perform public.confirm_refund_receipt(
+    (select id from refund_test_ids where name = 'case_r05_default'),
+    'Back in good condition');
+
+  begin
+    perform public.confirm_refund_receipt(
+      (select id from refund_test_ids where name = 'case_r05_bad_condition'),
+      'Soaked', 'soaked');
+  exception when others then
+    if sqlstate <> '22023' then
+      raise;
+    end if;
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 17 FAILED: an invalid inspection condition was accepted';
+  end if;
+  if (select received_at from public.refund_cases
+       where id = (select id from refund_test_ids where name = 'case_r05_bad_condition')) is not null then
+    raise exception 'TEST 17 FAILED: invalid condition still recorded a receipt';
+  end if;
+
+  -- 17a: the condition and the courier payer are recorded, and the payer
+  -- follows D-09 (customer for good, vendor for wrong/damaged).
+  if not exists (
+    select 1 from public.refund_cases
+     where id = (select id from refund_test_ids where name = 'case_r05_damaged')
+       and inspection_condition = 'damaged'
+       and return_courier_paid_by = 'vendor'
+       and received_at is not null
+  ) then
+    raise exception 'TEST 17 FAILED: damaged receipt did not record vendor-paid courier';
+  end if;
+  if not exists (
+    select 1 from public.refund_cases
+     where id = (select id from refund_test_ids where name = 'case_r05_wrong')
+       and inspection_condition = 'wrong_item'
+       and return_courier_paid_by = 'vendor'
+  ) then
+    raise exception 'TEST 17 FAILED: wrong-item receipt did not record vendor-paid courier';
+  end if;
+  if not exists (
+    select 1 from public.refund_cases
+     where id = (select id from refund_test_ids where name = 'case_r05_good')
+       and inspection_condition = 'good'
+       and return_courier_paid_by = 'customer'
+  ) then
+    raise exception 'TEST 17 FAILED: good receipt did not record customer-paid courier';
+  end if;
+  if not exists (
+    select 1 from public.refund_cases
+     where id = (select id from refund_test_ids where name = 'case_r05_default')
+       and inspection_condition = 'good'
+       and return_courier_paid_by = 'customer'
+  ) then
+    raise exception 'TEST 17 FAILED: receipt without a condition did not default to good / customer-paid';
+  end if;
+  raise notice 'TEST 17a PASSED: inspection condition and courier payer recorded per D-09';
+end $$;
+
+-- The CHECK constraint itself refuses a contradictory allocation, even
+-- written directly.
+reset role;
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  begin
+    update public.refund_cases
+       set return_courier_paid_by = 'customer'
+     where id = (select id from refund_test_ids where name = 'case_r05_damaged');
+  exception when check_violation then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 17 FAILED: a damaged case accepted a customer-paid courier';
+  end if;
+  raise notice 'TEST 17b PASSED: the payer constraint refuses a contradictory allocation';
+end $$;
+
+-- The admin restocks: damaged and wrong-item are refused (stock untouched);
+-- good and default restock exactly once.
+set role authenticated;
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  begin
+    perform public.restock_refund_case(
+      (select id from refund_test_ids where name = 'case_r05_damaged'));
+  exception when check_violation then
+    if sqlerrm like '%never restocked%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 17 FAILED: wrong error for a damaged restock: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 17 FAILED: a damaged return was restocked';
+  end if;
+
+  v_blocked := false;
+  begin
+    perform public.restock_refund_case(
+      (select id from refund_test_ids where name = 'case_r05_wrong'));
+  exception when check_violation then
+    if sqlerrm like '%cannot be restocked%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 17 FAILED: wrong error for a wrong-item restock: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 17 FAILED: a wrong item was restocked against the order';
+  end if;
+
+  if (select stock from public.products
+       where id = '52200000-0000-0000-0000-000000000001') <> 10 then
+    raise exception 'TEST 17 FAILED: refused restocks changed stock';
+  end if;
+  if exists (
+    select 1 from public.refund_cases
+     where id in (select id from refund_test_ids
+                   where name in ('case_r05_damaged', 'case_r05_wrong'))
+       and restocked_at is not null
+  ) then
+    raise exception 'TEST 17 FAILED: a refused case was marked restocked';
+  end if;
+  raise notice 'TEST 17c PASSED: damaged and wrong-item returns are never restocked';
+
+  perform public.restock_refund_case(
+    (select id from refund_test_ids where name = 'case_r05_good'));
+  perform public.restock_refund_case(
+    (select id from refund_test_ids where name = 'case_r05_default'));
+
+  if (select stock from public.products
+       where id = '52200000-0000-0000-0000-000000000001') <> 12 then
+    raise exception 'TEST 17 FAILED: good returns did not restock exactly once each';
+  end if;
+  if not exists (
+    select 1 from public.refund_cases
+     where id in (select id from refund_test_ids
+                   where name in ('case_r05_good', 'case_r05_default'))
+       and restocked_at is not null
+  ) then
+    raise exception 'TEST 17 FAILED: good restocks were not recorded';
+  end if;
+  raise notice 'TEST 17 PASSED: D-09 inspection condition, courier payer and restock bans enforced';
+end $$;
+
 reset role;
 
 rollback;
