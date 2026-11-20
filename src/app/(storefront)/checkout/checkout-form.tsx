@@ -17,6 +17,11 @@ import {
   type CartItem,
 } from "@/lib/cart";
 import { createGuestAttempt, type GuestAttempt } from "@/lib/guest-client";
+import {
+  GOVERNORATES,
+  governorateLabel,
+  normalizeGovernorate,
+} from "@/lib/governorates";
 import { formatEgp } from "@/lib/money";
 
 import { placeOrder, type CheckoutState, type CheckoutValues } from "./actions";
@@ -303,17 +308,22 @@ export function CheckoutForm({
 
           <label className={labelClass}>
             Governorate
-            <input
-              type="text"
+            <select
               name="governorate"
               required
-              minLength={2}
-              maxLength={80}
               autoComplete="address-level1"
-              defaultValue={values.governorate}
-              placeholder="e.g. Cairo Governorate"
+              defaultValue={normalizeGovernorate(values.governorate) ?? ""}
               className={inputClass}
-            />
+            >
+              <option value="" disabled>
+                Choose a governorate
+              </option>
+              {GOVERNORATES.map((governorate) => (
+                <option key={governorate.en} value={governorate.en}>
+                  {governorateLabel(governorate.en)}
+                </option>
+              ))}
+            </select>
           </label>
         </div>
 

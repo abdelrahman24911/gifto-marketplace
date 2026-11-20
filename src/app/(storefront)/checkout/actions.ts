@@ -17,6 +17,7 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { notifyOrderPlaced } from "@/lib/mail";
+import { isGovernorate } from "@/lib/governorates";
 import {
   coverageFromJson,
   deliveryCoverageAllows,
@@ -313,6 +314,17 @@ export async function placeOrder(
   if (values.contactEmail && !isValidEmail(values.contactEmail)) {
     return {
       error: "Enter a valid email address, or leave it blank.",
+      values,
+      attempt,
+    };
+  }
+
+  // P1-06: the governorate is chosen from the dropdown, never typed.
+  // A non-canonical value can only arrive from a tampered or stale
+  // submit; reject it here instead of letting the DB trigger decide.
+  if (!isGovernorate(values.governorate)) {
+    return {
+      error: "Choose a governorate from the list.",
       values,
       attempt,
     };

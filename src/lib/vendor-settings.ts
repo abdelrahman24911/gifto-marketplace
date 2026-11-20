@@ -1,3 +1,5 @@
+import { normalizeGovernorate } from "@/lib/governorates";
+
 import type { Json } from "@/lib/supabase/database.types";
 
 /**
@@ -229,6 +231,13 @@ function normalizeCoverageValue(value: string): string {
  * has not configured coverage, so the address is allowed for backwards
  * compatibility. Governorates must match exactly; areas may match the city or
  * appear in the street address.
+ *
+ * P1-06: governorate comparison uses the same normalisation as
+ * delivery_coverage_allows() (migration 37) — trim, case, a trailing
+ * "Governorate" suffix or a leading "محافظة" prefix, Arabic
+ * orthography — with the plain trimmed comparison as fallback for
+ * values the normaliser cannot map. Areas use String.includes, which
+ * is already literal; the DB escapes LIKE wildcards.
  */
 export function deliveryCoverageAllows(
   coverage: DeliveryCoverage,
@@ -243,9 +252,22 @@ export function deliveryCoverageAllows(
 
   const city = normalizeCoverageValue(address.city);
   const governorate = normalizeCoverageValue(address.governorate);
+  // Canonical form of the order's governorate, or null when it cannot
+  // be mapped — compared against each stored value's canonical form,
+  // exactly like normalize_governorate_name() in the database.
+  const governorateCanonical = normalizeGovernorate(address.governorate);
   const addressLine = normalizeCoverageValue(address.addressLine);
 
-  if (governorates.length > 0 && !governorates.includes(governorate)) {
+  if (
+    governorates.length > 0 &&
+    !governorates.includes(governorate) &&
+    !(
+      governorateCanonical !== null &&
+      governorates.some(
+        (stored) => normalizeGovernorate(stored) === governorateCanonical,
+      )
+    )
+  ) {
     return false;
   }
 

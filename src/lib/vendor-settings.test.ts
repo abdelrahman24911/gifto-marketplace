@@ -145,6 +145,43 @@ describe("deliveryCoverageAllows", () => {
       deliveryCoverageAllows({ governorates: [], areas: ["Nasr City"] }, address),
     ).toBe(false);
   });
+
+  it("tolerates governorate variants the way the database does (P1-06)", () => {
+    // The old false-reject pair: "Cairo Governorate" vs "Cairo".
+    expect(
+      deliveryCoverageAllows(
+        { governorates: ["Cairo"], areas: ["Maadi"] },
+        { ...address, governorate: "Cairo Governorate" },
+      ),
+    ).toBe(true);
+    expect(
+      deliveryCoverageAllows(
+        { governorates: ["Cairo Governorate"], areas: ["Maadi"] },
+        address,
+      ),
+    ).toBe(true);
+    expect(
+      deliveryCoverageAllows(
+        { governorates: ["Cairo"], areas: ["Maadi"] },
+        { ...address, governorate: "محافظة القاهرة" },
+      ),
+    ).toBe(true);
+  });
+
+  it("still rejects a genuinely different governorate", () => {
+    expect(
+      deliveryCoverageAllows(
+        { governorates: ["Cairo"], areas: ["Maadi"] },
+        { ...address, governorate: "Giza" },
+      ),
+    ).toBe(false);
+    expect(
+      deliveryCoverageAllows(
+        { governorates: ["Cairo"], areas: ["Maadi"] },
+        { ...address, governorate: "Cairoo" },
+      ),
+    ).toBe(false);
+  });
 });
 
 describe("working hours", () => {

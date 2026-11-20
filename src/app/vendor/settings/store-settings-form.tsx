@@ -7,6 +7,11 @@ import {
   WORKING_DAY_LABELS,
   WORKING_DAYS,
 } from "@/lib/vendor-settings";
+import {
+  GOVERNORATES,
+  governorateLabel,
+  partitionGovernorates,
+} from "@/lib/governorates";
 
 import {
   saveVendorSettings,
@@ -38,6 +43,16 @@ export function StoreSettingsForm({
   // failed submit (and a successful one) preserves exactly what was saved.
   const values = state?.values ?? initial;
   const formKey = state?.attempt ? `state-${state.attempt}` : "pristine";
+
+  // P1-06: stored governorates are split into canonical ones (the picker)
+  // and unmappable ones, which are shown separately and kept as-is unless
+  // the vendor unticks them — never silently dropped.
+  const storedGovernorates = partitionGovernorates(
+    values.governorates
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
 
   return (
     <form key={formKey} action={formAction} className="flex flex-col gap-5">
@@ -178,23 +193,64 @@ export function StoreSettingsForm({
           Delivery coverage
         </legend>
         <p className="mt-1 text-xs text-ink-mute">
-          Separate entries with commas or new lines. Up to 30 governorates and
-          30 areas, 80 characters each.
+          Tick every governorate this shop delivers to. Areas are free-text,
+          separated with commas or new lines — up to 30 entries of 80
+          characters each. Leaving both lists empty means the shop delivers
+          everywhere.
         </p>
 
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <label className={labelClass}>
-            Governorates
-            <textarea
-              name="governorates"
-              rows={3}
-              defaultValue={values.governorates}
-              disabled={!canEdit}
-              placeholder="Alexandria, Beheira"
-              className={inputClass}
-            />
-          </label>
+        <div className="mt-4">
+          <p className="text-sm font-medium text-ink-soft">Governorates</p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {GOVERNORATES.map((governorate) => (
+              <label
+                key={governorate.en}
+                className="flex items-center gap-2 text-sm font-normal text-ink"
+              >
+                <input
+                  type="checkbox"
+                  name="governorates"
+                  value={governorate.en}
+                  defaultChecked={storedGovernorates.canonical.includes(
+                    governorate.en,
+                  )}
+                  disabled={!canEdit}
+                />
+                {governorateLabel(governorate.en)}
+              </label>
+            ))}
+          </div>
+          {storedGovernorates.unmappable.length > 0 ? (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <p className="font-medium">
+                Saved entries that are not in the standard list — kept as-is:
+              </p>
+              <div className="mt-2 flex flex-col gap-1">
+                {storedGovernorates.unmappable.map((value) => (
+                  <label
+                    key={value}
+                    className="flex items-center gap-2 text-sm font-normal"
+                  >
+                    <input
+                      type="checkbox"
+                      name="unmappable_governorates"
+                      value={value}
+                      defaultChecked
+                      disabled={!canEdit}
+                    />
+                    {value}
+                  </label>
+                ))}
+              </div>
+              <p className="mt-2">
+                Untick one to remove it. These are preserved on save so
+                nothing is silently dropped.
+              </p>
+            </div>
+          ) : null}
+        </div>
 
+        <div className="mt-4">
           <label className={labelClass}>
             Areas or districts
             <textarea
