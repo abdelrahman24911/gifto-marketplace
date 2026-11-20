@@ -4,6 +4,10 @@ import { redirect } from "next/navigation";
 import { Pagination } from "@/components/pagination";
 import { Breadcrumb, EmptyState } from "@/components/ui/section";
 import { requirePlatformAdmin } from "@/lib/auth";
+import {
+  BUSINESS_TIME_ZONE,
+  startOfBusinessDayOffset,
+} from "@/lib/business-time";
 import { fetchAllRows } from "@/lib/fetch-all";
 import {
   buildSettlementLineLookup,
@@ -106,6 +110,7 @@ function formatDate(value: string) {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: BUSINESS_TIME_ZONE,
   });
 }
 
@@ -222,7 +227,7 @@ export default async function AdminCommissionsPage({
   const reversed = totalsForEntries(
     entries.filter((entry) => entry.status === "reversed"),
   );
-  const thirtyDaysAgo = new Date().getTime() - 30 * 86_400_000;
+  const thirtyDaysAgo = startOfBusinessDayOffset(new Date(), 29).getTime();
   const recent = totalsForEntries(
     entries.filter(
       (entry) =>
@@ -456,6 +461,7 @@ export default async function AdminCommissionsPage({
           <ul className="mt-4 overflow-hidden rounded-2xl border border-line bg-paper-soft">
             {visible.map((entry) => {
               const state = stateFor(entry);
+              const orderId = entry.order_vendor?.order_id ?? null;
               const orderRef = entry.order_vendor?.order?.public_reference
                 ? entry.order_vendor.order.public_reference
                 : entry.order_vendor
@@ -495,12 +501,16 @@ export default async function AdminCommissionsPage({
                         ) : null}
                       </div>
                       <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-ink-soft">
-                        <Link
-                          href="/admin/orders"
-                          className="font-medium text-berry hover:underline"
-                        >
-                          {orderRef}
-                        </Link>
+                        {orderId ? (
+                          <Link
+                            href={`/admin/orders/${orderId}`}
+                            className="font-medium text-berry hover:underline"
+                          >
+                            {orderRef}
+                          </Link>
+                        ) : (
+                          <span className="text-ink-mute">{orderRef}</span>
+                        )}
                         <span>
                           Earned {formatDate(entry.earned_at)}
                         </span>

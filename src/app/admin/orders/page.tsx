@@ -4,11 +4,9 @@ import { redirect } from "next/navigation";
 import { Pagination } from "@/components/pagination";
 import { Breadcrumb, EmptyState } from "@/components/ui/section";
 import { requirePlatformAdmin } from "@/lib/auth";
+import { startOfBusinessDayOffset } from "@/lib/business-time";
 import { formatEgp } from "@/lib/money";
-import {
-  ORDER_STATUS_LABELS,
-  isOrderStatus,
-} from "@/lib/orders";
+import { ORDER_STATUS_LABELS, isOrderStatus } from "@/lib/orders";
 import {
   DEFAULT_PAGE_SIZE,
   clampPage,
@@ -22,6 +20,12 @@ import {
   AdminPageHeader,
   AdminStatStrip,
 } from "../ui";
+
+import {
+  ADMIN_ORDER_STATUS_STYLES,
+  ATTENTION_STATUSES,
+  formatOrderDateTime,
+} from "./order-shared";
 
 import type { OrderStatus } from "@/lib/supabase/database.types";
 
@@ -39,25 +43,33 @@ const ADMIN_FILTERS = [
   { value: "partially_completed", label: "Partially completed" },
 ] as const;
 
-const ATTENTION_STATUSES: OrderStatus[] = [
-  "placed",
-  "confirmed",
-  "shipped",
+type OrderRange = "7d" | "30d" | "90d" | "all";
+
+const ORDER_RANGES: ReadonlyArray<{
+  value: OrderRange;
+  label: string;
+  days: number | null;
+}> = [
+  { value: "all", label: "All dates", days: null },
+  { value: "7d", label: "7 days", days: 7 },
+  { value: "30d", label: "30 days", days: 30 },
+  { value: "90d", label: "90 days", days: 90 },
 ];
 
-const STATUS_STYLES: Record<OrderStatus, string> = {
-  placed: "border-warning/30 bg-warning-soft text-ink",
-  confirmed: "border-berry/25 bg-berry-soft text-ink",
-  shipped: "border-gold/40 bg-gold-soft text-ink",
-  delivered: "border-success/25 bg-success-soft text-ink",
-  cancelled: "border-line-strong bg-paper text-ink-mute",
-  returned: "border-danger/25 bg-danger-soft text-ink",
-  partially_completed: "border-line-strong bg-paper-deep text-ink-soft",
-};
+function isOrderRange(value: string | undefined): value is OrderRange {
+  return value === "7d" || value === "30d" || value === "90d" || value === "all";
+}
 
-function adminOrdersHref(filter: string, page = 1) {
+function adminOrdersHref(
+  filter: string,
+  page = 1,
+  search = "",
+  dateRange: OrderRange = "all",
+) {
   const params = new URLSearchParams();
   if (filter !== "all") params.set("status", filter);
+  if (search) params.set("q", search);
+  if (dateRange !== "all") params.set("range", dateRange);
   if (page > 1) params.set("page", String(page));
   const query = params.toString();
   return query ? `/admin/orders?${query}` : "/admin/orders";
@@ -67,25 +79,33 @@ function countValue(result: { count: number | null; error: unknown }) {
   return result.error ? "—" : (result.count ?? 0);
 }
 
-function formatDateTime(value: string) {
-  return new Date(value).toLocaleString("en-GB", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 export default async function AdminOrdersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; page?: string }>;
+  searchParams: Promise<{
+    status?: string;
+    page?: string;
+    q?: string;
+    range?: string;
+  }>;
 }) {
-  const { status: statusFilter, page: pageParam } = await searchParams;
+  const {
+    status: statusFilter,
+    page: pageParam,
+    q: query,
+    range: rangeParam,
+  } = await searchParams;
   const { supabase } = await requirePlatformAdmin();
 
   const filter = statusFilter ?? "all";
+  const dateRange: OrderRange = isOrderRange(rangeParam) ? rangeParam : "all";
+  const dateOption = ORDER_RANGES.find((option) => option.value === dateRange)!;
+  const dateStart =
+    dateOption.days === null
+      ? null
+      : startOfBusinessDayOffset(new Date(), dateOption.days - 1);
+  const search = (query ?? "").trim().slice(0, 80);
+  const searchTerm = search.replace(/[,()"%_\\]/g, " ").replace(/\s+/g, " ").trim();
   const requestedPage = parsePage(pageParam);
   const range = pageWindow(requestedPage);
 
@@ -95,6 +115,16 @@ export default async function AdminOrdersPage({
       "id, public_reference, user_id, status, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, contact_email, city, governorate, created_at, order_vendors(id, status, subtotal_minor, commission_rate, vendor:vendors(name, slug), order_items(product_name, quantity, line_total_minor), commission_entries(amount_minor, status))",
       { count: "exact" },
     );
+
+  if (dateStart) {
+    listQuery = listQuery.gte("created_at", dateStart.toISOString());
+  }
+
+  if (searchTerm) {
+    listQuery = listQuery.or(
+      `public_reference.ilike.%${searchTerm}%,recipient_name.ilike.%${searchTerm}%,contact_phone.ilike.%${searchTerm}%,contact_email.ilike.%${searchTerm}%`,
+    );
+  }
 
   if (filter === "attention") {
     listQuery = listQuery.in("status", ATTENTION_STATUSES);
@@ -132,7 +162,7 @@ export default async function AdminOrdersPage({
   const currentPage = clampPage(requestedPage, total);
 
   if (requestedPage > 1 && currentPage !== requestedPage) {
-    redirect(adminOrdersHref(filter, currentPage));
+    redirect(adminOrdersHref(filter, currentPage, search, dateRange));
   }
 
   const orders = listResult.data ?? [];
@@ -151,7 +181,7 @@ export default async function AdminOrdersPage({
         <AdminPageHeader
           eyebrow="Operations"
           title="Orders"
-          description="Read-only oversight of every marketplace order and its shop suborders. Progress is driven by each vendor, not by administration."
+          description="Search, inspect and intervene in marketplace orders. Vendors drive normal progress; administration handles exceptions with recorded reasons."
         />
       </div>
 
@@ -186,16 +216,81 @@ export default async function AdminOrdersPage({
       </div>
 
       <section className="mt-8">
-        <div className="flex flex-wrap gap-2 border-b border-line pb-5">
-          {ADMIN_FILTERS.map((option) => (
-            <AdminFilterPill
-              key={option.value}
-              href={adminOrdersHref(option.value)}
-              active={filter === option.value}
+        <div className="flex flex-col gap-4 border-b border-line pb-5">
+          <div className="flex flex-wrap gap-2">
+            {ADMIN_FILTERS.map((option) => (
+              <AdminFilterPill
+                key={option.value}
+                href={adminOrdersHref(
+                  option.value,
+                  1,
+                  search,
+                  dateRange,
+                )}
+                active={filter === option.value}
+              >
+                {option.label}
+              </AdminFilterPill>
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <form
+              action="/admin/orders"
+              method="get"
+              className="flex flex-wrap items-center gap-2"
             >
-              {option.label}
-            </AdminFilterPill>
-          ))}
+              {filter !== "all" ? (
+                <input type="hidden" name="status" value={filter} />
+              ) : null}
+              {dateRange !== "all" ? (
+                <input type="hidden" name="range" value={dateRange} />
+              ) : null}
+              <label htmlFor="admin-order-search" className="sr-only">
+                Search orders
+              </label>
+              <input
+                id="admin-order-search"
+                name="q"
+                type="search"
+                defaultValue={search}
+                maxLength={80}
+                placeholder="Reference, recipient, phone or email"
+                className="w-full min-w-0 rounded-full border border-line-strong bg-paper px-4 py-2 text-sm text-ink sm:w-72"
+              />
+              <button
+                type="submit"
+                className="rounded-full bg-berry px-4 py-2 text-sm font-semibold text-paper transition-colors hover:bg-berry-deep"
+              >
+                Search
+              </button>
+              {search ? (
+                <Link
+                  href={adminOrdersHref(filter, 1, "", dateRange)}
+                  className="text-xs font-medium text-berry hover:text-berry-deep"
+                >
+                  Clear search
+                </Link>
+              ) : null}
+            </form>
+
+            <nav aria-label="Filter by date" className="flex flex-wrap gap-2">
+              {ORDER_RANGES.map((option) => (
+                <AdminFilterPill
+                  key={option.value}
+                  href={adminOrdersHref(
+                    filter,
+                    1,
+                    search,
+                    option.value,
+                  )}
+                  active={dateRange === option.value}
+                >
+                  {option.label}
+                </AdminFilterPill>
+              ))}
+            </nav>
+          </div>
         </div>
 
         {listResult.error ? (
@@ -210,7 +305,11 @@ export default async function AdminOrdersPage({
           <p className="text-xs text-ink-mute">
             {total.toLocaleString("en-US")}{" "}
             {total === 1 ? "order" : "orders"}
-            {filter === "all" ? "" : " match this filter"}
+            {search
+              ? ` matching "${search}"`
+              : filter === "all"
+                ? ""
+                : " match this filter"}
           </p>
           <p className="text-xs text-ink-mute">
             Newest first · page {currentPage} of{" "}
@@ -222,14 +321,18 @@ export default async function AdminOrdersPage({
           <div className="mt-6">
             <EmptyState
               title={
-                filter === "all"
-                  ? "No orders placed yet"
-                  : "No orders match this filter"
+                search
+                  ? "No orders match this search"
+                  : filter !== "all" || dateRange !== "all"
+                    ? "No orders match this view"
+                    : "No orders placed yet"
               }
             >
-              {filter === "all"
-                ? "Marketplace orders will appear here as soon as customers check out."
-                : "Choose another status to see more orders."}
+              {search
+                ? "Try a different reference, recipient, phone number or email."
+                : filter !== "all" || dateRange !== "all"
+                  ? "Choose another status or date range to see more orders."
+                  : "Marketplace orders will appear here as soon as customers check out."}
             </EmptyState>
           </div>
         ) : (
@@ -249,7 +352,13 @@ export default async function AdminOrdersPage({
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <h2 className="text-lg font-medium text-ink">
-                          {order.public_reference ?? `#${order.id.slice(0, 8)}`}
+                          <Link
+                            href={`/admin/orders/${order.id}`}
+                            className="transition-colors hover:text-berry"
+                          >
+                            {order.public_reference ??
+                              `#${order.id.slice(0, 8)}`}
+                          </Link>
                         </h2>
                         {order.user_id === null ? (
                           <span className="rounded-full border border-warning/30 bg-warning-soft px-2.5 py-0.5 text-[0.62rem] font-semibold uppercase tracking-wide text-ink">
@@ -257,13 +366,13 @@ export default async function AdminOrdersPage({
                           </span>
                         ) : null}
                         <span
-                          className={`rounded-full border px-2.5 py-0.5 text-[0.62rem] font-semibold uppercase tracking-wide ${STATUS_STYLES[status]}`}
+                          className={`rounded-full border px-2.5 py-0.5 text-[0.62rem] font-semibold uppercase tracking-wide ${ADMIN_ORDER_STATUS_STYLES[status]}`}
                         >
                           {ORDER_STATUS_LABELS[status]}
                         </span>
                       </div>
                       <p className="mt-1 text-xs text-ink-mute">
-                        {formatDateTime(order.created_at)} ·{" "}
+                        {formatOrderDateTime(order.created_at)} ·{" "}
                         {suborders.length}{" "}
                         {suborders.length === 1 ? "shop" : "shops"}
                       </p>
@@ -331,7 +440,7 @@ export default async function AdminOrdersPage({
                                 {suborder.vendor?.name ?? "Unknown shop"}
                               </p>
                               <span
-                                className={`rounded-full border px-2.5 py-0.5 text-[0.62rem] font-semibold uppercase tracking-wide ${STATUS_STYLES[subStatus]}`}
+                                className={`rounded-full border px-2.5 py-0.5 text-[0.62rem] font-semibold uppercase tracking-wide ${ADMIN_ORDER_STATUS_STYLES[subStatus]}`}
                               >
                                 {ORDER_STATUS_LABELS[subStatus]}
                               </span>
@@ -394,7 +503,13 @@ export default async function AdminOrdersPage({
                     </div>
                   </div>
 
-                  <div className="mt-3 flex justify-end">
+                  <div className="mt-3 flex flex-wrap justify-end gap-4">
+                    <Link
+                      href={`/admin/orders/${order.id}`}
+                      className="text-xs font-medium text-berry hover:text-berry-deep"
+                    >
+                      View order details
+                    </Link>
                     <Link
                       href="/admin/commissions"
                       className="text-xs font-medium text-berry hover:text-berry-deep"
