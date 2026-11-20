@@ -31,6 +31,9 @@
  * N-02: pending commission adjustments for pre-delivery refunds
  *       (pending_commission_adjustments).
  * N-03: cancel_refund_case / cancel_guest_refund_case (D-09).
+ * UX Batch 1: wishlists, saved_addresses; orders gift_wrap, gift_message,
+ *       preferred_delivery_date, delivery_time_note; gift parameters on the
+ *       price-check checkout RPCs.
  *
  * Regenerate from the live database once the Gifto project exists:
  *   supabase gen types typescript --project-id <ref> > src/lib/supabase/database.types.ts
@@ -452,6 +455,10 @@ export type Database = {
           city: string;
           governorate: string;
           notes: string | null;
+          gift_wrap: boolean;
+          gift_message: string | null;
+          preferred_delivery_date: string | null;
+          delivery_time_note: string | null;
           guest_token_hash: string | null;
           guest_token_expires_at: string | null;
           idempotency_key: string | null;
@@ -475,6 +482,10 @@ export type Database = {
           city: string;
           governorate: string;
           notes?: string | null;
+          gift_wrap?: boolean;
+          gift_message?: string | null;
+          preferred_delivery_date?: string | null;
+          delivery_time_note?: string | null;
           guest_token_hash?: string | null;
           guest_token_expires_at?: string | null;
           idempotency_key?: string | null;
@@ -498,6 +509,10 @@ export type Database = {
           city?: string;
           governorate?: string;
           notes?: string | null;
+          gift_wrap?: boolean;
+          gift_message?: string | null;
+          preferred_delivery_date?: string | null;
+          delivery_time_note?: string | null;
           guest_token_hash?: string | null;
           guest_token_expires_at?: string | null;
           idempotency_key?: string | null;
@@ -1736,6 +1751,95 @@ export type Database = {
           },
         ];
       };
+      wishlists: {
+        Row: {
+          id: string;
+          user_id: string;
+          product_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          product_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          product_id?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "wishlists_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "wishlists_product_id_fkey";
+            columns: ["product_id"];
+            isOneToOne: false;
+            referencedRelation: "products";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      saved_addresses: {
+        Row: {
+          id: string;
+          user_id: string;
+          label: string;
+          recipient_name: string;
+          contact_phone: string;
+          address_line: string;
+          city: string;
+          governorate: string;
+          notes: string | null;
+          is_default: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          label: string;
+          recipient_name: string;
+          contact_phone: string;
+          address_line: string;
+          city: string;
+          governorate: string;
+          notes?: string | null;
+          is_default?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          label?: string;
+          recipient_name?: string;
+          contact_phone?: string;
+          address_line?: string;
+          city?: string;
+          governorate?: string;
+          notes?: string | null;
+          is_default?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "saved_addresses_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       public_vendors: {
@@ -1820,6 +1924,10 @@ export type Database = {
           p_idempotency_key: string;
           p_expected_prices: Json;
           p_expected_total_minor: number;
+          p_gift_wrap?: boolean;
+          p_gift_message?: string | null;
+          p_preferred_delivery_date?: string | null;
+          p_delivery_time_note?: string | null;
         };
         Returns: string;
       };
@@ -1837,6 +1945,10 @@ export type Database = {
           p_guest_token_hash: string;
           p_expected_prices: Json;
           p_expected_total_minor: number;
+          p_gift_wrap?: boolean;
+          p_gift_message?: string | null;
+          p_preferred_delivery_date?: string | null;
+          p_delivery_time_note?: string | null;
         };
         Returns: string;
       };
