@@ -94,12 +94,29 @@ export async function resolveRefundCase(
       ?.amount_minor ?? null;
   }
 
+  // N-02: when the approval landed before delivery, the commission
+  // reduction is pending until the suborder is delivered — say so, so
+  // the admin does not read "adjusted" as money already moved.
+  let pendingMinor: number | null = null;
+  if (decision === "approve" && clawbackMinor === null) {
+    const { data: pendingData } = await supabase
+      .from("pending_commission_adjustments")
+      .select("amount_minor")
+      .eq("refund_case_id", caseId)
+      .eq("status", "pending")
+      .maybeSingle();
+    pendingMinor = (pendingData as { amount_minor: number } | null)
+      ?.amount_minor ?? null;
+  }
+
   return {
     success:
       decision === "approve"
         ? clawbackMinor !== null
           ? `Refund approved. The commission was already paid out, so a clawback of ${formatEgp(Math.abs(clawbackMinor))} was recorded against the shop's next settlement.`
-          : "Refund approved and commission adjusted."
+          : pendingMinor !== null
+            ? `Refund approved. The commission will be reduced by ${formatEgp(Math.abs(pendingMinor))} when the suborder is delivered.`
+            : "Refund approved and commission adjusted."
         : "Refund request rejected.",
     attempt,
   };

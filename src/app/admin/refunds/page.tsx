@@ -252,6 +252,27 @@ export default async function AdminRefundsPage({
     ]),
   );
 
+  // N-02: pending adjustments recorded for approvals made before
+  // delivery, so the approved-case line can say the reduction is still
+  // to come instead of claiming the commission was already adjusted.
+  type CasePendingRow = {
+    refund_case_id: string;
+    amount_minor: number;
+  };
+  const { data: casePendingData } = caseIds.length
+    ? await supabase
+        .from("pending_commission_adjustments")
+        .select("refund_case_id, amount_minor")
+        .in("refund_case_id", caseIds)
+        .eq("status", "pending")
+    : { data: [] };
+  const pendingByCase = new Map(
+    ((casePendingData ?? []) as unknown as CasePendingRow[]).map((row) => [
+      row.refund_case_id,
+      row,
+    ]),
+  );
+
   return (
     <div className="w-full">
       <Breadcrumb
@@ -461,7 +482,9 @@ export default async function AdminRefundsPage({
                         Approved {formatEgp(refundCase.refund_amount_minor)}.
                         {clawbackByCase.has(refundCase.id)
                           ? ` The commission was already paid out, so a clawback of ${formatEgp(Math.abs(clawbackByCase.get(refundCase.id)!.amount_minor))} was recorded against the shop's next settlement.`
-                          : " Commission has been adjusted."}
+                          : pendingByCase.has(refundCase.id)
+                            ? ` The commission will be reduced by ${formatEgp(Math.abs(pendingByCase.get(refundCase.id)!.amount_minor))} when the suborder is delivered.`
+                            : " Commission has been adjusted."}
                       </p>
                     ) : null}
                     {refundCase.status === "approved" &&

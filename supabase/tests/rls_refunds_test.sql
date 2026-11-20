@@ -1839,6 +1839,408 @@ begin
   raise notice 'TEST 13 PASSED: zero-net settlement and direct repayment work';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST 14: pending commission adjustment for pre-delivery refunds (N-02)
+-- ---------------------------------------------------------------------------
+-- Four shipped suborders for a fresh shop (vendor G, 10%): none has an
+-- earned entry yet, so approvals must record PENDING adjustments — never
+-- silently skip the commission effect (re-audit N-02).
+reset role;
+insert into auth.users (id, email) values
+  ('12200000-0000-0000-0000-000000000007', 'vendor-g-owner@refunds.gifto.test');
+
+insert into public.vendors (id, name, slug, status, commission_rate)
+values (
+  '42200000-0000-0000-0000-000000000007',
+  'Seventh Shop', 'seventh-shop', 'active', 0.1000
+);
+
+insert into public.vendor_members (vendor_id, profile_id, role) values
+  ('42200000-0000-0000-0000-000000000007', '12200000-0000-0000-0000-000000000007', 'owner');
+
+insert into public.products (id, vendor_id, name, slug, price_minor, stock, status)
+values (
+  '52200000-0000-0000-0000-000000000007',
+  '42200000-0000-0000-0000-000000000007',
+  'Pending Gift', 'pending-gift', 10000, 10, 'active'
+);
+
+-- 722...021: approve while shipped, then deliver (the core N-02 path).
+-- 722...022: approve while shipped, then cancel (pending must void).
+-- 722...023: approve while shipped, then return via receipt (pending voids).
+-- 722...024: three partial refunds before delivery (accumulate to the cap).
+-- 722...025: stays shipped; used for the scope-trigger probe only.
+insert into public.orders (
+  id, user_id, status, subtotal_minor, total_minor, recipient_name,
+  contact_phone, address_line, city, governorate
+) values
+  ('62200000-0000-0000-0000-000000000021',
+   '12200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+   '12 Road 9, Maadi', 'Maadi', 'Cairo'),
+  ('62200000-0000-0000-0000-000000000022',
+   '12200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+   '12 Road 9, Maadi', 'Maadi', 'Cairo'),
+  ('62200000-0000-0000-0000-000000000023',
+   '12200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+   '12 Road 9, Maadi', 'Maadi', 'Cairo'),
+  ('62200000-0000-0000-0000-000000000024',
+   '12200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+   '12 Road 9, Maadi', 'Maadi', 'Cairo'),
+  ('62200000-0000-0000-0000-000000000025',
+   '12200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+   '12 Road 9, Maadi', 'Maadi', 'Cairo');
+
+insert into public.order_vendors (
+  id, order_id, vendor_id, status, subtotal_minor, commission_rate, delivered_at
+) values
+  ('72200000-0000-0000-0000-000000000021',
+   '62200000-0000-0000-0000-000000000021',
+   '42200000-0000-0000-0000-000000000007',
+   'shipped', 10000, 0.1000, null),
+  ('72200000-0000-0000-0000-000000000022',
+   '62200000-0000-0000-0000-000000000022',
+   '42200000-0000-0000-0000-000000000007',
+   'shipped', 10000, 0.1000, null),
+  ('72200000-0000-0000-0000-000000000023',
+   '62200000-0000-0000-0000-000000000023',
+   '42200000-0000-0000-0000-000000000007',
+   'shipped', 10000, 0.1000, null),
+  ('72200000-0000-0000-0000-000000000024',
+   '62200000-0000-0000-0000-000000000024',
+   '42200000-0000-0000-0000-000000000007',
+   'shipped', 10000, 0.1000, null),
+  ('72200000-0000-0000-0000-000000000025',
+   '62200000-0000-0000-0000-000000000025',
+   '42200000-0000-0000-0000-000000000007',
+   'shipped', 10000, 0.1000, null);
+
+insert into public.order_items (
+  order_vendor_id, product_id, product_name, product_slug,
+  unit_price_minor, quantity, line_total_minor
+) values
+  ('72200000-0000-0000-0000-000000000021', '52200000-0000-0000-0000-000000000007', 'Pending Gift', 'pending-gift', 10000, 1, 10000),
+  ('72200000-0000-0000-0000-000000000022', '52200000-0000-0000-0000-000000000007', 'Pending Gift', 'pending-gift', 10000, 1, 10000),
+  ('72200000-0000-0000-0000-000000000023', '52200000-0000-0000-0000-000000000007', 'Pending Gift', 'pending-gift', 10000, 1, 10000),
+  ('72200000-0000-0000-0000-000000000024', '52200000-0000-0000-0000-000000000007', 'Pending Gift', 'pending-gift', 10000, 1, 10000),
+  ('72200000-0000-0000-0000-000000000025', '52200000-0000-0000-0000-000000000007', 'Pending Gift', 'pending-gift', 10000, 1, 10000);
+
+-- Open one case per suborder (the shipped window has not started).
+set role authenticated;
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000001"}';
+do $$
+begin
+  insert into refund_test_ids
+  select 'pending_a', public.open_refund_case(
+    '72200000-0000-0000-0000-000000000021', 'Changed my mind before delivery', 4000);
+  insert into refund_test_ids
+  select 'pending_b', public.open_refund_case(
+    '72200000-0000-0000-0000-000000000022', 'Changed my mind before delivery', 2000);
+  insert into refund_test_ids
+  select 'pending_c', public.open_refund_case(
+    '72200000-0000-0000-0000-000000000023', 'Changed my mind before delivery', 3000);
+  insert into refund_test_ids
+  select 'pending_d1', public.open_refund_case(
+    '72200000-0000-0000-0000-000000000024', 'First partial refund', 3000);
+  insert into refund_test_ids
+  select 'pending_e', public.open_refund_case(
+    '72200000-0000-0000-0000-000000000025', 'Scope probe case', 1000);
+end $$;
+
+-- Admin approves all four: each must record a pending adjustment (no
+-- earned entry exists yet), never silently skip the commission effect.
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000006';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000006"}';
+do $$
+begin
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'pending_a'), true, 4000, 'Approved before delivery');
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'pending_b'), true, 2000, 'Approved before delivery');
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'pending_c'), true, 3000, 'Approved before delivery');
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'pending_d1'), true, 3000, 'First partial approved');
+
+  if (select count(*) from public.pending_commission_adjustments
+       where refund_case_id = (select id from refund_test_ids where name = 'pending_a')
+         and amount_minor = -400 and rate = 0.1000 and status = 'pending'
+         and refund_amount_minor = 4000) <> 1 then
+    raise exception 'TEST 14 FAILED: shipped approval did not record a pending -400 adjustment';
+  end if;
+  if (select count(*) from public.pending_commission_adjustments
+       where refund_case_id = (select id from refund_test_ids where name = 'pending_b')
+         and amount_minor = -200 and status = 'pending') <> 1 then
+    raise exception 'TEST 14 FAILED: shipped approval did not record a pending -200 adjustment';
+  end if;
+  if (select count(*) from public.pending_commission_adjustments
+       where refund_case_id = (select id from refund_test_ids where name = 'pending_c')
+         and amount_minor = -300 and status = 'pending') <> 1 then
+    raise exception 'TEST 14 FAILED: shipped approval did not record a pending -300 adjustment';
+  end if;
+  if (select count(*) from public.pending_commission_adjustments
+       where refund_case_id = (select id from refund_test_ids where name = 'pending_d1')
+         and amount_minor = -300 and status = 'pending') <> 1 then
+    raise exception 'TEST 14 FAILED: first partial did not record a pending -300 adjustment';
+  end if;
+  if exists (select 1 from public.commission_entries
+              where order_vendor_id in (
+                '72200000-0000-0000-0000-000000000021',
+                '72200000-0000-0000-0000-000000000022',
+                '72200000-0000-0000-0000-000000000023',
+                '72200000-0000-0000-0000-000000000024')) then
+    raise exception 'TEST 14 FAILED: approval created a commission entry before delivery';
+  end if;
+  raise notice 'TEST 14a PASSED: shipped approvals record pending adjustments, no entry yet';
+end $$;
+
+-- 14a core path: deliver the first suborder. The pending -400 converts
+-- into an ordinary adjustment; the entry keeps its full 1000 amount and
+-- the net is 600.
+do $$
+declare
+  v_entry_id uuid;
+begin
+  perform public.set_order_vendor_status(
+    '72200000-0000-0000-0000-000000000021', 'delivered', 'shipped');
+
+  select id into v_entry_id from public.commission_entries
+   where order_vendor_id = '72200000-0000-0000-0000-000000000021';
+  if v_entry_id is null then
+    raise exception 'TEST 14 FAILED: delivery did not earn a commission entry';
+  end if;
+
+  if not exists (
+    select 1 from public.commission_entries
+     where id = v_entry_id and amount_minor = 1000 and status = 'earned'
+       and rate = 0.1000 and base_minor = 10000
+  ) then
+    raise exception 'TEST 14 FAILED: earned entry is not the full 1000';
+  end if;
+
+  if not exists (
+    select 1 from public.commission_adjustments
+     where commission_entry_id = v_entry_id
+       and refund_case_id = (select id from refund_test_ids where name = 'pending_a')
+       and amount_minor = -400
+  ) then
+    raise exception 'TEST 14 FAILED: pending adjustment did not convert into an ordinary adjustment';
+  end if;
+
+  if not exists (
+    select 1 from public.pending_commission_adjustments
+     where refund_case_id = (select id from refund_test_ids where name = 'pending_a')
+       and status = 'applied'
+       and applied_entry_id = v_entry_id
+  ) then
+    raise exception 'TEST 14 FAILED: pending adjustment was not consumed exactly once with the entry linked';
+  end if;
+
+  if (select amount_minor + coalesce((
+        select sum(amount_minor) from public.commission_adjustments
+         where commission_entry_id = v_entry_id), 0)
+       from public.commission_entries where id = v_entry_id) <> 600 then
+    raise exception 'TEST 14 FAILED: delivered commission net is not 600';
+  end if;
+  raise notice 'TEST 14a2 PASSED: delivery earns the reduced net 600, pending consumed once';
+end $$;
+
+-- 14b: cancel the second suborder. The pending -200 voids visibly; no
+-- entry and no adjustment ever appear.
+do $$
+begin
+  perform public.set_order_vendor_status(
+    '72200000-0000-0000-0000-000000000022', 'cancelled', 'shipped',
+    'unreachable', 'Customer did not answer');
+
+  if (select status from public.order_vendors
+       where id = '72200000-0000-0000-0000-000000000022') <> 'cancelled' then
+    raise exception 'TEST 14 FAILED: suborder did not cancel';
+  end if;
+
+  if not exists (
+    select 1 from public.pending_commission_adjustments
+     where refund_case_id = (select id from refund_test_ids where name = 'pending_b')
+       and status = 'voided'
+  ) then
+    raise exception 'TEST 14 FAILED: cancelled suborder left its pending adjustment unvoided';
+  end if;
+
+  if exists (select 1 from public.commission_entries
+              where order_vendor_id = '72200000-0000-0000-0000-000000000022') then
+    raise exception 'TEST 14 FAILED: cancelled suborder earned commission';
+  end if;
+
+  if exists (select 1 from public.commission_adjustments
+              where refund_case_id = (select id from refund_test_ids where name = 'pending_b')) then
+    raise exception 'TEST 14 FAILED: cancelled suborder converted its pending adjustment';
+  end if;
+  raise notice 'TEST 14b PASSED: cancelled suborder voids its pending adjustment visibly';
+end $$;
+
+-- 14c: the vendor confirms receipt for the third suborder (physical
+-- return while still shipped). The suborder moves to returned and the
+-- pending -300 voids visibly; nothing is ever earned.
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000007';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000007"}';
+do $$
+begin
+  perform public.acknowledge_refund_case(
+    (select id from refund_test_ids where name = 'pending_c'));
+  perform public.confirm_refund_receipt(
+    (select id from refund_test_ids where name = 'pending_c'), 'Item back before delivery');
+
+  if (select status from public.order_vendors
+       where id = '72200000-0000-0000-0000-000000000023') <> 'returned' then
+    raise exception 'TEST 14 FAILED: suborder did not move to returned on receipt';
+  end if;
+
+  if not exists (
+    select 1 from public.pending_commission_adjustments
+     where refund_case_id = (select id from refund_test_ids where name = 'pending_c')
+       and status = 'voided'
+  ) then
+    raise exception 'TEST 14 FAILED: returned suborder left its pending adjustment unvoided';
+  end if;
+
+  if exists (select 1 from public.commission_entries
+              where order_vendor_id = '72200000-0000-0000-0000-000000000023') then
+    raise exception 'TEST 14 FAILED: returned suborder earned commission';
+  end if;
+  raise notice 'TEST 14c PASSED: returned suborder voids its pending adjustment visibly';
+end $$;
+
+-- 14d: two more partial refunds on the fourth suborder (3000 + 4000 +
+-- 3000 = the full subtotal; reductions -300, -400, -300 accumulate to
+-- exactly the 1000 eventual earn — the cap). Delivery earns zero net
+-- and the settlement snapshot excludes the zero-net line.
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000001"}';
+do $$
+begin
+  insert into refund_test_ids
+  select 'pending_d2', public.open_refund_case(
+    '72200000-0000-0000-0000-000000000024', 'Second partial refund', 4000);
+end $$;
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000006';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000006"}';
+do $$
+begin
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'pending_d2'), true, 4000, 'Second partial approved');
+end $$;
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000001"}';
+do $$
+begin
+  insert into refund_test_ids
+  select 'pending_d3', public.open_refund_case(
+    '72200000-0000-0000-0000-000000000024', 'Third partial refund', 3000);
+end $$;
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000006';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000006"}';
+do $$
+declare
+  v_entry_id uuid;
+  v_settlement_id uuid;
+begin
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'pending_d3'), true, 3000, 'Third partial approved');
+
+  if (select coalesce(sum(amount_minor), 0) from public.pending_commission_adjustments
+       where order_vendor_id = '72200000-0000-0000-0000-000000000024'
+         and status = 'pending') <> -1000 then
+    raise exception 'TEST 14 FAILED: partial refunds did not accumulate to -1000';
+  end if;
+
+  perform public.set_order_vendor_status(
+    '72200000-0000-0000-0000-000000000024', 'delivered', 'shipped');
+
+  select id into v_entry_id from public.commission_entries
+   where order_vendor_id = '72200000-0000-0000-0000-000000000024';
+  if v_entry_id is null then
+    raise exception 'TEST 14 FAILED: full-refund delivery did not earn an entry';
+  end if;
+
+  if (select coalesce(sum(amount_minor), 0) from public.commission_adjustments
+       where commission_entry_id = v_entry_id) <> -1000 then
+    raise exception 'TEST 14 FAILED: full-refund adjustments do not sum to -1000';
+  end if;
+
+  if (select count(*) from public.pending_commission_adjustments
+       where order_vendor_id = '72200000-0000-0000-0000-000000000024'
+         and status = 'applied') <> 3 then
+    raise exception 'TEST 14 FAILED: not all three pending rows converted';
+  end if;
+
+  -- The settlement snapshot sees the already-correct net: the 600 line
+  -- from 14a is included, the zero-net line is excluded.
+  insert into refund_test_ids
+  select 'pending_settlement', public.create_settlement(
+    '42200000-0000-0000-0000-000000000007', 'N-02 test batch');
+  v_settlement_id := (select id from refund_test_ids where name = 'pending_settlement');
+
+  if (select total_minor from public.settlements where id = v_settlement_id) <> 600 then
+    raise exception 'TEST 14 FAILED: settlement total is not 600 (only the reduced line)';
+  end if;
+
+  if (select count(*) from public.settlement_lines
+       where settlement_id = v_settlement_id) <> 1 then
+    raise exception 'TEST 14 FAILED: settlement does not have exactly one line';
+  end if;
+
+  if exists (select 1 from public.settlement_lines
+              where settlement_id = v_settlement_id
+                and commission_entry_id = v_entry_id) then
+    raise exception 'TEST 14 FAILED: zero-net line was included in the settlement';
+  end if;
+  raise notice 'TEST 14d PASSED: partial refunds accumulate to the cap; full refund earns zero net and is excluded from settlement';
+end $$;
+
+-- 14e: scope-trigger probe (defense-in-depth). A direct pending insert
+-- with the wrong rate is rejected by the trigger, not recorded.
+reset role;
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  begin
+    insert into public.pending_commission_adjustments (
+      refund_case_id, order_vendor_id, vendor_id, amount_minor,
+      refund_amount_minor, rate, created_by
+    ) values (
+      (select id from refund_test_ids where name = 'pending_e'),
+      '72200000-0000-0000-0000-000000000025',
+      '42200000-0000-0000-0000-000000000007',
+      -100, 1000, 0.2000,
+      '12200000-0000-0000-0000-000000000006'
+    );
+  exception when check_violation then
+    if sqlerrm like '%frozen commission rate%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 14 FAILED: wrong-rate insert raised the wrong error: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 14 FAILED: pending insert with a wrong rate was accepted';
+  end if;
+
+  if exists (select 1 from public.pending_commission_adjustments
+              where refund_case_id = (select id from refund_test_ids where name = 'pending_e')) then
+    raise exception 'TEST 14 FAILED: rejected pending insert left a row behind';
+  end if;
+  raise notice 'TEST 14e PASSED: scope trigger rejects a pending adjustment with the wrong rate';
+end $$;
+
 reset role;
 
 rollback;

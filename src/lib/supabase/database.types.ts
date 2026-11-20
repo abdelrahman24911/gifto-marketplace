@@ -28,6 +28,8 @@
  *         transfer_reference, proof_note); mark_settlement_paid takes proof.
  * N-01: paid-return clawbacks (commission_clawbacks, clawback_applications,
  *       settlements.clawback_minor, record_clawback_direct_repayment).
+ * N-02: pending commission adjustments for pre-delivery refunds
+ *       (pending_commission_adjustments).
  *
  * Regenerate from the live database once the Gifto project exists:
  *   supabase gen types typescript --project-id <ref> > src/lib/supabase/database.types.ts
@@ -1330,6 +1332,81 @@ export type Database = {
             columns: ["settlement_id"];
             isOneToOne: false;
             referencedRelation: "settlements";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      // N-02: pending commission adjustments for pre-delivery refunds.
+      pending_commission_adjustments: {
+        Row: {
+          id: string;
+          refund_case_id: string;
+          order_vendor_id: string;
+          vendor_id: string;
+          currency: string;
+          amount_minor: number;
+          refund_amount_minor: number;
+          rate: number;
+          status: string;
+          applied_entry_id: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          refund_case_id: string;
+          order_vendor_id: string;
+          vendor_id: string;
+          currency?: string;
+          amount_minor: number;
+          refund_amount_minor: number;
+          rate: number;
+          status?: string;
+          applied_entry_id?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          refund_case_id?: string;
+          order_vendor_id?: string;
+          vendor_id?: string;
+          currency?: string;
+          amount_minor?: number;
+          refund_amount_minor?: number;
+          rate?: number;
+          status?: string;
+          applied_entry_id?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "pending_commission_adjustments_refund_case_id_fkey";
+            columns: ["refund_case_id"];
+            isOneToOne: true;
+            referencedRelation: "refund_cases";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "pending_commission_adjustments_order_vendor_id_fkey";
+            columns: ["order_vendor_id"];
+            isOneToOne: false;
+            referencedRelation: "order_vendors";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "pending_commission_adjustments_vendor_id_fkey";
+            columns: ["vendor_id"];
+            isOneToOne: false;
+            referencedRelation: "vendors";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "pending_commission_adjustments_applied_entry_id_fkey";
+            columns: ["applied_entry_id"];
+            isOneToOne: false;
+            referencedRelation: "commission_entries";
             referencedColumns: ["id"];
           },
         ];
