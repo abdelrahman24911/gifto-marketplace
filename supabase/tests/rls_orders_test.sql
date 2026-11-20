@@ -470,7 +470,7 @@ begin
   select id into v_ov from public.order_vendors
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000002';
 
-  update public.order_vendors set status = 'confirmed' where id = v_ov;
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
 
   select status, confirmed_at into v_status, v_at
     from public.order_vendors where id = v_ov;
@@ -496,7 +496,7 @@ begin
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000002';
 
   begin
-    update public.order_vendors set status = 'delivered' where id = v_ov;
+    perform public.set_order_vendor_status(v_ov, 'delivered', 'confirmed');
     raise exception 'TEST 8 FAILED: jumped confirmed -> delivered';
   exception when check_violation then
     raise notice 'TEST 8 PASSED: invalid status transition rejected';
@@ -531,13 +531,18 @@ begin
   select id into v_ov from public.order_vendors
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000001';
 
-  update public.order_vendors set status = 'cancelled' where id = v_ov;
+  begin
+    perform public.set_order_vendor_status(v_ov, 'cancelled', 'placed');
+    raise exception 'TEST 10 FAILED: shop B cancelled shop A''s suborder';
+  exception when insufficient_privilege then
+    null;
+  end;
 
   select status into v_status from public.order_vendors where id = v_ov;
   if v_status <> 'placed' then
     raise exception 'TEST 10 FAILED: shop B changed shop A''s suborder to %', v_status;
   end if;
-  raise notice 'TEST 10 PASSED: cross-vendor status update had no effect';
+  raise notice 'TEST 10 PASSED: cross-vendor status update was denied';
 end $$;
 
 set request.jwt.claim.sub = '21100000-0000-0000-0000-000000000002';
@@ -549,7 +554,12 @@ begin
   select id into v_ov from public.order_vendors
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000001';
 
-  update public.order_vendors set status = 'confirmed' where id = v_ov;
+  begin
+    perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+    raise exception 'TEST 10 FAILED: staff member advanced the suborder';
+  exception when insufficient_privilege then
+    null;
+  end;
 
   select status into v_status from public.order_vendors where id = v_ov;
   if v_status <> 'placed' then
@@ -688,9 +698,9 @@ begin
   select id into v_ov from public.order_vendors
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000001';
 
-  update public.order_vendors set status = 'confirmed' where id = v_ov;
-  update public.order_vendors set status = 'shipped' where id = v_ov;
-  update public.order_vendors set status = 'delivered' where id = v_ov;
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
+  perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
 
   select delivered_at into v_at from public.order_vendors where id = v_ov;
   if v_at is null then
@@ -712,8 +722,8 @@ begin
   select id into v_ov from public.order_vendors
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000002';
 
-  update public.order_vendors set status = 'shipped' where id = v_ov;
-  update public.order_vendors set status = 'delivered' where id = v_ov;
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
+  perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
 
   select status into v_parent from public.orders where id = v_oid;
   if v_parent <> 'delivered' then
@@ -779,11 +789,12 @@ end $$;
 set request.jwt.claim.sub = '21100000-0000-0000-0000-000000000003';
 set request.jwt.claims = '{"sub":"21100000-0000-0000-0000-000000000003"}';
 do $$
-declare v_third uuid;
+declare v_third uuid; v_ov uuid;
 begin
   v_third := current_setting('gifto_test.third_order_id')::uuid;
-  update public.order_vendors set status = 'confirmed'
+  select id into v_ov from public.order_vendors
    where order_id = v_third and vendor_id = '41100000-0000-0000-0000-000000000002';
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
 end $$;
 
 set request.jwt.claim.sub = '11100000-0000-0000-0000-000000000001';
@@ -839,9 +850,9 @@ begin
   select id into v_ov from public.order_vendors
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000001';
 
-  update public.order_vendors set status = 'confirmed' where id = v_ov;
-  update public.order_vendors set status = 'shipped' where id = v_ov;
-  update public.order_vendors set status = 'delivered' where id = v_ov;
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
+  perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
 end $$;
 
 -- Shop B dispatches, then the COD delivery fails.
@@ -860,13 +871,14 @@ begin
   select id into v_ov from public.order_vendors
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000002';
 
-  update public.order_vendors set status = 'confirmed' where id = v_ov;
-  update public.order_vendors set status = 'shipped' where id = v_ov;
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
 
   select stock into v_stock_before from public.products
    where id = '51100000-0000-0000-0000-000000000004';
 
-  update public.order_vendors set status = 'cancelled' where id = v_ov;
+  perform public.set_order_vendor_status(
+    v_ov, 'cancelled', 'shipped', 'unreachable');
 
   select stock into v_stock_after from public.products
    where id = '51100000-0000-0000-0000-000000000004';
@@ -885,8 +897,13 @@ begin
     raise exception 'TEST 16 FAILED: mixed parent status is % (expected partially_completed)', v_parent;
   end if;
 
-  -- A repeated status write must not restock twice.
-  update public.order_vendors set status = 'cancelled' where id = v_ov;
+  -- A repeated cancellation must not restock twice.
+  begin
+    perform public.set_order_vendor_status(v_ov, 'cancelled', 'cancelled');
+    raise exception 'TEST 16 FAILED: repeated cancellation was accepted';
+  exception when check_violation then
+    null;
+  end;
   select stock into v_stock_after from public.products
    where id = '51100000-0000-0000-0000-000000000004';
   if v_stock_after <> v_stock_before + 1 then

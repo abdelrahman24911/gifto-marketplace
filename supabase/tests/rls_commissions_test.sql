@@ -129,9 +129,9 @@ begin
   v_oid := current_setting('gifto_test.comm_order_id')::uuid;
   select id into v_ov from public.order_vendors
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000001';
-  update public.order_vendors set status = 'confirmed' where id = v_ov;
-  update public.order_vendors set status = 'shipped' where id = v_ov;
-  update public.order_vendors set status = 'delivered' where id = v_ov;
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
+  perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
 end $$;
 
 set request.jwt.claim.sub = 'c2110000-0000-0000-0000-000000000003';
@@ -142,9 +142,9 @@ begin
   v_oid := current_setting('gifto_test.comm_order_id')::uuid;
   select id into v_ov from public.order_vendors
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000002';
-  update public.order_vendors set status = 'confirmed' where id = v_ov;
-  update public.order_vendors set status = 'shipped' where id = v_ov;
-  update public.order_vendors set status = 'delivered' where id = v_ov;
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
+  perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
 end $$;
 
 reset role;
@@ -202,7 +202,12 @@ begin
      where ov.order_id = current_setting('gifto_test.comm_order_id')::uuid
        and ov.vendor_id = '41100000-0000-0000-0000-000000000001'
   );
-  update public.order_vendors set status = 'delivered' where id = v_ov;
+  begin
+    perform public.set_order_vendor_status(v_ov, 'delivered', 'delivered');
+    raise exception 'TEST 4 FAILED: repeated delivery was accepted';
+  exception when check_violation then
+    null;
+  end;
 
   begin
     insert into public.commission_entries (order_vendor_id, vendor_id, rate, base_minor, amount_minor)
@@ -300,7 +305,8 @@ begin
      where ov.order_id = current_setting('gifto_test.comm_order_id')::uuid
        and ov.vendor_id = '41100000-0000-0000-0000-000000000001'
   );
-  update public.order_vendors set status = 'returned' where id = v_ov;
+  perform public.set_order_vendor_status(
+    v_ov, 'returned', 'delivered', 'damaged');
 end $$;
 
 reset role;
@@ -445,9 +451,9 @@ begin
   v_oid := current_setting('gifto_test.comm_order3_id')::uuid;
   select id into v_ov from public.order_vendors
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000002';
-  update public.order_vendors set status = 'confirmed' where id = v_ov;
-  update public.order_vendors set status = 'shipped' where id = v_ov;
-  update public.order_vendors set status = 'delivered' where id = v_ov;
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
+  perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
 end $$;
 
 set request.jwt.claim.sub = 'c3110000-0000-0000-0000-000000000001';
@@ -463,7 +469,8 @@ begin
    where ov.order_id = v_oid and ov.vendor_id = '41100000-0000-0000-0000-000000000002';
 
   begin
-    update public.order_vendors set status = 'returned' where id = v_ov;
+    perform public.set_order_vendor_status(
+      v_ov, 'returned', 'delivered', 'damaged');
     raise exception 'TEST 10 FAILED: reversed a settled commission';
   exception when check_violation then
     raise notice 'TEST 10 PASSED: a settled commission cannot be reversed automatically';
@@ -524,6 +531,11 @@ begin
   end if;
   raise notice 'TEST 12 PASSED: suspended vendor commission/settlement reads denied';
 end $$;
+
+set request.jwt.claim.sub = 'c3110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c3110000-0000-0000-0000-000000000001"}';
+update public.vendors set status = 'active'
+ where id = '41100000-0000-0000-0000-000000000002';
 
 -- ---------------------------------------------------------------------------
 -- TEST 13: a shop cannot have two open settlements at once
@@ -734,7 +746,8 @@ begin
     from public.commission_entries ce
    where ce.order_vendor_id = v_ov;
 
-  update public.order_vendors set status = 'returned' where id = v_ov;
+  perform public.set_order_vendor_status(
+    v_ov, 'returned', 'delivered', 'damaged');
 
   select status into v_status
     from public.commission_entries where id = v_entry;
@@ -845,9 +858,9 @@ begin
     from public.order_vendors
    where order_id = current_setting('gifto_test.comm_order5_id')::uuid
      and vendor_id = '41100000-0000-0000-0000-000000000002';
-  update public.order_vendors set status = 'confirmed' where id = v_ov;
-  update public.order_vendors set status = 'shipped' where id = v_ov;
-  update public.order_vendors set status = 'delivered' where id = v_ov;
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
+  perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
 end $$;
 
 set role authenticated;
@@ -905,9 +918,9 @@ begin
     from public.order_vendors
    where order_id = current_setting('gifto_test.comm_order6_id')::uuid
      and vendor_id = '41100000-0000-0000-0000-000000000001';
-  update public.order_vendors set status = 'confirmed' where id = v_ov;
-  update public.order_vendors set status = 'shipped' where id = v_ov;
-  update public.order_vendors set status = 'delivered' where id = v_ov;
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
+  perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
 end $$;
 
 set request.jwt.claim.sub = 'c3110000-0000-0000-0000-000000000001';
