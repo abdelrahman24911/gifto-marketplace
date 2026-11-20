@@ -147,7 +147,11 @@ part of a settlement…"* — both while the entry sits in any settlement line.
 ### c. Admin approves the case in `/admin/refunds`
 
 Open the case, approve it with the refund amount, and add a resolution
-note. Then verify — do not assume:
+note. "Physical return required" is checked by default: the refund is
+approved on the condition that the item comes back. Uncheck it only when
+the refund is approved without the item coming back (wrong or damaged
+beyond return) — then steps (d) and (e) do not apply at all. Then verify
+— do not assume:
 
 - A **negative `commission_adjustments` row** was recorded for the refund
   (ask a developer to check, or confirm in the next settlement batch that
@@ -156,27 +160,30 @@ note. Then verify — do not assume:
   `reversed`.
 
 Approving a case does **not** move the suborder to `returned` and does
-**not** restock. Both are separate manual steps below.
+**not** restock. Both are separate steps below.
 
-### d. Separately move the suborder delivered → returned
+### d. The vendor confirms receipt — this moves the suborder to `returned`
 
-On the admin order detail page (`/admin/orders/[id]`), change the suborder
-from `delivered` to `returned`, choosing a reason code (a note is required
-if the reason is "other"). Say it plainly to the customer if asked: refund
-approval alone does not change the order status; this step does.
+The shop acknowledges the case in `/vendor/refunds`, inspects the
+returned gift, then confirms receipt there (with an inspection note).
+Confirming receipt moves the suborder from `delivered` to `returned`
+through the audited status path (reason `customer_request`, note naming
+the case). No admin status change is needed anymore — do not also move it
+manually on the admin order page.
 
 Do this only after step (b): if the commission is still in a settlement,
-this change raises and the suborder stays `delivered`.
+approval in step (c) already raised and the case is still open.
 
 ### e. Restock ONLY if D-09 says so and the item is resaleable
 
-- The vendor inspects the returned item first.
-- **Resaleable:** the vendor (or an admin) adds the quantity back with
-  `adjust_product_stock` — on the vendor inventory page — with a note
-  naming the order reference (e.g. "Returned, inspected resaleable —
-  GFT-…"). The movement is recorded as a manual adjustment.
-- **Damaged, wrong, used, or not inspected:** do **not** restock. Stock
-  stays decremented; the unit is not sellable.
+- The vendor inspects the returned item first (step d).
+- **Resaleable:** on `/admin/refunds`, the approved case now shows a
+  "Restock returned items" button (only after receipt is confirmed). It
+  restocks through `adjust_product_stock` — one unit per returned item,
+  exactly once — and the movement note names the refund case.
+- **Damaged, wrong, used, or not inspected:** do **not** press it. Stock
+  stays decremented; the unit is not sellable. A damaged item is simply
+  never restocked.
 - **Never** restock automatically, and never restock before inspection.
   There is no quarantine state in the system — an uninspected restock
   overstates sellable stock.
@@ -189,6 +196,15 @@ Agree with the shop who hands the cash back and how, then record in the
 log: refund amount, method (e.g. cash handed back by the shop), date, and
 who paid it. If the customer was wronged (wrong/damaged item), the shop
 also bears the return courier — see D-09 above.
+
+### g. If the customer disagrees with a rejection — one escalation
+
+A rejected case can be escalated **once** by the customer (or guest, from
+their order page), with a note saying why they disagree. The case reopens
+with the first decision kept on record (`first_resolved_by`,
+`first_resolved_at`); the admin's second decision is **final** and both
+decision-makers are recorded. A second escalation is rejected by the
+system — do not reopen the case by hand to work around it.
 
 ---
 

@@ -306,6 +306,538 @@ begin
   raise notice 'TEST 6 PASSED: expired guest token rejected on refund open and list';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST 7: the D-09 return window (P1-04) — signed-in and guest
+-- ---------------------------------------------------------------------------
+reset role;
+insert into auth.users (id, email) values
+  ('12200000-0000-0000-0000-000000000004', 'vendor-owner@refunds.gifto.test'),
+  ('12200000-0000-0000-0000-000000000005', 'vendor-b-owner@refunds.gifto.test'),
+  ('12200000-0000-0000-0000-000000000006', 'admin2@refunds.gifto.test');
+
+alter table public.profiles disable trigger profiles_protect_platform_admin;
+update public.profiles
+   set is_platform_admin = true
+ where id = '12200000-0000-0000-0000-000000000006';
+alter table public.profiles enable trigger profiles_protect_platform_admin;
+
+insert into public.vendors (id, name, slug, status, commission_rate)
+values (
+  '42200000-0000-0000-0000-000000000002',
+  'Second Shop', 'second-shop', 'active', 0.1000
+);
+
+insert into public.vendor_members (vendor_id, profile_id, role) values
+  ('42200000-0000-0000-0000-000000000001', '12200000-0000-0000-0000-000000000004', 'owner'),
+  ('42200000-0000-0000-0000-000000000002', '12200000-0000-0000-0000-000000000005', 'owner');
+
+insert into public.products (id, vendor_id, name, slug, price_minor, stock, status)
+values (
+  '52200000-0000-0000-0000-000000000001',
+  '42200000-0000-0000-0000-000000000001',
+  'Refund Gift', 'refund-gift', 10000, 5, 'active'
+);
+
+-- 722...003: delivered 8 days ago — window expired.
+-- 722...004: shipped, not yet delivered — window has not started.
+-- 722...005: delivered 6 days ago — inside the window.
+insert into public.orders (
+  id, user_id, status, subtotal_minor, total_minor, recipient_name,
+  contact_phone, address_line, city, governorate
+) values
+  ('62200000-0000-0000-0000-000000000003',
+   '12200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+   '12 Road 9, Maadi', 'Maadi', 'Cairo'),
+  ('62200000-0000-0000-0000-000000000004',
+   '12200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+   '12 Road 9, Maadi', 'Maadi', 'Cairo'),
+  ('62200000-0000-0000-0000-000000000005',
+   '12200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+   '12 Road 9, Maadi', 'Maadi', 'Cairo');
+
+insert into public.order_vendors (
+  id, order_id, vendor_id, status, subtotal_minor, commission_rate, delivered_at
+) values
+  ('72200000-0000-0000-0000-000000000003',
+   '62200000-0000-0000-0000-000000000003',
+   '42200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 0.1000, now() - interval '8 days'),
+  ('72200000-0000-0000-0000-000000000004',
+   '62200000-0000-0000-0000-000000000004',
+   '42200000-0000-0000-0000-000000000001',
+   'shipped', 10000, 0.1000, null),
+  ('72200000-0000-0000-0000-000000000005',
+   '62200000-0000-0000-0000-000000000005',
+   '42200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 0.1000, now() - interval '6 days');
+
+insert into public.order_items (
+  order_vendor_id, product_id, product_name, product_slug,
+  unit_price_minor, quantity, line_total_minor
+) values
+  ('72200000-0000-0000-0000-000000000004',
+   '52200000-0000-0000-0000-000000000001', 'Refund Gift', 'refund-gift',
+   10000, 1, 10000),
+  ('72200000-0000-0000-0000-000000000005',
+   '52200000-0000-0000-0000-000000000001', 'Refund Gift', 'refund-gift',
+   10000, 1, 10000);
+
+insert into public.commission_entries (
+  id, order_vendor_id, vendor_id, rate, base_minor, amount_minor, earned_at
+) values
+  ('82200000-0000-0000-0000-000000000004',
+   '72200000-0000-0000-0000-000000000004',
+   '42200000-0000-0000-0000-000000000001',
+   0.1000, 10000, 1000, now()),
+  ('82200000-0000-0000-0000-000000000005',
+   '72200000-0000-0000-0000-000000000005',
+   '42200000-0000-0000-0000-000000000001',
+   0.1000, 10000, 1000, now());
+
+set role authenticated;
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  -- (a) Delivered 8 days ago: the window has closed.
+  begin
+    perform public.open_refund_case(
+      '72200000-0000-0000-0000-000000000003', 'Too late for a return', 1000);
+  exception when check_violation then
+    if sqlerrm like '%7-day return window%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 7 FAILED: wrong error for an expired window: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 7 FAILED: case opened after the 7-day window';
+  end if;
+  raise notice 'TEST 7a PASSED: case after the window is rejected with the window named';
+
+  -- (b) Shipped, not yet delivered: the window has not started.
+  insert into refund_test_ids
+  select 'case_shipped', public.open_refund_case(
+    '72200000-0000-0000-0000-000000000004', 'Changed my mind before delivery', 1000);
+  raise notice 'TEST 7b PASSED: shipped (undelivered) case stays openable';
+
+  -- (c) Delivered 6 days ago: inside the window.
+  insert into refund_test_ids
+  select 'case_window', public.open_refund_case(
+    '72200000-0000-0000-0000-000000000005', 'Gift arrived scratched', 4000);
+  raise notice 'TEST 7c PASSED: case inside the window opens';
+end $$;
+
+-- (d) Guest path: expired window rejected, in-window opens.
+reset role;
+insert into public.orders (
+  id, user_id, status, subtotal_minor, total_minor, recipient_name,
+  contact_phone, contact_email, address_line, city, governorate,
+  guest_token_hash, public_reference
+) values
+  ('62200000-0000-0000-0000-000000000006',
+   null, 'delivered', 10000, 10000, 'Guest Window Buyer', '01001112233',
+   'guest6@refunds.gifto.test', '12 Road 9, Maadi', 'Maadi', 'Cairo',
+   encode(digest('guest-window-6', 'sha256'), 'hex'), 'GFT-111111222222'),
+  ('62200000-0000-0000-0000-000000000007',
+   null, 'delivered', 10000, 10000, 'Guest Window Buyer', '01001112233',
+   'guest7@refunds.gifto.test', '12 Road 9, Maadi', 'Maadi', 'Cairo',
+   encode(digest('guest-window-7', 'sha256'), 'hex'), 'GFT-333333444444');
+
+insert into public.order_vendors (
+  id, order_id, vendor_id, status, subtotal_minor, commission_rate, delivered_at
+) values
+  ('72200000-0000-0000-0000-000000000006',
+   '62200000-0000-0000-0000-000000000006',
+   '42200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 0.1000, now() - interval '8 days'),
+  ('72200000-0000-0000-0000-000000000007',
+   '62200000-0000-0000-0000-000000000007',
+   '42200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 0.1000, now() - interval '2 days');
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_hash6 text := encode(digest('guest-window-6', 'sha256'), 'hex');
+  v_hash7 text := encode(digest('guest-window-7', 'sha256'), 'hex');
+  v_blocked boolean := false;
+  v_case uuid;
+begin
+  begin
+    perform public.open_guest_refund_case(
+      '62200000-0000-0000-0000-000000000006', v_hash6,
+      '72200000-0000-0000-0000-000000000006', 'Too late for a return', 1000);
+  exception when check_violation then
+    if sqlerrm like '%7-day return window%' then
+      v_blocked := true;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 7 FAILED: guest case opened after the 7-day window';
+  end if;
+
+  v_case := public.open_guest_refund_case(
+    '62200000-0000-0000-0000-000000000007', v_hash7,
+    '72200000-0000-0000-0000-000000000007', 'Gift arrived scratched', 4000);
+  if v_case is null then
+    raise exception 'TEST 7 FAILED: guest case inside the window did not open';
+  end if;
+  raise notice 'TEST 7 PASSED: window enforced on both paths, shipped stays openable';
+end $$;
+
+-- The temp id table belongs to the authenticated role; record the guest case
+-- as superuser instead of inside the service_role block.
+reset role;
+insert into refund_test_ids
+select 'case_guest_window', id from public.refund_cases
+ where order_vendor_id = '72200000-0000-0000-0000-000000000007';
+
+-- ---------------------------------------------------------------------------
+-- TEST 8: approved + received return -> suborder returned (audited),
+-- then manual restock exactly once (P1-04, D-09)
+-- ---------------------------------------------------------------------------
+-- Admin approves the in-window case from TEST 7c (physical return required).
+set role authenticated;
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+do $$
+begin
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'case_window'), true, 4000, 'Return approved, please send the item back'
+  );
+
+  if not exists (
+    select 1 from public.refund_cases
+     where id = (select id from refund_test_ids where name = 'case_window')
+       and status = 'approved'
+       and return_path = 'physical_return'
+       and refund_amount_minor = 4000
+  ) then
+    raise exception 'TEST 8 FAILED: approval did not record the physical-return path';
+  end if;
+
+  if not exists (
+    select 1 from public.commission_adjustments
+     where refund_case_id = (select id from refund_test_ids where name = 'case_window')
+       and amount_minor = -400
+  ) then
+    raise exception 'TEST 8 FAILED: commission adjustment changed by P1-04';
+  end if;
+
+  -- Restock before receipt is refused: nothing has been inspected yet.
+  begin
+    perform public.restock_refund_case(
+      (select id from refund_test_ids where name = 'case_window'));
+    raise exception 'TEST 8 FAILED: restock succeeded before receipt';
+  exception when check_violation then
+    null;
+  end;
+  raise notice 'TEST 8a PASSED: approval records physical-return path and commission; restock before receipt refused';
+end $$;
+
+-- Vendor acknowledges, then confirms receipt: suborder -> returned, audited.
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000004';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000004"}';
+do $$
+begin
+  perform public.acknowledge_refund_case(
+    (select id from refund_test_ids where name = 'case_window'));
+
+  if not exists (
+    select 1 from public.refund_cases
+     where id = (select id from refund_test_ids where name = 'case_window')
+       and acknowledged_by = '12200000-0000-0000-0000-000000000004'
+       and acknowledged_at is not null
+  ) then
+    raise exception 'TEST 8 FAILED: acknowledgement was not recorded';
+  end if;
+
+  perform public.confirm_refund_receipt(
+    (select id from refund_test_ids where name = 'case_window'), 'Item back in good condition');
+
+  if not exists (
+    select 1 from public.refund_cases
+     where id = (select id from refund_test_ids where name = 'case_window')
+       and received_by = '12200000-0000-0000-0000-000000000004'
+       and received_at is not null
+       and receipt_note = 'Item back in good condition'
+  ) then
+    raise exception 'TEST 8 FAILED: receipt was not recorded';
+  end if;
+
+  if (select status from public.order_vendors
+       where id = '72200000-0000-0000-0000-000000000005') <> 'returned' then
+    raise exception 'TEST 8 FAILED: suborder did not move to returned';
+  end if;
+
+  if not exists (
+    select 1 from public.order_status_events
+     where order_vendor_id = '72200000-0000-0000-0000-000000000005'
+       and from_status = 'delivered'
+       and to_status = 'returned'
+       and actor_role = 'vendor'
+       and reason_code = 'customer_request'
+       and note like '%refund case%'
+  ) then
+    raise exception 'TEST 8 FAILED: returned transition was not audited';
+  end if;
+
+  -- Receipt alone never touches stock.
+  if (select stock from public.products
+       where id = '52200000-0000-0000-0000-000000000001') <> 5 then
+    raise exception 'TEST 8 FAILED: receipt changed stock';
+  end if;
+  raise notice 'TEST 8b PASSED: vendor receipt moves the suborder to returned with an audit event, stock untouched';
+end $$;
+
+-- Admin restocks manually: stock +1, one movement naming the case.
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  perform public.restock_refund_case(
+    (select id from refund_test_ids where name = 'case_window'));
+
+  if (select stock from public.products
+       where id = '52200000-0000-0000-0000-000000000001') <> 6 then
+    raise exception 'TEST 8 FAILED: restock did not return one unit to stock';
+  end if;
+
+  -- adjust_product_stock writes no order_id; the note names the case.
+  if (select count(*) from public.inventory_movements
+       where product_id = '52200000-0000-0000-0000-000000000001'
+         and delta = 1
+         and reason = 'manual_adjustment'
+         and note like '%Refund case%') <> 1 then
+    raise exception 'TEST 8 FAILED: restock movement missing or not exactly once';
+  end if;
+
+  if not exists (
+    select 1 from public.refund_cases
+     where id = (select id from refund_test_ids where name = 'case_window')
+       and restocked_by = '12200000-0000-0000-0000-000000000003'
+       and restocked_at is not null
+  ) then
+    raise exception 'TEST 8 FAILED: restock was not recorded on the case';
+  end if;
+
+  -- A second restock is refused: never restock twice for one case.
+  begin
+    perform public.restock_refund_case(
+      (select id from refund_test_ids where name = 'case_window'));
+  exception when check_violation then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 8 FAILED: second restock was allowed';
+  end if;
+  if (select stock from public.products
+       where id = '52200000-0000-0000-0000-000000000001') <> 6 then
+    raise exception 'TEST 8 FAILED: second restock changed stock';
+  end if;
+  raise notice 'TEST 8 PASSED: approved + received return is returned (audited) and restocked exactly once';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 9: refund without a physical return does neither (P1-04)
+-- ---------------------------------------------------------------------------
+-- Admin approves the shipped case from TEST 7b with no return required.
+do $$
+begin
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'case_shipped'), true, 1000, 'Goodwill refund, keep the item', false
+  );
+
+  if not exists (
+    select 1 from public.refund_cases
+     where id = (select id from refund_test_ids where name = 'case_shipped')
+       and status = 'approved'
+       and return_path = 'no_return'
+  ) then
+    raise exception 'TEST 9 FAILED: approval did not record the no-return path';
+  end if;
+
+  if (select status from public.order_vendors
+       where id = '72200000-0000-0000-0000-000000000004') <> 'shipped' then
+    raise exception 'TEST 9 FAILED: no-return refund moved the suborder';
+  end if;
+  raise notice 'TEST 9a PASSED: no-return approval leaves the suborder alone';
+end $$;
+
+-- Receipt and restock are both refused on a no-return case.
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000004';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000004"}';
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  begin
+    perform public.confirm_refund_receipt(
+      (select id from refund_test_ids where name = 'case_shipped'), 'No item to receive');
+  exception when check_violation then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 9 FAILED: receipt confirmed on a no-return case';
+  end if;
+  raise notice 'TEST 9b PASSED: receipt refused on a no-return case';
+end $$;
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  begin
+    perform public.restock_refund_case(
+      (select id from refund_test_ids where name = 'case_shipped'));
+  exception when check_violation then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 9 FAILED: restock ran on a no-return case';
+  end if;
+  if (select stock from public.products
+       where id = '52200000-0000-0000-0000-000000000001') <> 6 then
+    raise exception 'TEST 9 FAILED: no-return refund changed stock';
+  end if;
+  raise notice 'TEST 9 PASSED: refund without a physical return restocks nothing and moves nothing';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 10: vendor receipt is own-suborder only (P1-04)
+-- ---------------------------------------------------------------------------
+-- The other shop's owner cannot acknowledge, confirm receipt, or restock
+-- vendor A's cases; a non-vendor customer cannot either.
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000005';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000005"}';
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  begin
+    perform public.acknowledge_refund_case(
+      (select id from refund_test_ids where name = 'case_window'));
+  exception when insufficient_privilege then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 10 FAILED: another shop acknowledged the case';
+  end if;
+
+  v_blocked := false;
+  begin
+    perform public.confirm_refund_receipt(
+      (select id from refund_test_ids where name = 'case_window'), 'Not my shop');
+  exception when insufficient_privilege then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 10 FAILED: another shop confirmed receipt';
+  end if;
+  raise notice 'TEST 10a PASSED: another vendor cannot touch this shop''s case';
+end $$;
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000002';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000002"}';
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  begin
+    perform public.confirm_refund_receipt(
+      (select id from refund_test_ids where name = 'case_window'), 'A customer should not do this');
+  exception when insufficient_privilege then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 10 FAILED: a customer confirmed receipt';
+  end if;
+  raise notice 'TEST 10 PASSED: vendor receipt is own-suborder only';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 11: one-shot dispute escalation (P1-04)
+-- ---------------------------------------------------------------------------
+-- case_two was rejected by admin 122...003 in TEST 5. Buyer A escalates it
+-- once; admin 122...006 (a different admin) makes the final decision.
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000001"}';
+do $$
+begin
+  perform public.escalate_refund_case(
+    (select id from refund_test_ids where name = 'case_two'),
+    'The item really was broken, here is what happened');
+
+  if not exists (
+    select 1 from public.refund_cases
+     where id = (select id from refund_test_ids where name = 'case_two')
+       and status = 'open'
+       and escalation_count = 1
+       and escalated_at is not null
+       and escalation_note = 'The item really was broken, here is what happened'
+       and first_resolved_by = '12200000-0000-0000-0000-000000000003'
+       and first_resolved_at is not null
+       and first_resolution_note = 'Duplicate claim'
+       and resolved_by is null
+       and refund_amount_minor is null
+  ) then
+    raise exception 'TEST 11 FAILED: escalation did not reopen the case with the first decision stashed';
+  end if;
+  raise notice 'TEST 11a PASSED: rejected case escalates once and reopens';
+end $$;
+
+-- The second decision is final and both decision-makers are recorded.
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000006';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000006"}';
+do $$
+begin
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'case_two'), false, 0, 'Final: no refund after review');
+
+  if not exists (
+    select 1 from public.refund_cases
+     where id = (select id from refund_test_ids where name = 'case_two')
+       and status = 'rejected'
+       and resolved_by = '12200000-0000-0000-0000-000000000006'
+       and first_resolved_by = '12200000-0000-0000-0000-000000000003'
+       and escalation_count = 1
+  ) then
+    raise exception 'TEST 11 FAILED: final decision did not record both decision-makers';
+  end if;
+  raise notice 'TEST 11b PASSED: second decision is final, both decision-makers recorded';
+end $$;
+
+-- No second escalation.
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  begin
+    perform public.escalate_refund_case(
+      (select id from refund_test_ids where name = 'case_two'), 'Trying again');
+  exception when check_violation then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 11 FAILED: second escalation was allowed';
+  end if;
+  raise notice 'TEST 11 PASSED: escalation works once and only once';
+end $$;
+
 reset role;
 
 rollback;

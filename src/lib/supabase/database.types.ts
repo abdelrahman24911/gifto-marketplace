@@ -22,6 +22,8 @@
  * Phase 29: delivery coverage helper and order_vendors trigger.
  * Phase 30: refund cases, commission adjustments, refund RPCs.
  * P1-02: guest token expiry, recovery tokens, claim_guest_order.
+ * P1-03: price-change consent RPCs (place_order_with_price_check).
+ * P1-04: D-09 return window, return path, receipt, restock, escalation.
  *
  * Regenerate from the live database once the Gifto project exists:
  *   supabase gen types typescript --project-id <ref> > src/lib/supabase/database.types.ts
@@ -891,6 +893,20 @@ export type Database = {
           resolved_at: string | null;
           created_at: string;
           updated_at: string;
+          return_path: "physical_return" | "no_return" | null;
+          received_at: string | null;
+          received_by: string | null;
+          receipt_note: string | null;
+          acknowledged_at: string | null;
+          acknowledged_by: string | null;
+          restocked_at: string | null;
+          restocked_by: string | null;
+          escalation_count: number;
+          escalated_at: string | null;
+          escalation_note: string | null;
+          first_resolved_by: string | null;
+          first_resolved_at: string | null;
+          first_resolution_note: string | null;
         };
         Insert: {
           id?: string;
@@ -908,6 +924,20 @@ export type Database = {
           resolved_at?: string | null;
           created_at?: string;
           updated_at?: string;
+          return_path?: "physical_return" | "no_return" | null;
+          received_at?: string | null;
+          received_by?: string | null;
+          receipt_note?: string | null;
+          acknowledged_at?: string | null;
+          acknowledged_by?: string | null;
+          restocked_at?: string | null;
+          restocked_by?: string | null;
+          escalation_count?: number;
+          escalated_at?: string | null;
+          escalation_note?: string | null;
+          first_resolved_by?: string | null;
+          first_resolved_at?: string | null;
+          first_resolution_note?: string | null;
         };
         Update: {
           id?: string;
@@ -925,6 +955,20 @@ export type Database = {
           resolved_at?: string | null;
           created_at?: string;
           updated_at?: string;
+          return_path?: "physical_return" | "no_return" | null;
+          received_at?: string | null;
+          received_by?: string | null;
+          receipt_note?: string | null;
+          acknowledged_at?: string | null;
+          acknowledged_by?: string | null;
+          restocked_at?: string | null;
+          restocked_by?: string | null;
+          escalation_count?: number;
+          escalated_at?: string | null;
+          escalation_note?: string | null;
+          first_resolved_by?: string | null;
+          first_resolved_at?: string | null;
+          first_resolution_note?: string | null;
         };
         Relationships: [
           {
@@ -1546,6 +1590,8 @@ export type Database = {
           resolution_note: string | null;
           created_at: string;
           resolved_at: string | null;
+          escalation_count: number;
+          escalated_at: string | null;
         }[];
       };
       open_refund_case: {
@@ -1572,6 +1618,32 @@ export type Database = {
           p_approved: boolean;
           p_refund_amount_minor?: number | null;
           p_note?: string | null;
+          p_return_required?: boolean | null;
+        };
+        Returns: undefined;
+      };
+      acknowledge_refund_case: {
+        Args: { p_case_id: string };
+        Returns: undefined;
+      };
+      confirm_refund_receipt: {
+        Args: { p_case_id: string; p_note?: string | null };
+        Returns: undefined;
+      };
+      restock_refund_case: {
+        Args: { p_case_id: string };
+        Returns: undefined;
+      };
+      escalate_refund_case: {
+        Args: { p_case_id: string; p_note: string };
+        Returns: undefined;
+      };
+      escalate_guest_refund_case: {
+        Args: {
+          p_order_id: string;
+          p_token_hash: string;
+          p_case_id: string;
+          p_note: string;
         };
         Returns: undefined;
       };

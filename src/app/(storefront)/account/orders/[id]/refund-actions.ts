@@ -68,3 +68,49 @@ export async function openRefundCase(
 
   return { success: "Refund request sent to the Gifto team.", attempt };
 }
+
+// P1-04: one-shot dispute escalation. The RPC enforces "once": a second
+// escalation is rejected, and the admin's second decision is final.
+export async function escalateRefundCase(
+  prev: OpenRefundState,
+  formData: FormData,
+): Promise<OpenRefundState> {
+  const attempt = (prev?.attempt ?? 0) + 1;
+  const orderId = String(formData.get("order_id") ?? "").trim();
+  const caseId = String(formData.get("case_id") ?? "").trim();
+  const note = String(formData.get("note") ?? "").trim();
+
+  if (!UUID_PATTERN.test(orderId) || !UUID_PATTERN.test(caseId)) {
+    return { error: "That refund case could not be found.", attempt };
+  }
+  if (note.length < 5 || note.length > 1000) {
+    return {
+      error: "Explain why you disagree in 5-1000 characters.",
+      attempt,
+    };
+  }
+
+  const { supabase } = await requireUser({ verifyWithAuthServer: true });
+  const { error } = await supabase.rpc("escalate_refund_case", {
+    p_case_id: caseId,
+    p_note: note,
+  });
+
+  if (error) {
+    return {
+      error:
+        error.code === "23514" || error.code === "42501" || error.code === "22023"
+          ? error.message
+          : "The escalation could not be sent. Refresh the page and try again.",
+      attempt,
+    };
+  }
+
+  revalidatePath(`/account/orders/${orderId}`);
+  revalidatePath("/admin/refunds");
+
+  return {
+    success: "Escalated. Gifto will review your refund again.",
+    attempt,
+  };
+}

@@ -68,7 +68,9 @@ export function GuestRefundRequestForm({
           />
           <p className="mt-1 text-xs text-zinc-500">
             The shop subtotal is {formatEgp(subtotalMinor)}. The Gifto team
-            confirms the final amount.
+            confirms the final amount. Returns are available within 7 days
+            of delivery; the shop inspects the returned gift and restocking
+            is never automatic.
           </p>
         </div>
 

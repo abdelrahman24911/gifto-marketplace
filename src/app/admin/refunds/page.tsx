@@ -16,6 +16,7 @@ import {
   REFUND_CASE_STATUSES,
   REFUND_CASE_STATUS_LABELS,
   REFUND_CASE_STATUS_STYLES,
+  REFUND_RETURN_PATH_LABELS,
   isRefundCaseStatus,
 } from "@/lib/refunds";
 
@@ -27,8 +28,10 @@ import {
 } from "../ui";
 
 import { ResolveRefundForm } from "./resolve-refund-form";
+import { RestockRefundForm } from "./restock-refund-form";
 
 import type { OrderStatus, RefundCaseStatus } from "@/lib/supabase/database.types";
+import type { RefundReturnPath } from "@/lib/refunds";
 
 export const metadata = { title: "Refunds - Admin - Gifto" };
 
@@ -45,6 +48,15 @@ type RefundQueueRow = {
   resolution_note: string | null;
   created_at: string;
   resolved_at: string | null;
+  return_path: RefundReturnPath | null;
+  received_at: string | null;
+  receipt_note: string | null;
+  acknowledged_at: string | null;
+  restocked_at: string | null;
+  escalation_count: number;
+  escalated_at: string | null;
+  escalation_note: string | null;
+  first_resolved_at: string | null;
   order: {
     public_reference: string | null;
     recipient_name: string | null;
@@ -95,7 +107,7 @@ export default async function AdminRefundsPage({
   let listQuery = supabase
     .from("refund_cases")
     .select(
-      "id, order_id, order_vendor_id, vendor_id, source, status, reason, requested_amount_minor, refund_amount_minor, resolution_note, created_at, resolved_at, order:orders(public_reference, recipient_name, contact_phone), order_vendor:order_vendors(status, subtotal_minor, vendor:vendors(name, slug))",
+      "id, order_id, order_vendor_id, vendor_id, source, status, reason, requested_amount_minor, refund_amount_minor, resolution_note, created_at, resolved_at, return_path, received_at, receipt_note, acknowledged_at, restocked_at, escalation_count, escalated_at, escalation_note, first_resolved_at, order:orders(public_reference, recipient_name, contact_phone), order_vendor:order_vendors(status, subtotal_minor, vendor:vendors(name, slug))",
       { count: "exact" },
     );
 
@@ -350,10 +362,46 @@ export default async function AdminRefundsPage({
                         Commission has been adjusted.
                       </p>
                     ) : null}
+                    {refundCase.status === "approved" &&
+                    refundCase.return_path ? (
+                      <p className="mt-2 text-xs text-ink-mute">
+                        {REFUND_RETURN_PATH_LABELS[refundCase.return_path]}
+                        {refundCase.received_at
+                          ? " · shop confirmed receipt"
+                          : " · waiting for the shop to confirm receipt"}
+                        {refundCase.receipt_note
+                          ? ` · “${refundCase.receipt_note}”`
+                          : null}
+                        {refundCase.restocked_at
+                          ? " · restocked after inspection"
+                          : null}
+                        {refundCase.acknowledged_at
+                          ? " · shop acknowledged"
+                          : null}
+                      </p>
+                    ) : null}
+                    {refundCase.status === "open" &&
+                    refundCase.escalation_count > 0 ? (
+                      <p className="mt-2 rounded-xl border border-warning/30 bg-warning-soft px-3 py-2 text-sm text-ink">
+                        Escalated by the customer
+                        {refundCase.escalation_note
+                          ? `: “${refundCase.escalation_note}”`
+                          : ""}
+                        . The first decision is on record; this second
+                        decision is final.
+                      </p>
+                    ) : null}
                     {refundCase.resolution_note ? (
                       <p className="mt-2 text-xs text-ink-mute">
                         Note: {refundCase.resolution_note}
                       </p>
+                    ) : null}
+
+                    {refundCase.status === "approved" &&
+                    refundCase.return_path === "physical_return" &&
+                    refundCase.received_at &&
+                    !refundCase.restocked_at ? (
+                      <RestockRefundForm caseId={refundCase.id} />
                     ) : null}
 
                     {refundCase.status === "open" ? (

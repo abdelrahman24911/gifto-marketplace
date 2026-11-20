@@ -43,7 +43,9 @@ export default function RefundPolicyPage() {
           Gifto&apos;s team approves the request, and the shop inspects the
           returned gift. You pay the return courier, unless the gift is wrong
           or damaged — then the shop pays. A returned gift is checked before
-          it goes back on sale; restocking is never automatic.
+          it goes back on sale; restocking is never automatic. Where Gifto
+          approves a refund without asking for the gift back, you do not
+          need to return it.
         </p>
       </PolicySection>
 
@@ -103,9 +105,10 @@ export default function RefundPolicyPage() {
           explains the current process.
         </p>
         <p>
-          If a shop and customer cannot agree, the final policy will explain how
-          the issue is escalated to Gifto. A public escalation channel is still
-          being finalised; see the{" "}
+          If a refund request is rejected and you disagree with the decision,
+          you can escalate it once from the order page. Gifto reviews the
+          case again and the second decision is final. If you still need
+          help, see the{" "}
           <GuardedLink
             href="/contact"
             className="font-medium text-berry underline underline-offset-2 hover:text-berry-deep"

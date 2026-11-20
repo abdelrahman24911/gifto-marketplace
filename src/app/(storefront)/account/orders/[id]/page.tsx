@@ -14,11 +14,16 @@ import {
 import {
   REFUND_CASE_STATUS_LABELS,
   REFUND_CASE_STATUS_STYLES,
-  canRequestRefund,
+  REFUND_RETURN_PATH_LABELS,
+  canRequestRefundWithinWindow,
+  refundWindowEndsAt,
+  type RefundReturnPath,
 } from "@/lib/refunds";
+import { EscalateRefundForm } from "@/components/escalate-refund-form";
 
 import { CancelOrderButton } from "./cancel-order-button";
 import { RefundRequestForm } from "./refund-request-form";
+import { escalateRefundCase } from "./refund-actions";
 
 import type {
   OrderStatus,
@@ -35,6 +40,11 @@ type RefundCaseRow = {
   resolution_note: string | null;
   created_at: string;
   resolved_at: string | null;
+  return_path: RefundReturnPath | null;
+  received_at: string | null;
+  restocked_at: string | null;
+  escalation_count: number;
+  escalated_at: string | null;
 };
 
 export const metadata = { title: "Order — Gifto" };
@@ -64,7 +74,7 @@ export default async function AccountOrderPage({
     supabase
     .from("orders")
     .select(
-      "id, status, payment_method, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, address_line, city, governorate, notes, created_at, order_vendors(id, status, subtotal_minor, vendor_id, order_items(id, product_name, product_slug, unit_price_minor, quantity, line_total_minor))",
+      "id, status, payment_method, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, address_line, city, governorate, notes, created_at, order_vendors(id, status, subtotal_minor, vendor_id, delivered_at, order_items(id, product_name, product_slug, unit_price_minor, quantity, line_total_minor))",
     )
     .eq("id", id)
     ,
@@ -84,7 +94,7 @@ export default async function AccountOrderPage({
   const { data: refundCases, error: refundError } = await supabase
     .from("refund_cases")
     .select(
-      "id, order_vendor_id, status, reason, requested_amount_minor, refund_amount_minor, resolution_note, created_at, resolved_at",
+      "id, order_vendor_id, status, reason, requested_amount_minor, refund_amount_minor, resolution_note, created_at, resolved_at, return_path, received_at, restocked_at, escalation_count, escalated_at",
     )
     .eq("order_id", id)
     .order("created_at", { ascending: false })
@@ -270,18 +280,64 @@ export default async function AccountOrderPage({
                           Gifto note: {refundCase.resolution_note}
                         </p>
                       ) : null}
+                      {refundCase.status === "approved" &&
+                      refundCase.return_path ? (
+                        <p className="mt-1 text-xs text-zinc-600">
+                          {REFUND_RETURN_PATH_LABELS[refundCase.return_path]}
+                          {refundCase.received_at
+                            ? " · item received by the shop"
+                            : null}
+                          {refundCase.restocked_at
+                            ? " · restocked after inspection"
+                            : null}
+                        </p>
+                      ) : null}
+                      {refundCase.status === "open" &&
+                      refundCase.escalation_count > 0 ? (
+                        <p className="mt-1 text-xs font-medium text-zinc-700">
+                          Escalated — Gifto is reviewing this refund again.
+                          The second decision is final.
+                        </p>
+                      ) : null}
+                      {refundCase.status === "rejected" &&
+                      refundCase.escalation_count === 0 ? (
+                        <EscalateRefundForm
+                          caseId={refundCase.id}
+                          orderId={order.id}
+                          action={escalateRefundCase}
+                        />
+                      ) : null}
                     </div>
                   ))}
                 </div>
               ) : null}
 
-              {canRequestRefund(suborder.status as OrderStatus) &&
-              !hasOpenCase ? (
+              {canRequestRefundWithinWindow(
+                suborder.status as OrderStatus,
+                suborder.delivered_at,
+              ) && !hasOpenCase ? (
                 <RefundRequestForm
                   orderId={order.id}
                   orderVendorId={suborder.id}
                   subtotalMinor={suborder.subtotal_minor}
                 />
+              ) : null}
+              {suborder.status === "delivered" &&
+              suborder.delivered_at &&
+              !canRequestRefundWithinWindow(
+                suborder.status as OrderStatus,
+                suborder.delivered_at,
+              ) &&
+              !hasOpenCase ? (
+                <p className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+                  The 7-day return window for this delivery ended on{" "}
+                  {refundWindowEndsAt(suborder.delivered_at).toLocaleDateString(
+                    "en-GB",
+                    { dateStyle: "medium" },
+                  )}
+                  . Returns are no longer available for this shop&apos;s part
+                  of the order.
+                </p>
               ) : null}
             </div>
           );

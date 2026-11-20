@@ -68,6 +68,23 @@ export function ResolveRefundForm({
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <label className="flex items-center gap-2 rounded-lg border border-line-strong bg-paper-soft px-3 py-2 text-sm text-ink">
+            <input
+              type="checkbox"
+              name="return_required"
+              value="yes"
+              defaultChecked
+              className="h-4 w-4 accent-berry"
+            />
+            Physical return required
+          </label>
+          <span className="text-xs text-ink-mute">
+            Uncheck only when the refund is approved without the item coming
+            back (wrong or damaged beyond return).
+          </span>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
           <button
             type="submit"
             name="decision"

@@ -82,3 +82,58 @@ export async function openGuestRefundCase(
 
   return { success: "Refund request sent to the Gifto team.", attempt };
 }
+
+// P1-04: one-shot dispute escalation for guest orders. The token is
+// verified by the service-role RPC (with the P1-02 expiry check); the RPC
+// enforces "once" and the admin's second decision is final.
+export async function escalateGuestRefundCase(
+  prev: GuestRefundState,
+  formData: FormData,
+): Promise<GuestRefundState> {
+  const attempt = (prev?.attempt ?? 0) + 1;
+  const orderId = String(formData.get("order_id") ?? "").trim();
+  const caseId = String(formData.get("case_id") ?? "").trim();
+  const note = String(formData.get("note") ?? "").trim();
+
+  if (!UUID_PATTERN.test(orderId) || !UUID_PATTERN.test(caseId)) {
+    return { error: "That refund case could not be found.", attempt };
+  }
+  if (note.length < 5 || note.length > 1000) {
+    return {
+      error: "Explain why you disagree in 5-1000 characters.",
+      attempt,
+    };
+  }
+
+  const cookieStore = await cookies();
+  const token = cookieStore.get(guestCookieName(orderId))?.value;
+  if (!isValidGuestToken(token)) {
+    return { error: "This order link is not valid in this browser.", attempt };
+  }
+
+  const service = createServiceClient();
+  const { error } = await service.rpc("escalate_guest_refund_case", {
+    p_order_id: orderId,
+    p_token_hash: sha256Hex(token),
+    p_case_id: caseId,
+    p_note: note,
+  });
+
+  if (error) {
+    return {
+      error:
+        error.code === "23514" || error.code === "42501" || error.code === "22023"
+          ? error.message
+          : "The escalation could not be sent. Refresh the page and try again.",
+      attempt,
+    };
+  }
+
+  revalidatePath(`/orders/${orderId}`);
+  revalidatePath("/admin/refunds");
+
+  return {
+    success: "Escalated. Gifto will review your refund again.",
+    attempt,
+  };
+}

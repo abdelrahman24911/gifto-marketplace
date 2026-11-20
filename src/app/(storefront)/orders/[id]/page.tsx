@@ -12,14 +12,17 @@ import { ORDER_STATUS_HELP, ORDER_STATUS_LABELS, isOrderStatus } from "@/lib/ord
 import {
   REFUND_CASE_STATUS_LABELS,
   REFUND_CASE_STATUS_STYLES,
-  canRequestRefund,
+  canRequestRefundWithinWindow,
+  refundWindowEndsAt,
 } from "@/lib/refunds";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { EscalateRefundForm } from "@/components/escalate-refund-form";
 
 import { GuestRefundRequestForm } from "./refund-request-form";
 import { GuestCancelOrderButton } from "./cancel-order-form";
 import { ClaimOrderButton } from "./claim-order-button";
+import { escalateGuestRefundCase } from "./refund-actions";
 
 import type {
   OrderStatus,
@@ -36,6 +39,8 @@ type GuestRefundCase = {
   resolution_note: string | null;
   created_at: string;
   resolved_at: string | null;
+  escalation_count: number;
+  escalated_at: string | null;
 };
 
 export const metadata = {
@@ -60,6 +65,7 @@ type GuestOrderVendor = {
   id: string;
   status: string;
   subtotal_minor: number;
+  delivered_at: string | null;
   vendor_name: string;
   vendor_slug: string;
   items: GuestOrderItem[];
@@ -340,17 +346,52 @@ export default async function GuestOrderPage({
                         Gifto note: {refundCase.resolution_note}
                       </p>
                     ) : null}
+                    {refundCase.status === "open" &&
+                    refundCase.escalation_count > 0 ? (
+                      <p className="mt-1 text-xs font-medium text-zinc-700">
+                        Escalated — Gifto is reviewing this refund again. The
+                        second decision is final.
+                      </p>
+                    ) : null}
+                    {refundCase.status === "rejected" &&
+                    refundCase.escalation_count === 0 ? (
+                      <EscalateRefundForm
+                        caseId={refundCase.id}
+                        orderId={order.id}
+                        action={escalateGuestRefundCase}
+                      />
+                    ) : null}
                   </div>
                 ))}
               </div>
             ) : null}
 
-            {canRequestRefund(vendor.status as OrderStatus) && !hasOpenCase ? (
+            {canRequestRefundWithinWindow(
+              vendor.status as OrderStatus,
+              vendor.delivered_at,
+            ) && !hasOpenCase ? (
               <GuestRefundRequestForm
                 orderId={order.id}
                 orderVendorId={vendor.id}
                 subtotalMinor={vendor.subtotal_minor}
               />
+            ) : null}
+            {vendor.status === "delivered" &&
+            vendor.delivered_at &&
+            !canRequestRefundWithinWindow(
+              vendor.status as OrderStatus,
+              vendor.delivered_at,
+            ) &&
+            !hasOpenCase ? (
+              <p className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+                The 7-day return window for this delivery ended on{" "}
+                {refundWindowEndsAt(vendor.delivered_at).toLocaleDateString(
+                  "en-GB",
+                  { dateStyle: "medium" },
+                )}
+                . Returns are no longer available for this shop&apos;s part of
+                the order.
+              </p>
             ) : null}
           </div>
           );
