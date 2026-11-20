@@ -19,6 +19,10 @@ import { minorToEgpInput } from "@/lib/money";
  * and rejected; the transfer method and the vendor's transfer reference
  * are required. Nothing here moves money — the transfer happened outside
  * the dashboard.
+ *
+ * N-01 (D-08): when the net commission due is zero, the batch was fully
+ * offset by paid-return clawbacks — no transfer took place, so the form
+ * collects no proof at all and records the batch paid with amount 0.
  */
 export function SettlementPaidForm({
   settlementId,
@@ -29,6 +33,51 @@ export function SettlementPaidForm({
 }) {
   const [state, formAction, pending] =
     useActionState<SettlementPaidState, FormData>(markSettlementPaid, null);
+
+  if (commissionDueMinor === 0) {
+    return (
+      <form
+        action={formAction}
+        onSubmit={(event) => {
+          if (
+            !window.confirm(
+              "Confirm this batch was fully offset by paid-return clawbacks, so no commission was due and no transfer took place. This records the settlement as paid and cannot be undone.",
+            )
+          ) {
+            event.preventDefault();
+          }
+        }}
+        className="mt-3 flex flex-col gap-3"
+      >
+        <input type="hidden" name="settlement_id" value={settlementId} />
+        <input type="hidden" name="paid_amount" value="0" />
+        <p className="text-sm text-ink-soft">
+          No commission is due — paid-return clawbacks fully offset this
+          batch. No transfer took place, so there is no method or reference
+          to record.
+        </p>
+        <button
+          type="submit"
+          disabled={pending || Boolean(state && "success" in state)}
+          className="self-start rounded-full bg-berry px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-berry-deep disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {pending ? "Recording…" : "Record batch as paid (no transfer)"}
+        </button>
+        {state && "error" in state ? (
+          <p role="alert" className="text-sm text-danger">
+            {state.error}
+          </p>
+        ) : state && "success" in state ? (
+          <p
+            role="status"
+            className="rounded-xl border border-success/25 bg-success-soft px-3 py-2 text-sm text-ink"
+          >
+            {state.success}
+          </p>
+        ) : null}
+      </form>
+    );
+  }
 
   return (
     <form

@@ -1201,4 +1201,143 @@ begin
   raise notice 'TEST 19 PASSED: payout proof is required, exact and visible to the vendor';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST 20 (P1-05, N-01 verification): settlement gross / earned commission
+-- / adjustments / net-due reconcile to the piaster, and the payout proof
+-- amount must equal the derived net before the RPC accepts it.
+-- ---------------------------------------------------------------------------
+-- One fresh delivered order for shop A (1 x 10000 at 8% -> 800), then a
+-- 2500 refund approval adjusts it by round(2500 x 0.08) = 200, so the net
+-- due is 600: earned 800 + adjustments (-200) = lines 600 = stored total
+-- 600 = amount that must be paid.
+set role authenticated;
+set request.jwt.claim.sub = 'c1110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c1110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_oid uuid;
+begin
+  v_oid := public.place_order(
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria'
+  );
+  perform set_config('gifto_test.comm_order20_id', v_oid::text, false);
+end $$;
+
+set request.jwt.claim.sub = 'c2110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c2110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_ov uuid;
+begin
+  select id into v_ov
+    from public.order_vendors
+   where order_id = current_setting('gifto_test.comm_order20_id')::uuid
+     and vendor_id = '41100000-0000-0000-0000-000000000001';
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', 'TRK-0020');
+  perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
+end $$;
+
+set request.jwt.claim.sub = 'c1110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c1110000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_ov uuid;
+  v_case uuid;
+begin
+  select id into v_ov
+    from public.order_vendors
+   where order_id = current_setting('gifto_test.comm_order20_id')::uuid
+     and vendor_id = '41100000-0000-0000-0000-000000000001';
+  v_case := public.open_refund_case(v_ov, 'Item arrived damaged', 2500);
+  perform set_config('gifto_test.comm_case20_id', v_case::text, false);
+end $$;
+
+set request.jwt.claim.sub = 'c3110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c3110000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_sid uuid;
+  v_earned int;
+  v_adjustments int;
+  v_lines int;
+  v_total int;
+  v_blocked boolean := false;
+begin
+  perform public.resolve_refund_case(
+    current_setting('gifto_test.comm_case20_id')::uuid, true, 2500, 'Damage confirmed');
+
+  v_sid := public.create_settlement('41100000-0000-0000-0000-000000000001');
+
+  select amount_minor into v_earned
+    from public.commission_entries
+   where order_vendor_id = (
+     select id from public.order_vendors
+      where order_id = current_setting('gifto_test.comm_order20_id')::uuid
+        and vendor_id = '41100000-0000-0000-0000-000000000001');
+
+  select coalesce(sum(amount_minor), 0) into v_adjustments
+    from public.commission_adjustments
+   where commission_entry_id = (
+     select id from public.commission_entries
+      where order_vendor_id = (
+        select id from public.order_vendors
+         where order_id = current_setting('gifto_test.comm_order20_id')::uuid
+           and vendor_id = '41100000-0000-0000-0000-000000000001'));
+
+  select coalesce(sum(amount_minor), 0) into v_lines
+    from public.settlement_lines where settlement_id = v_sid;
+
+  select total_minor into v_total from public.settlements where id = v_sid;
+
+  -- Gross / earned / adjustments / net reconcile to the piaster.
+  if v_earned <> 800 then
+    raise exception 'TEST 20 FAILED: earned commission % (expected 800)', v_earned;
+  end if;
+  if v_adjustments <> -200 then
+    raise exception 'TEST 20 FAILED: adjustments % (expected -200)', v_adjustments;
+  end if;
+  if v_lines <> v_earned + v_adjustments then
+    raise exception 'TEST 20 FAILED: lines % <> earned + adjustments %', v_lines, v_earned + v_adjustments;
+  end if;
+  if v_total <> v_lines then
+    raise exception 'TEST 20 FAILED: stored total % <> lines %', v_total, v_lines;
+  end if;
+  if v_total <> 600 then
+    raise exception 'TEST 20 FAILED: net due % (expected 600)', v_total;
+  end if;
+
+  -- The proof amount must equal the derived net (600), not the gross
+  -- earned commission (800) and not any other figure.
+  begin
+    perform public.mark_settlement_paid(v_sid, 800, 'bank_transfer', 'COMM-TEST20-001');
+    raise exception 'TEST 20 FAILED: paying the gross earned amount was accepted';
+  exception when check_violation then
+    if sqlerrm not like '%does not match the commission due (600)%' then
+      raise exception 'TEST 20 FAILED: wrong error for gross payment: %', sqlerrm;
+    end if;
+  end;
+
+  begin
+    perform public.mark_settlement_paid(v_sid, 599, 'bank_transfer', 'COMM-TEST20-001');
+    raise exception 'TEST 20 FAILED: paying one piastre short was accepted';
+  exception when check_violation then
+    null;
+  end;
+
+  perform public.mark_settlement_paid(
+    v_sid, 600, 'bank_transfer', 'COMM-TEST20-001', 'Weekly remittance');
+
+  if not exists (
+    select 1 from public.settlements
+     where id = v_sid
+       and status = 'paid'
+       and total_minor = 600
+       and paid_amount_minor = 600
+       and transfer_reference = 'COMM-TEST20-001'
+  ) then
+    raise exception 'TEST 20 FAILED: net payment was not recorded exactly';
+  end if;
+  raise notice 'TEST 20 PASSED: gross 800 + adjustments -200 = net 600 reconciles; proof must equal the net';
+end $$;
+
 rollback;

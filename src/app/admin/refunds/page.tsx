@@ -153,6 +153,105 @@ export default async function AdminRefundsPage({
   const rejectedCount = counts.get("rejected");
   const pageCount = Math.max(1, Math.ceil(total / DEFAULT_PAGE_SIZE));
 
+  // N-01 (D-08): per-case paid-clawback preview. For each open case, find
+  // the suborder's earned commission entry and any unreleased line in a
+  // PAID settlement; the remaining paid amount caps the clawback an
+  // approval would record. Approved cases also show any clawback already
+  // recorded for them.
+  type PaidEntryRow = {
+    id: string;
+    order_vendor_id: string;
+    rate: number;
+    status: string;
+  };
+  type PaidLineRow = {
+    commission_entry_id: string;
+    amount_minor: number;
+    settlement: { status: string } | { status: string }[] | null;
+  };
+  type CaseClawbackRow = {
+    refund_case_id: string;
+    amount_minor: number;
+    status: string;
+  };
+
+  const openSuborderIds = cases
+    .filter((refundCase) => refundCase.status === "open")
+    .map((refundCase) => refundCase.order_vendor_id);
+  const { data: paidEntryData } = openSuborderIds.length
+    ? await supabase
+        .from("commission_entries")
+        .select("id, order_vendor_id, rate, status")
+        .in("order_vendor_id", openSuborderIds)
+    : { data: [] };
+  const paidEntries = (paidEntryData ?? []) as unknown as PaidEntryRow[];
+  const paidEntryIds = paidEntries.map((entry) => entry.id);
+  const { data: paidLineData } = paidEntryIds.length
+    ? await supabase
+        .from("settlement_lines")
+        .select("commission_entry_id, amount_minor, settlement:settlements(status)")
+        .is("released_at", null)
+        .in("commission_entry_id", paidEntryIds)
+    : { data: [] };
+  const paidLines = (paidLineData ?? []) as unknown as PaidLineRow[];
+  const { data: priorClawbackData } = paidEntryIds.length
+    ? await supabase
+        .from("commission_clawbacks")
+        .select("commission_entry_id, amount_minor")
+        .in("commission_entry_id", paidEntryIds)
+    : { data: [] };
+  const priorClawbacks = new Map<string, number>();
+  for (const row of (priorClawbackData ?? []) as unknown as {
+    commission_entry_id: string;
+    amount_minor: number;
+  }[]) {
+    priorClawbacks.set(
+      row.commission_entry_id,
+      (priorClawbacks.get(row.commission_entry_id) ?? 0) + row.amount_minor,
+    );
+  }
+
+  const paidClawbackPreviewBySuborder = new Map<
+    string,
+    { rate: number; remainingPaidMinor: number }
+  >();
+  for (const entry of paidEntries) {
+    if (entry.status !== "earned") continue;
+    const paidLine = paidLines.find((line) => {
+      if (line.commission_entry_id !== entry.id) return false;
+      const settlement = Array.isArray(line.settlement)
+        ? line.settlement[0]
+        : line.settlement;
+      return settlement?.status === "paid";
+    });
+    if (!paidLine) continue;
+    // Prior clawbacks are negative; the remaining paid amount is what a
+    // new approval can still claw back.
+    const remainingPaidMinor =
+      paidLine.amount_minor +
+      (priorClawbacks.get(entry.id) ?? 0);
+    if (remainingPaidMinor > 0) {
+      paidClawbackPreviewBySuborder.set(entry.order_vendor_id, {
+        rate: entry.rate,
+        remainingPaidMinor,
+      });
+    }
+  }
+
+  const caseIds = cases.map((refundCase) => refundCase.id);
+  const { data: caseClawbackData } = caseIds.length
+    ? await supabase
+        .from("commission_clawbacks")
+        .select("refund_case_id, amount_minor, status")
+        .in("refund_case_id", caseIds)
+    : { data: [] };
+  const clawbackByCase = new Map(
+    ((caseClawbackData ?? []) as unknown as CaseClawbackRow[]).map((row) => [
+      row.refund_case_id,
+      row,
+    ]),
+  );
+
   return (
     <div className="w-full">
       <Breadcrumb
@@ -236,7 +335,8 @@ export default async function AdminRefundsPage({
           <p className="text-xs text-ink-mute">
             Approving a refund reduces the shop&apos;s earned commission. If
             that commission is already in an active settlement, void the
-            settlement first.
+            settlement first. If it is already paid, approving records a
+            clawback against the shop&apos;s next settlement (D-08) instead.
           </p>
         </div>
 
@@ -359,7 +459,9 @@ export default async function AdminRefundsPage({
                     refundCase.refund_amount_minor !== null ? (
                       <p className="mt-3 rounded-xl border border-success/25 bg-success-soft px-3 py-2 text-sm text-ink">
                         Approved {formatEgp(refundCase.refund_amount_minor)}.
-                        Commission has been adjusted.
+                        {clawbackByCase.has(refundCase.id)
+                          ? ` The commission was already paid out, so a clawback of ${formatEgp(Math.abs(clawbackByCase.get(refundCase.id)!.amount_minor))} was recorded against the shop's next settlement.`
+                          : " Commission has been adjusted."}
                       </p>
                     ) : null}
                     {refundCase.status === "approved" &&
@@ -408,6 +510,9 @@ export default async function AdminRefundsPage({
                       <ResolveRefundForm
                         caseId={refundCase.id}
                         suggestedMinor={suggested}
+                        paidClawbackPreview={paidClawbackPreviewBySuborder.get(
+                          refundCase.order_vendor_id,
+                        )}
                       />
                     ) : null}
                   </li>

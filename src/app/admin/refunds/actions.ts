@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { requirePlatformAdmin } from "@/lib/auth";
 import { checkMutationQuota } from "@/lib/rate-limit";
-import { parseEgpToMinor } from "@/lib/money";
+import { formatEgp, parseEgpToMinor } from "@/lib/money";
 import { notifyRefundCaseResolved } from "@/lib/mail";
 
 export type ResolveRefundState =
@@ -80,10 +80,26 @@ export async function resolveRefundCase(
   // P1-01: customer refund-resolution email. Never rolls the decision back.
   await notifyRefundCaseResolved(caseId);
 
+  // N-01 (D-08): when the approval landed on a paid settlement, the
+  // commission was recorded as a clawback instead of an adjustment —
+  // say so, so the admin knows the money is carried to the next batch.
+  let clawbackMinor: number | null = null;
+  if (decision === "approve") {
+    const { data: clawbackData } = await supabase
+      .from("commission_clawbacks")
+      .select("amount_minor")
+      .eq("refund_case_id", caseId)
+      .maybeSingle();
+    clawbackMinor = (clawbackData as { amount_minor: number } | null)
+      ?.amount_minor ?? null;
+  }
+
   return {
     success:
       decision === "approve"
-        ? "Refund approved and commission adjusted."
+        ? clawbackMinor !== null
+          ? `Refund approved. The commission was already paid out, so a clawback of ${formatEgp(Math.abs(clawbackMinor))} was recorded against the shop's next settlement.`
+          : "Refund approved and commission adjusted."
         : "Refund request rejected.",
     attempt,
   };

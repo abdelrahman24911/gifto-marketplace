@@ -9,6 +9,7 @@ import {
   settlementEarnedCommissionMinor,
   settlementEffectiveStatus,
   settlementLineGrossMinor,
+  settlementNetDueMinor,
   settlementTotals,
   settlementTotalsResult,
   totalsForFinanceState,
@@ -78,6 +79,7 @@ const settlements: SettlementRecord[] = [
     vendor_id: "vendor-1",
     status: "open",
     total_minor: 800,
+    clawback_minor: 0,
     note: "Week 45",
     created_at: "2026-11-04T12:00:00.000Z",
     paid_at: null,
@@ -99,6 +101,7 @@ const settlements: SettlementRecord[] = [
     vendor_id: "vendor-1",
     status: "paid",
     total_minor: 1_125,
+    clawback_minor: 0,
     note: null,
     created_at: "2026-11-02T12:00:00.000Z",
     paid_at: "2026-11-03T12:00:00.000Z",
@@ -120,6 +123,7 @@ const settlements: SettlementRecord[] = [
     vendor_id: "vendor-1",
     status: "voided",
     total_minor: 400,
+    clawback_minor: 0,
     note: "Opened by mistake",
     created_at: "2026-11-05T12:00:00.000Z",
     paid_at: null,
@@ -442,5 +446,11 @@ describe("P1-05 payout proof helpers", () => {
     expect(isTransferMethod("wire")).toBe(false);
     expect(isTransferMethod(null)).toBe(false);
     expect(isTransferMethod(undefined)).toBe(false);
+  });
+
+  it("N-01: nets paid-return clawbacks out of the lines total", () => {
+    expect(settlementNetDueMinor(1000, 200)).toBe(800);
+    expect(settlementNetDueMinor(400, 400)).toBe(0);
+    expect(settlementNetDueMinor(800, 0)).toBe(800);
   });
 });

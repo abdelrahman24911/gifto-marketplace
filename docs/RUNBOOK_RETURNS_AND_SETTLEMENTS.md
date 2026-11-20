@@ -137,9 +137,11 @@ order). Then:
   releases the lines, so the commission can be settled again in a later
   batch. There is **no per-line release** in today's UI; voiding the whole
   batch is the only way to free the entry.
-- **If the entry is in a paid settlement:** stop. Go to
-  "Return arrives AFTER payout" below. Do not approve the case and do not
-  try to edit the settlement.
+- **If the entry is in a paid settlement:** proceed — approving the case
+  records a **clawback** (D-08, N-01) against the shop's next settlement
+  instead of an adjustment. The refund form shows the clawback estimate
+  before you approve. The paid settlement, its lines and its total are
+  never edited. Do not void anything — a paid settlement cannot be voided.
 - **If the entry is in no settlement:** proceed.
 
 This check comes first because approving the refund (step c) raises
@@ -159,6 +161,10 @@ beyond return) — then steps (d) and (e) do not apply at all. Then verify
 - A **negative `commission_adjustments` row** was recorded for the refund
   (ask a developer to check, or confirm in the next settlement batch that
   the entry's remaining commission is reduced).
+- If the commission was already paid out, a **negative
+  `commission_clawbacks` row** was recorded instead of an adjustment — the
+  approved case on `/admin/refunds` shows it, and the shop sees it on
+  `/vendor/finance`. The clawback is taken from the shop's next settlement.
 - If the refund consumed the whole commission, the entry flipped to
   `reversed`.
 
@@ -211,32 +217,43 @@ system — do not reopen the case by hand to work around it.
 
 ---
 
-## Return arrives AFTER payout — the honest procedure
+## Return arrives AFTER payout — the in-system procedure (N-01)
 
-This is the case the rule exists to prevent. If it happens anyway:
+The rule still exists to prevent this, but if it happens the system can
+now handle it — do not work around it by hand.
 
-1. **The system cannot approve the refund.** `resolve_refund_case` will
-   raise *"This commission is part of an active settlement…"* and there is
-   no way around it in the product.
-2. **The system cannot void the paid settlement.** Voiding raises *"A paid
-   settlement cannot be voided."*
-3. **Do NOT edit the paid settlement, its lines, or its totals — ever.**
+1. **Approve the refund in `/admin/refunds` as normal.** The form shows
+   the clawback estimate before you confirm: the commission Gifto already
+   paid out, times the refund, capped at the commission still paid out.
+   Approving records a `commission_clawbacks` row for the case; the entry
+   stays `earned` and the paid settlement, its lines and its total are
+   never touched.
+2. **The clawback is taken from the shop's next settlement
+   automatically** (oldest first; a clawback larger than one batch is
+   applied in part and the remainder carries forward). The batch's total
+   is the lines' commission less the clawbacks applied, and the amount
+   Gifto records as received is that net total — never the gross lines
+   total. If a batch is fully offset, it is recorded paid with amount 0
+   and no transfer proof, because no transfer took place.
+3. **Direct repayment (D-08 fallback):** if there is no next settlement,
+   or the owner agrees the vendor repays directly, an admin records it
+   with `record_clawback_direct_repayment` (clawback ID + the vendor's
+   transfer reference). The clawback is then consumed and never applies
+   to a later batch. There is no admin UI for this yet — it is an RPC
+   call an admin makes with a developer.
+4. **Do NOT edit the paid settlement, its lines, or its totals — ever.**
    No manual database edit, no "correction" to the recorded total. The paid
    record is the audit trail.
-4. **Record the case in the runbook log** (table below) with the paid
-   settlement's ID, and handle the money by the D-08 agreed route: a
-   **documented deduction from the vendor's next settlement**, recorded as a
-   manual note on that settlement until N-01 ships the in-system clawback —
-   or **direct repayment** by the vendor if there is no next settlement.
-   Write the deduction into the next batch's note field and the log so the
-   two records agree.
-5. **Flag the case to the owner the same day.** A post-payout return is an
+5. **Record the case in the runbook log** (table below) with the paid
+   settlement's ID, the clawback amount, and the recovery route
+   (next-settlement deduction or direct repayment).
+6. **Flag the case to the owner the same day.** A post-payout return is an
    owner-level exception, not a routine refund: same-day flag, with the
    order reference, the paid settlement ID, the refund amount, and the
-   agreed recovery (next-settlement deduction or direct repayment).
-6. Still move the suborder to `returned` (step d) and restock only after
+   agreed recovery.
+7. Still move the suborder to `returned` (step d) and restock only after
    inspection (step e) — those steps are not blocked by the payout. Only
-   the commission reversal is blocked, and that is what the deduction
+   the commission reversal is deferred, and that is what the clawback
    recovers.
 
 ---
@@ -257,8 +274,9 @@ stores the reference in the system.
 
 ## What this runbook does not do
 
-- It does not build returns tables, RPCs, or customer UI (P1-04 / N-01 /
-  N-03 own that).
+- It does not build returns tables, RPCs, or customer UI (P1-04 / N-03 own
+  that). N-01 shipped the in-system paid-return clawback; the manual-note
+  workaround for post-payout returns is retired.
 - It does not close CR-01 (returns/refunds/disputes) or CR-03 (settlement
   payout): both stay open. This runbook mitigates them for the pilot.
 - It does not authorise editing a paid settlement or restocking without

@@ -9,6 +9,7 @@ import { fetchAllRows } from "@/lib/fetch-all";
 import {
   commissionEntriesById,
   isTransferMethod,
+  settlementNetDueMinor,
   settlementTotalsResult,
 } from "@/lib/finance";
 import { formatEgp, parseEgpToMinor } from "@/lib/money";
@@ -93,7 +94,7 @@ export async function markSettlementPaid(
   const { data: settlementData, error: settlementError } = await supabase
     .from("settlements")
     .select(
-      "settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
+      "id, total_minor, clawback_minor, settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
     )
     .eq("id", settlementId)
     .maybeSingle();
@@ -105,11 +106,11 @@ export async function markSettlementPaid(
     };
   }
 
-  const settlement = settlementData as Pick<
+  const settlementRow = settlementData as Pick<
     SettlementRecord,
-    "settlement_lines"
+    "total_minor" | "clawback_minor" | "settlement_lines"
   >;
-  const entryIds = settlement.settlement_lines.map(
+  const entryIds = settlementRow.settlement_lines.map(
     (line) => line.commission_entry_id,
   );
   const entriesResult = entryIds.length
@@ -127,7 +128,7 @@ export async function markSettlementPaid(
       )
     : { rows: [], failed: false, truncated: false };
   const totalsResult = settlementTotalsResult(
-    settlement,
+    settlementRow,
     commissionEntriesById(entriesResult.rows),
     {
       failed: entriesResult.failed,
@@ -152,6 +153,13 @@ export async function markSettlementPaid(
   // reference are part of the attestation; the database rejects a wrong
   // amount or a missing reference, and this validation surfaces the same
   // errors before the RPC call.
+  //
+  // N-01 (D-08): the amount due is the NET commission — the lines'
+  // snapshot less the paid-return clawbacks applied to this batch — which
+  // is the stored total_minor. The proof validation compares the entered
+  // amount to that derived net, never to the gross lines total. When the
+  // batch is fully offset by clawbacks the net due is zero, no transfer
+  // took place, and no proof is collected or recorded.
   const paidAmountMinor = parseEgpToMinor(
     String(formData.get("paid_amount") ?? ""),
   );
@@ -167,6 +175,67 @@ export async function markSettlementPaid(
       attempt,
     };
   }
+
+  const netDueMinor = settlementNetDueMinor(
+    totalsResult.totals.commissionMinor,
+    settlementRow.clawback_minor ?? 0,
+  );
+  if (settlementRow.total_minor !== netDueMinor) {
+    return {
+      error:
+        "The settlement total does not match its lines net of clawbacks. The settlement was not marked paid.",
+      attempt,
+    };
+  }
+
+  // The derived D-08 amount is the net commission. Check it here for a
+  // fast, specific error; the RPC re-checks it and is the authority, so
+  // a race cannot slip a wrong amount through.
+  if (paidAmountMinor !== netDueMinor) {
+    return {
+      error: `The amount received (${formatEgp(paidAmountMinor)}) does not match the commission due (${formatEgp(netDueMinor)}).`,
+      attempt,
+    };
+  }
+
+  if (netDueMinor === 0) {
+    if (transferMethod !== "" || transferReference !== "" || proofNote !== "") {
+      return {
+        error:
+          "This settlement is fully offset by clawbacks, so no transfer took place and no proof is recorded.",
+        attempt,
+      };
+    }
+
+    const { error } = await supabase.rpc("mark_settlement_paid", {
+      p_settlement_id: settlementId,
+      p_paid_amount_minor: 0,
+      p_transfer_method: null,
+      p_transfer_reference: null,
+      p_proof_note: null,
+    });
+
+    if (error) {
+      return {
+        error:
+          error.code === "23514" || error.code === "22023"
+            ? error.message
+            : "The settlement could not be marked paid. Refresh the page and try again.",
+        attempt,
+      };
+    }
+
+    revalidatePath("/admin/settlements");
+    revalidatePath(`/admin/settlements/${settlementId}`);
+    revalidatePath("/vendor/finance");
+
+    return {
+      success:
+        "No commission was due — this batch was fully offset by paid-return clawbacks.",
+      attempt,
+    };
+  }
+
   if (!isTransferMethod(transferMethod)) {
     return { error: "Choose how the commission was transferred.", attempt };
   }
@@ -179,16 +248,6 @@ export async function markSettlementPaid(
   if (proofNote.length > 500) {
     return {
       error: "A proof note must be 500 characters or fewer.",
-      attempt,
-    };
-  }
-
-  // The derived D-08 amount is the net commission (sum of the lines).
-  // Check it here for a fast, specific error; the RPC re-checks it and
-  // is the authority, so a race cannot slip a wrong amount through.
-  if (paidAmountMinor !== totalsResult.totals.commissionMinor) {
-    return {
-      error: `The amount received (${formatEgp(paidAmountMinor)}) does not match the commission due (${formatEgp(totalsResult.totals.commissionMinor)}).`,
       attempt,
     };
   }

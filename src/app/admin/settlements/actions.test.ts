@@ -6,6 +6,12 @@ const state = vi.hoisted(() => ({
   quotaError: null as string | null,
   fromCalls: 0,
   rpc: vi.fn(),
+  // N-01: the mock settlement's line, stored total and clawback are
+  // configurable so the clawback net can be exercised.
+  lineAmountMinor: 800,
+  entryAmountMinor: 800,
+  totalMinor: 800,
+  clawbackMinor: 0,
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -29,10 +35,13 @@ vi.mock("@/lib/auth", () => ({
           data:
             table === "settlements"
               ? {
+                  id: "settlement-1",
+                  total_minor: state.totalMinor,
+                  clawback_minor: state.clawbackMinor,
                   settlement_lines: [
                     {
                       commission_entry_id: "entry-1",
-                      amount_minor: 800,
+                      amount_minor: state.lineAmountMinor,
                       released_at: null,
                       released_by: null,
                       release_reason: null,
@@ -56,7 +65,7 @@ vi.mock("@/lib/auth", () => ({
                   status: "earned",
                   rate: 0.08,
                   base_minor: 10_000,
-                  amount_minor: 800,
+                  amount_minor: state.entryAmountMinor,
                   earned_at: "2026-11-01T10:00:00.000Z",
                   reversed_at: null,
                 },
@@ -125,6 +134,10 @@ beforeEach(() => {
   state.authRejected = false;
   state.quotaError = null;
   state.fromCalls = 0;
+  state.lineAmountMinor = 800;
+  state.entryAmountMinor = 800;
+  state.totalMinor = 800;
+  state.clawbackMinor = 0;
   state.rpc.mockReset();
   state.rpc.mockResolvedValue({ error: null });
 });
@@ -290,5 +303,88 @@ describe("markSettlementPaid verification guard", () => {
       error: "This settlement was voided and cannot be marked paid.",
     });
     expect(state.rpc).toHaveBeenCalledTimes(2);
+  });
+
+  it("N-01: compares the paid amount to the clawback net, not the gross lines total", async () => {
+    state.mode = "complete";
+    // Lines total 1000, clawbacks 200, stored net 800.
+    state.lineAmountMinor = 1000;
+    state.entryAmountMinor = 1000;
+    state.totalMinor = 800;
+    state.clawbackMinor = 200;
+
+    const netForm = paidFormData();
+    await expect(markSettlementPaid(null, netForm)).resolves.toMatchObject({
+      success: expect.any(String),
+    });
+    expect(state.rpc).toHaveBeenCalledWith("mark_settlement_paid", {
+      p_settlement_id: "settlement-1",
+      p_paid_amount_minor: 800,
+      p_transfer_method: "bank_transfer",
+      p_transfer_reference: "BANK-REF-1",
+      p_proof_note: null,
+    });
+
+    state.rpc.mockClear();
+    const grossForm = paidFormData();
+    grossForm.set("paid_amount", "10.00");
+    await expect(markSettlementPaid(null, grossForm)).resolves.toMatchObject({
+      error:
+        "The amount received (EGP 10.00) does not match the commission due (EGP 8.00).",
+    });
+    expect(state.rpc).not.toHaveBeenCalled();
+  });
+
+  it("N-01: rejects a stored total that does not match lines net of clawbacks", async () => {
+    state.mode = "complete";
+    state.lineAmountMinor = 1000;
+    state.entryAmountMinor = 1000;
+    state.totalMinor = 900;
+    state.clawbackMinor = 200;
+
+    const result = await markSettlementPaid(null, paidFormData());
+
+    expect(result).toMatchObject({
+      error:
+        "The settlement total does not match its lines net of clawbacks. The settlement was not marked paid.",
+    });
+    expect(state.rpc).not.toHaveBeenCalled();
+  });
+
+  it("N-01: records a fully clawback-offset batch as paid with amount 0 and no proof", async () => {
+    state.mode = "complete";
+    // Lines total 400, clawbacks 400, stored net 0: no transfer took place.
+    state.lineAmountMinor = 400;
+    state.entryAmountMinor = 400;
+    state.totalMinor = 0;
+    state.clawbackMinor = 400;
+
+    const zeroForm = new FormData();
+    zeroForm.set("settlement_id", "settlement-1");
+    zeroForm.set("paid_amount", "0");
+
+    await expect(markSettlementPaid(null, zeroForm)).resolves.toMatchObject({
+      success:
+        "No commission was due — this batch was fully offset by paid-return clawbacks.",
+    });
+    expect(state.rpc).toHaveBeenCalledWith("mark_settlement_paid", {
+      p_settlement_id: "settlement-1",
+      p_paid_amount_minor: 0,
+      p_transfer_method: null,
+      p_transfer_reference: null,
+      p_proof_note: null,
+    });
+
+    state.rpc.mockClear();
+    const proofForm = new FormData();
+    proofForm.set("settlement_id", "settlement-1");
+    proofForm.set("paid_amount", "0");
+    proofForm.set("transfer_method", "bank_transfer");
+    proofForm.set("transfer_reference", "BANK-REF-1");
+    await expect(markSettlementPaid(null, proofForm)).resolves.toMatchObject({
+      error:
+        "This settlement is fully offset by clawbacks, so no transfer took place and no proof is recorded.",
+    });
+    expect(state.rpc).not.toHaveBeenCalled();
   });
 });

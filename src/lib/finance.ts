@@ -46,6 +46,9 @@ export type SettlementRecord = {
   vendor_id: string;
   status: SettlementStatus;
   total_minor: number;
+  // N-01 (D-08): piastres of outstanding paid-return clawbacks netted
+  // against this batch. total_minor = sum(lines) - clawback_minor.
+  clawback_minor: number;
   note: string | null;
   created_at: string;
   paid_at: string | null;
@@ -108,6 +111,48 @@ export type SettlementLineLookup = Map<
   string,
   { settlementId: string; status: ActiveSettlementStatus }
 >;
+
+// N-01 (D-08): a paid-return clawback — commission Gifto already paid out
+// that the vendor owes back, carried into the next settlement (or repaid
+// directly when there is no next settlement).
+export type CommissionClawbackStatus =
+  | "outstanding"
+  | "consumed"
+  | "direct_repayment";
+
+export type CommissionClawbackRecord = {
+  id: string;
+  commission_entry_id: string;
+  refund_case_id: string;
+  vendor_id: string;
+  amount_minor: number;
+  reason: string | null;
+  status: CommissionClawbackStatus;
+  direct_repayment_reference: string | null;
+  created_at: string;
+  consumed_at: string | null;
+};
+
+export type ClawbackApplicationRecord = {
+  id: string;
+  clawback_id: string;
+  settlement_id: string;
+  amount_minor: number;
+  created_at: string;
+};
+
+/**
+ * N-01: the net commission due on a settlement is its lines' snapshot
+ * less the paid-return clawbacks applied to the batch. The stored
+ * total_minor must equal this figure, and the payout proof amount must
+ * equal it too — never the gross lines total.
+ */
+export function settlementNetDueMinor(
+  linesTotalMinor: number,
+  clawbackMinor: number,
+): number {
+  return linesTotalMinor - clawbackMinor;
+}
 
 export const FINANCE_ENTRY_STATE_LABELS: Record<FinanceEntryState, string> = {
   unsettled: "Unsettled",

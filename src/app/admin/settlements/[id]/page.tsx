@@ -35,6 +35,7 @@ type SettlementDetailRow = {
   vendor_id: string;
   status: SettlementRecord["status"];
   total_minor: number;
+  clawback_minor: number;
   note: string | null;
   created_at: string;
   paid_at: string | null;
@@ -68,11 +69,38 @@ type OrderVendorRow = {
   order_items: { product_name: string; quantity: number }[] | null;
 };
 
+type ClawbackApplicationRow = {
+  id: string;
+  amount_minor: number;
+  created_at: string;
+  clawback: {
+    id: string;
+    refund_case_id: string;
+    amount_minor: number;
+    status: string;
+  } | null;
+};
+
+type ClawbackCaseRow = {
+  id: string;
+  order_vendor:
+    | { order: { public_reference: string | null } | { public_reference: string | null }[] | null }
+    | null;
+};
+
 type ActorRow = {
   id: string;
   full_name: string | null;
   email: string;
 };
+
+function clawbackOrderReference(row: ClawbackCaseRow | undefined) {
+  if (!row?.order_vendor?.order) return "Order reference unavailable";
+  const order = Array.isArray(row.order_vendor.order)
+    ? row.order_vendor.order[0]
+    : row.order_vendor.order;
+  return order?.public_reference ?? "Order reference unavailable";
+}
 
 function formatDate(value: string) {
   return new Date(value).toLocaleString("en-GB", {
@@ -114,7 +142,7 @@ export default async function SettlementDetailPage({
   const { data: settlementData, error: settlementError } = await supabase
     .from("settlements")
     .select(
-      "id, vendor_id, status, total_minor, note, created_at, paid_at, created_by, paid_by, voided_at, voided_by, void_reason, paid_amount_minor, transfer_method, transfer_reference, proof_note, vendor:vendors(name, slug), settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
+      "id, vendor_id, status, total_minor, clawback_minor, note, created_at, paid_at, created_by, paid_by, voided_at, voided_by, void_reason, paid_amount_minor, transfer_method, transfer_reference, proof_note, vendor:vendors(name, slug), settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -127,6 +155,7 @@ export default async function SettlementDetailPage({
     vendor_id: row.vendor_id,
     status: row.status,
     total_minor: row.total_minor,
+    clawback_minor: row.clawback_minor,
     note: row.note,
     created_at: row.created_at,
     paid_at: row.paid_at,
@@ -194,9 +223,10 @@ export default async function SettlementDetailPage({
   // P0-07 (returns-before-payout rule): the payout check for this batch.
   // The 7-day D-09 return window runs from each suborder's delivered_at; the
   // batch is safe to pay only when every window has closed AND no refund
-  // case is open on any of its lines. A paid settlement can never be voided
-  // and a refund on its lines can never be approved afterwards, so this
-  // panel warns instead of blocking — the runbook holds the rule.
+  // case is open on any of its lines. A paid settlement can never be voided;
+  // a refund approved on its lines afterwards no longer blocks — it records
+  // a clawback against the shop's next settlement (D-08, N-01) — so this
+  // panel warns instead of blocking, and the runbook holds the rule.
   const RETURN_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
   const deliveredAts = [...orderVendors.values()]
     .map((suborder) => suborder.delivered_at)
@@ -249,6 +279,38 @@ export default async function SettlementDetailPage({
 
   const actors = new Map(
     ((actorData ?? []) as ActorRow[]).map((actor) => [actor.id, actor]),
+  );
+
+  // N-01 (D-08): paid-return clawbacks netted against this batch, with
+  // the refund case's order reference for the audit trail.
+  const { data: clawbackApplicationData } = await supabase
+    .from("clawback_applications")
+    .select(
+      "id, amount_minor, created_at, clawback:commission_clawbacks(id, refund_case_id, amount_minor, status)",
+    )
+    .eq("settlement_id", id)
+    .order("created_at", { ascending: true });
+
+  const clawbackApplications = (
+    (clawbackApplicationData ?? []) as unknown as ClawbackApplicationRow[]
+  ).filter((application) => application.clawback !== null);
+  const clawbackCaseIds = Array.from(
+    new Set(
+      clawbackApplications
+        .map((application) => application.clawback?.refund_case_id)
+        .filter((caseId): caseId is string => Boolean(caseId)),
+    ),
+  );
+  const { data: clawbackCaseData } = clawbackCaseIds.length
+    ? await supabase
+        .from("refund_cases")
+        .select("id, order_vendor:order_vendors(order:orders(public_reference))")
+        .in("id", clawbackCaseIds)
+    : { data: [] };
+  const clawbackCases = new Map(
+    ((clawbackCaseData ?? []) as unknown as ClawbackCaseRow[]).map(
+      (refundCase) => [refundCase.id, refundCase],
+    ),
   );
 
   const lines = [...settlement.settlement_lines].sort((a, b) => {
@@ -379,28 +441,39 @@ export default async function SettlementDetailPage({
                   : "Payment date not recorded"}
               </p>
               <dl className="mt-3 space-y-1 text-xs">
-                <div className="flex justify-between gap-3">
-                  <dt className="text-ink-mute">Amount received</dt>
-                  <dd className="font-medium tabular-nums text-ink">
-                    {row.paid_amount_minor === null
-                      ? "Not recorded"
-                      : formatEgp(row.paid_amount_minor)}
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-ink-mute">Transfer method</dt>
-                  <dd className="font-medium text-ink">
-                    {row.transfer_method
-                      ? TRANSFER_METHOD_LABELS[row.transfer_method]
-                      : "Not recorded"}
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-ink-mute">Transfer reference</dt>
-                  <dd className="font-medium text-ink">
-                    {row.transfer_reference ?? "Not recorded"}
-                  </dd>
-                </div>
+                {row.paid_amount_minor === 0 && row.transfer_method === null ? (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-ink-mute">Transfer</dt>
+                    <dd className="font-medium text-ink">
+                      No transfer — fully offset by paid-return clawbacks
+                    </dd>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-ink-mute">Amount received</dt>
+                      <dd className="font-medium tabular-nums text-ink">
+                        {row.paid_amount_minor === null
+                          ? "Not recorded"
+                          : formatEgp(row.paid_amount_minor)}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-ink-mute">Transfer method</dt>
+                      <dd className="font-medium text-ink">
+                        {row.transfer_method
+                          ? TRANSFER_METHOD_LABELS[row.transfer_method]
+                          : "Not recorded"}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-ink-mute">Transfer reference</dt>
+                      <dd className="font-medium text-ink">
+                        {row.transfer_reference ?? "Not recorded"}
+                      </dd>
+                    </div>
+                  </>
+                )}
                 {row.proof_note ? (
                   <div className="flex justify-between gap-3">
                     <dt className="text-ink-mute">Proof note</dt>
@@ -458,10 +531,13 @@ export default async function SettlementDetailPage({
             amount must match the net commission due{" "}
             <strong className="text-ink">
               {totals.complete
-                ? formatEgp(totals.commissionMinor)
+                ? formatEgp(row.total_minor)
                 : "once the commission statement is complete"}
             </strong>
             . Marking this paid records the receipt; it does not move money.
+            {row.clawback_minor > 0
+              ? " Paid-return clawbacks have already been netted against this batch — the amount due is the lines' commission less those clawbacks."
+              : ""}
           </p>
           {totals.complete ? (
             <dl className="mt-3 space-y-1 rounded-xl border border-line bg-paper-soft px-4 py-3 text-sm">
@@ -489,10 +565,18 @@ export default async function SettlementDetailPage({
                     : formatEgp(adjustmentsMinor)}
                 </dd>
               </div>
+              {row.clawback_minor > 0 ? (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-ink-mute">Paid-return clawbacks</dt>
+                  <dd className="font-medium tabular-nums text-ink">
+                    −{formatEgp(row.clawback_minor)}
+                  </dd>
+                </div>
+              ) : null}
               <div className="flex justify-between gap-3 border-t border-line pt-1">
                 <dt className="font-medium text-ink">Net commission due</dt>
                 <dd className="font-semibold tabular-nums text-ink">
-                  {formatEgp(totals.commissionMinor)}
+                  {formatEgp(row.total_minor)}
                 </dd>
               </div>
             </dl>
@@ -511,8 +595,9 @@ export default async function SettlementDetailPage({
                   {missingDeliveredAt
                     ? "At least one line has no delivered date recorded, so its return window cannot be proven closed. Confirm the delivery date by hand before paying. "
                     : null}
-                  A paid settlement can never be voided and a refund on its
-                  lines can never be approved afterwards. See
+                  A paid settlement can never be voided; a refund approved
+                  on its lines afterwards records a clawback against the
+                  shop&apos;s next settlement (D-08). See
                   docs/RUNBOOK_RETURNS_AND_SETTLEMENTS.md.
                 </AdminNotice>
               ) : (
@@ -527,7 +612,7 @@ export default async function SettlementDetailPage({
               <div className="mt-3">
                 <SettlementPaidForm
                   settlementId={row.id}
-                  commissionDueMinor={totals.commissionMinor}
+                  commissionDueMinor={row.total_minor}
                 />
               </div>
             </div>
@@ -548,6 +633,49 @@ export default async function SettlementDetailPage({
               <SettlementVoidButton settlementId={row.id} />
             </div>
           </div>
+        </section>
+      ) : null}
+
+      {clawbackApplications.length > 0 ? (
+        <section className="mt-8">
+          <h2 className="font-display text-2xl text-ink">
+            Paid-return clawbacks ({clawbackApplications.length})
+          </h2>
+          <p className="mt-1 text-xs text-ink-mute">
+            Commission Gifto had already paid out and the shop owes back,
+            netted against this batch under D-08. The paid settlements they
+            came from were never edited.
+          </p>
+          <ul className="mt-3 flex flex-col divide-y divide-line overflow-hidden rounded-2xl border border-line bg-paper-soft">
+            {clawbackApplications.map((application) => {
+              const clawback = application.clawback;
+              const refundCase = clawback
+                ? clawbackCases.get(clawback.refund_case_id)
+                : undefined;
+              return (
+                <li key={application.id} className="px-5 py-4 text-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium text-ink">
+                        {clawbackOrderReference(refundCase)}
+                      </p>
+                      <p className="mt-1 text-xs text-ink-mute">
+                        Clawback of {formatEgp(Math.abs(clawback?.amount_minor ?? 0))} ·{" "}
+                        {clawback?.status === "consumed"
+                          ? "consumed by this batch"
+                          : clawback?.status === "direct_repayment"
+                            ? "repaid directly"
+                            : "outstanding"}
+                      </p>
+                    </div>
+                    <p className="font-medium tabular-nums text-ink">
+                      −{formatEgp(application.amount_minor)}
+                    </p>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         </section>
       ) : null}
 

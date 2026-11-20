@@ -197,7 +197,9 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- TEST 5: another refund cannot bypass an active settlement
+-- TEST 5 (N-01, D-08): a refund on a PAID settlement no longer dead-ends —
+-- approval succeeds and records a clawback carried to the next settlement.
+-- The paid settlement's rows must be byte-identical afterwards.
 -- ---------------------------------------------------------------------------
 insert into refund_test_ids
 select 'case_two', public.open_refund_case(
@@ -208,22 +210,106 @@ select 'case_two', public.open_refund_case(
 
 do $$
 declare
-  v_blocked boolean := false;
+  v_sid uuid := (select id from refund_test_ids where name = 'settlement');
 begin
-  begin
-    perform public.resolve_refund_case(
-      (select id from refund_test_ids where name = 'case_two'), true, 1000, 'Should require voiding the settlement'
-    );
-  exception when check_violation then
-    v_blocked := true;
-  end;
+  -- Snapshot the paid settlement and its lines before the approval.
+  create temp table n01_paid_snapshot as
+    select status, total_minor, paid_amount_minor, transfer_method,
+           transfer_reference, paid_at, paid_by, updated_at, clawback_minor
+      from public.settlements where id = v_sid;
+  create temp table n01_paid_lines_snapshot as
+    select commission_entry_id, amount_minor, currency, released_at,
+           release_reason, released_by
+      from public.settlement_lines where settlement_id = v_sid;
 
-  if not v_blocked then
-    raise exception 'TEST 5 FAILED: refund was approved despite active settlement';
+  -- Approval succeeds now (N-01): pro-rata reduction round(1000 x 0.10)
+  -- = 100 against the 600 still paid out for this entry.
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'case_two'), true, 1000, 'Second issue confirmed'
+  );
+
+  if not exists (
+    select 1 from public.refund_cases
+     where id = (select id from refund_test_ids where name = 'case_two')
+       and status = 'approved'
+       and refund_amount_minor = 1000
+       and return_path = 'physical_return'
+  ) then
+    raise exception 'TEST 5 FAILED: refund on a paid settlement was not approved';
   end if;
 
-  perform public.resolve_refund_case((select id from refund_test_ids where name = 'case_two'), false, 0, 'Duplicate claim');
-  raise notice 'TEST 5 PASSED: active settlement blocks automatic adjustment';
+  if not exists (
+    select 1 from public.commission_clawbacks
+     where refund_case_id = (select id from refund_test_ids where name = 'case_two')
+       and commission_entry_id = '82200000-0000-0000-0000-000000000001'
+       and vendor_id = '42200000-0000-0000-0000-000000000001'
+       and amount_minor = -100
+       and status = 'outstanding'
+  ) then
+    raise exception 'TEST 5 FAILED: clawback is wrong (expected -100 outstanding)';
+  end if;
+
+  -- No ordinary adjustment was written for the paid path.
+  if (select count(*) from public.commission_adjustments
+       where commission_entry_id = '82200000-0000-0000-0000-000000000001') <> 1 then
+    raise exception 'TEST 5 FAILED: paid-path approval wrote a commission adjustment';
+  end if;
+
+  -- The entry stays earned: it was earned and paid; the clawback is the
+  -- reversal record.
+  if (select status from public.commission_entries
+       where id = '82200000-0000-0000-0000-000000000001') <> 'earned' then
+    raise exception 'TEST 5 FAILED: paid-path approval changed the entry status';
+  end if;
+
+  -- The paid settlement is byte-identical.
+  if exists (
+    (select status, total_minor, paid_amount_minor, transfer_method,
+            transfer_reference, paid_at, paid_by, updated_at, clawback_minor
+       from public.settlements where id = v_sid)
+    except (select * from n01_paid_snapshot)
+  ) or exists (
+    (select * from n01_paid_snapshot)
+    except
+    (select status, total_minor, paid_amount_minor, transfer_method,
+            transfer_reference, paid_at, paid_by, updated_at, clawback_minor
+       from public.settlements where id = v_sid)
+  ) then
+    raise exception 'TEST 5 FAILED: approving the refund changed the paid settlement';
+  end if;
+
+  if exists (
+    (select commission_entry_id, amount_minor, currency, released_at,
+            release_reason, released_by
+       from public.settlement_lines where settlement_id = v_sid)
+    except (select * from n01_paid_lines_snapshot)
+  ) or exists (
+    (select * from n01_paid_lines_snapshot)
+    except
+    (select commission_entry_id, amount_minor, currency, released_at,
+            release_reason, released_by
+       from public.settlement_lines where settlement_id = v_sid)
+  ) then
+    raise exception 'TEST 5 FAILED: approving the refund changed the paid settlement lines';
+  end if;
+
+  raise notice 'TEST 5 PASSED: refund on a paid settlement approves with a -100 clawback; paid settlement byte-identical';
+end $$;
+
+-- The one-open-case slot is free again: open a third case and reject it,
+-- so TEST 11 still has a rejected case to escalate.
+insert into refund_test_ids
+select 'case_three', public.open_refund_case(
+  '72200000-0000-0000-0000-000000000001',
+  'Third issue, also a duplicate',
+  500
+);
+
+do $$
+begin
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'case_three'), false, 0, 'Duplicate claim');
+  raise notice 'TEST 5b PASSED: a fresh case opens after the clawback approval and can be rejected';
 end $$;
 
 -- ---------------------------------------------------------------------------
@@ -772,19 +858,19 @@ end $$;
 -- ---------------------------------------------------------------------------
 -- TEST 11: one-shot dispute escalation (P1-04)
 -- ---------------------------------------------------------------------------
--- case_two was rejected by admin 122...003 in TEST 5. Buyer A escalates it
+-- case_three was rejected by admin 122...003 in TEST 5. Buyer A escalates it
 -- once; admin 122...006 (a different admin) makes the final decision.
 set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000001';
 set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000001"}';
 do $$
 begin
   perform public.escalate_refund_case(
-    (select id from refund_test_ids where name = 'case_two'),
+    (select id from refund_test_ids where name = 'case_three'),
     'The item really was broken, here is what happened');
 
   if not exists (
     select 1 from public.refund_cases
-     where id = (select id from refund_test_ids where name = 'case_two')
+     where id = (select id from refund_test_ids where name = 'case_three')
        and status = 'open'
        and escalation_count = 1
        and escalated_at is not null
@@ -806,11 +892,11 @@ set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000006"}';
 do $$
 begin
   perform public.resolve_refund_case(
-    (select id from refund_test_ids where name = 'case_two'), false, 0, 'Final: no refund after review');
+    (select id from refund_test_ids where name = 'case_three'), false, 0, 'Final: no refund after review');
 
   if not exists (
     select 1 from public.refund_cases
-     where id = (select id from refund_test_ids where name = 'case_two')
+     where id = (select id from refund_test_ids where name = 'case_three')
        and status = 'rejected'
        and resolved_by = '12200000-0000-0000-0000-000000000006'
        and first_resolved_by = '12200000-0000-0000-0000-000000000003'
@@ -830,7 +916,7 @@ declare
 begin
   begin
     perform public.escalate_refund_case(
-      (select id from refund_test_ids where name = 'case_two'), 'Trying again');
+      (select id from refund_test_ids where name = 'case_three'), 'Trying again');
   exception when check_violation then
     v_blocked := true;
   end;
@@ -838,6 +924,919 @@ begin
     raise exception 'TEST 11 FAILED: second escalation was allowed';
   end if;
   raise notice 'TEST 11 PASSED: escalation works once and only once';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 12 (N-01, D-08): clawback carry — a paid settlement's clawback is
+-- netted against the vendor's next settlement exactly once, never more
+-- than was paid, and the open-settlement raise still holds.
+-- ---------------------------------------------------------------------------
+-- Fresh fixtures: vendor C (rate 10%), subtotal 10000 -> entry 1000.
+reset role;
+insert into public.vendors (id, name, slug, status, commission_rate)
+values (
+  '42200000-0000-0000-0000-000000000003',
+  'Clawback Shop', 'clawback-shop', 'active', 0.1000
+);
+
+insert into public.orders (
+  id, user_id, status, subtotal_minor, total_minor, recipient_name,
+  contact_phone, address_line, city, governorate
+) values (
+  '62200000-0000-0000-0000-000000000008',
+  '12200000-0000-0000-0000-000000000001',
+  'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+  '12 Road 9, Maadi', 'Maadi', 'Cairo'
+);
+
+insert into public.order_vendors (
+  id, order_id, vendor_id, status, subtotal_minor, commission_rate, delivered_at
+) values (
+  '72200000-0000-0000-0000-000000000008',
+  '62200000-0000-0000-0000-000000000008',
+  '42200000-0000-0000-0000-000000000003',
+  'delivered', 10000, 0.1000, now()
+);
+
+insert into public.commission_entries (
+  id, order_vendor_id, vendor_id, rate, base_minor, amount_minor, earned_at
+) values (
+  '82200000-0000-0000-0000-000000000008',
+  '72200000-0000-0000-0000-000000000008',
+  '42200000-0000-0000-0000-000000000003',
+  0.1000, 10000, 1000, now()
+);
+
+-- (a) Pre-settlement refund 5000: ordinary adjustment -500, no clawback.
+set role authenticated;
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000001"}';
+insert into refund_test_ids
+select 'claw_a', public.open_refund_case(
+  '72200000-0000-0000-0000-000000000008', 'First clawback issue', 5000);
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+do $$
+begin
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'claw_a'), true, 5000, 'First refund approved');
+
+  if not exists (
+    select 1 from public.commission_adjustments
+     where refund_case_id = (select id from refund_test_ids where name = 'claw_a')
+       and amount_minor = -500
+  ) then
+    raise exception 'TEST 12 FAILED: pre-settlement adjustment is wrong (expected -500)';
+  end if;
+
+  if exists (select 1 from public.commission_clawbacks
+              where refund_case_id = (select id from refund_test_ids where name = 'claw_a')) then
+    raise exception 'TEST 12 FAILED: pre-settlement approval recorded a clawback';
+  end if;
+  raise notice 'TEST 12a PASSED: pre-settlement refund adjusts -500, no clawback';
+end $$;
+
+-- (b) Settlement nets it: line 500, total 500. Pay it.
+insert into refund_test_ids
+select 'claw_settlement', public.create_settlement(
+  '42200000-0000-0000-0000-000000000003', 'Clawback carry test');
+
+do $$
+declare
+  v_sid uuid := (select id from refund_test_ids where name = 'claw_settlement');
+begin
+  if not exists (
+    select 1 from public.settlement_lines
+     where settlement_id = v_sid
+       and commission_entry_id = '82200000-0000-0000-0000-000000000008'
+       and amount_minor = 500
+  ) then
+    raise exception 'TEST 12 FAILED: settlement line is not the net 500';
+  end if;
+
+  if (select total_minor from public.settlements where id = v_sid) <> 500 then
+    raise exception 'TEST 12 FAILED: settlement total is not 500';
+  end if;
+
+  perform public.mark_settlement_paid(
+    v_sid, 500, 'bank_transfer', 'CLAW-TEST12-001', 'Weekly remittance');
+  raise notice 'TEST 12b PASSED: settlement pays the net 500';
+end $$;
+
+-- (c) Post-payment refund 4999: clawback -500 (round(4999 x 0.10) = 500),
+-- paid settlement byte-identical, entry still earned.
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000001"}';
+insert into refund_test_ids
+select 'claw_b', public.open_refund_case(
+  '72200000-0000-0000-0000-000000000008', 'Second clawback issue', 4999);
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+do $$
+declare
+  v_sid uuid := (select id from refund_test_ids where name = 'claw_settlement');
+begin
+  create temp table claw_paid_snapshot as
+    select status, total_minor, paid_amount_minor, transfer_method,
+           transfer_reference, paid_at, paid_by, updated_at, clawback_minor
+      from public.settlements where id = v_sid;
+  create temp table claw_paid_lines_snapshot as
+    select commission_entry_id, amount_minor, currency, released_at,
+           release_reason, released_by
+      from public.settlement_lines where settlement_id = v_sid;
+
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'claw_b'), true, 4999, 'Second refund approved');
+
+  if not exists (
+    select 1 from public.commission_clawbacks
+     where refund_case_id = (select id from refund_test_ids where name = 'claw_b')
+       and commission_entry_id = '82200000-0000-0000-0000-000000000008'
+       and amount_minor = -500
+       and status = 'outstanding'
+  ) then
+    raise exception 'TEST 12 FAILED: clawback is wrong (expected -500 outstanding)';
+  end if;
+
+  if (select count(*) from public.commission_adjustments
+       where commission_entry_id = '82200000-0000-0000-0000-000000000008') <> 1 then
+    raise exception 'TEST 12 FAILED: paid-path approval wrote a commission adjustment';
+  end if;
+
+  if exists (
+    (select status, total_minor, paid_amount_minor, transfer_method,
+            transfer_reference, paid_at, paid_by, updated_at, clawback_minor
+       from public.settlements where id = v_sid)
+    except (select * from claw_paid_snapshot)
+  ) or exists (
+    (select * from claw_paid_snapshot)
+    except
+    (select status, total_minor, paid_amount_minor, transfer_method,
+            transfer_reference, paid_at, paid_by, updated_at, clawback_minor
+       from public.settlements where id = v_sid)
+  ) then
+    raise exception 'TEST 12 FAILED: clawback approval changed the paid settlement';
+  end if;
+
+  if exists (
+    (select commission_entry_id, amount_minor, currency, released_at,
+            release_reason, released_by
+       from public.settlement_lines where settlement_id = v_sid)
+    except (select * from claw_paid_lines_snapshot)
+  ) or exists (
+    (select * from claw_paid_lines_snapshot)
+    except
+    (select commission_entry_id, amount_minor, currency, released_at,
+            release_reason, released_by
+       from public.settlement_lines where settlement_id = v_sid)
+  ) then
+    raise exception 'TEST 12 FAILED: clawback approval changed the paid settlement lines';
+  end if;
+
+  raise notice 'TEST 12c PASSED: post-payment refund claws back -500; paid settlement byte-identical';
+end $$;
+
+-- (d) The paid amount is now fully clawed back (500 of 500). A further
+-- refund of 1 piastre still approves — but records NO new clawback.
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000001"}';
+insert into refund_test_ids
+select 'claw_c', public.open_refund_case(
+  '72200000-0000-0000-0000-000000000008', 'Third clawback issue', 1);
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+do $$
+begin
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'claw_c'), true, 1, 'One piastre refund approved');
+
+  if exists (select 1 from public.commission_clawbacks
+              where refund_case_id = (select id from refund_test_ids where name = 'claw_c')) then
+    raise exception 'TEST 12 FAILED: a refund past the paid amount recorded a clawback';
+  end if;
+
+  if (select coalesce(sum(abs(amount_minor)), 0) from public.commission_clawbacks
+       where commission_entry_id = '82200000-0000-0000-0000-000000000008') <> 500 then
+    raise exception 'TEST 12 FAILED: total clawed back exceeds the 500 paid out';
+  end if;
+  raise notice 'TEST 12d PASSED: no clawback past the amount paid out';
+end $$;
+
+-- (e) The scope trigger itself refuses a clawback past the paid amount.
+reset role;
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  begin
+    insert into public.commission_clawbacks (
+      commission_entry_id, refund_case_id, vendor_id, amount_minor, reason
+    ) values (
+      '82200000-0000-0000-0000-000000000008',
+      (select id from refund_test_ids where name = 'claw_c'),
+      '42200000-0000-0000-0000-000000000003',
+      -1, 'Trigger cap probe'
+    );
+  exception when check_violation then
+    if sqlerrm like '%cannot exceed the amount paid out%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 12 FAILED: wrong trigger error: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 12 FAILED: clawback past the paid amount was inserted';
+  end if;
+  raise notice 'TEST 12e PASSED: clawback cap is enforced by the trigger';
+end $$;
+
+-- (f) The vendor's next settlement nets the clawback exactly once:
+-- new entry 2000, gross 2000, clawback 500 -> total 1500. Paying the
+-- gross 2000 is rejected; the net 1500 pays.
+reset role;
+insert into public.orders (
+  id, user_id, status, subtotal_minor, total_minor, recipient_name,
+  contact_phone, address_line, city, governorate
+) values (
+  '62200000-0000-0000-0000-000000000009',
+  '12200000-0000-0000-0000-000000000001',
+  'delivered', 20000, 20000, 'Refund Buyer', '01001112233',
+  '12 Road 9, Maadi', 'Maadi', 'Cairo'
+);
+
+insert into public.order_vendors (
+  id, order_id, vendor_id, status, subtotal_minor, commission_rate, delivered_at
+) values (
+  '72200000-0000-0000-0000-000000000009',
+  '62200000-0000-0000-0000-000000000009',
+  '42200000-0000-0000-0000-000000000003',
+  'delivered', 20000, 0.1000, now()
+);
+
+insert into public.commission_entries (
+  id, order_vendor_id, vendor_id, rate, base_minor, amount_minor, earned_at
+) values (
+  '82200000-0000-0000-0000-000000000009',
+  '72200000-0000-0000-0000-000000000009',
+  '42200000-0000-0000-0000-000000000003',
+  0.1000, 20000, 2000, now()
+);
+
+set role authenticated;
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+insert into refund_test_ids
+select 'claw_settlement_2', public.create_settlement(
+  '42200000-0000-0000-0000-000000000003', 'Second batch nets the clawback');
+
+do $$
+declare
+  v_sid uuid := (select id from refund_test_ids where name = 'claw_settlement_2');
+  v_blocked boolean := false;
+begin
+  if (select total_minor from public.settlements where id = v_sid) <> 1500 then
+    raise exception 'TEST 12 FAILED: second settlement total is not 1500 (2000 - 500)';
+  end if;
+
+  if (select clawback_minor from public.settlements where id = v_sid) <> 500 then
+    raise exception 'TEST 12 FAILED: second settlement clawback_minor is not 500';
+  end if;
+
+  if (select count(*) from public.clawback_applications
+       where settlement_id = v_sid) <> 1 then
+    raise exception 'TEST 12 FAILED: clawback was not applied exactly once to the second batch';
+  end if;
+
+  if not exists (
+    select 1 from public.commission_clawbacks
+     where refund_case_id = (select id from refund_test_ids where name = 'claw_b')
+       and status = 'consumed'
+       and consumed_at is not null
+  ) then
+    raise exception 'TEST 12 FAILED: fully applied clawback is not consumed';
+  end if;
+
+  -- Paying the gross (2000) is rejected: the derived net is 1500.
+  begin
+    perform public.mark_settlement_paid(
+      v_sid, 2000, 'bank_transfer', 'CLAW-TEST12-002');
+  exception when check_violation then
+    if sqlerrm like '%does not match the commission due (1500)%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 12 FAILED: wrong error for gross payment: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 12 FAILED: paying the gross instead of the net was accepted';
+  end if;
+
+  perform public.mark_settlement_paid(
+    v_sid, 1500, 'bank_transfer', 'CLAW-TEST12-002', 'Second batch, net of clawback');
+  raise notice 'TEST 12f PASSED: next settlement nets the clawback once; net 1500 pays, gross 2000 rejected';
+end $$;
+
+-- (g) A third settlement does not re-apply the consumed clawback.
+reset role;
+insert into public.orders (
+  id, user_id, status, subtotal_minor, total_minor, recipient_name,
+  contact_phone, address_line, city, governorate
+) values (
+  '62200000-0000-0000-0000-000000000010',
+  '12200000-0000-0000-0000-000000000001',
+  'delivered', 7000, 7000, 'Refund Buyer', '01001112233',
+  '12 Road 9, Maadi', 'Maadi', 'Cairo'
+);
+
+insert into public.order_vendors (
+  id, order_id, vendor_id, status, subtotal_minor, commission_rate, delivered_at
+) values (
+  '72200000-0000-0000-0000-000000000010',
+  '62200000-0000-0000-0000-000000000010',
+  '42200000-0000-0000-0000-000000000003',
+  'delivered', 7000, 0.1000, now()
+);
+
+insert into public.commission_entries (
+  id, order_vendor_id, vendor_id, rate, base_minor, amount_minor, earned_at
+) values (
+  '82200000-0000-0000-0000-000000000010',
+  '72200000-0000-0000-0000-000000000010',
+  '42200000-0000-0000-0000-000000000003',
+  0.1000, 7000, 700, now()
+);
+
+set role authenticated;
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+insert into refund_test_ids
+select 'claw_settlement_3', public.create_settlement(
+  '42200000-0000-0000-0000-000000000003', 'Third batch');
+
+do $$
+declare
+  v_sid uuid := (select id from refund_test_ids where name = 'claw_settlement_3');
+begin
+  if (select total_minor from public.settlements where id = v_sid) <> 700 then
+    raise exception 'TEST 12 FAILED: third settlement total is not 700';
+  end if;
+
+  if (select clawback_minor from public.settlements where id = v_sid) <> 0 then
+    raise exception 'TEST 12 FAILED: third settlement netted a clawback again';
+  end if;
+
+  if (select count(*) from public.clawback_applications
+       where clawback_id = (
+         select id from public.commission_clawbacks
+          where refund_case_id = (select id from refund_test_ids where name = 'claw_b')
+       )) <> 1 then
+    raise exception 'TEST 12 FAILED: clawback was applied more than once';
+  end if;
+
+  perform public.mark_settlement_paid(
+    v_sid, 700, 'bank_transfer', 'CLAW-TEST12-003');
+  raise notice 'TEST 12g PASSED: consumed clawback is never re-applied';
+end $$;
+
+-- (h) The open-settlement raise still holds (N-01 changes the PAID path
+-- only): approve against an open batch raises, then succeeds after void.
+reset role;
+insert into public.vendors (id, name, slug, status, commission_rate)
+values (
+  '42200000-0000-0000-0000-000000000004',
+  'Open Settlement Shop', 'open-settlement-shop', 'active', 0.1000
+);
+
+insert into public.orders (
+  id, user_id, status, subtotal_minor, total_minor, recipient_name,
+  contact_phone, address_line, city, governorate
+) values (
+  '62200000-0000-0000-0000-000000000011',
+  '12200000-0000-0000-0000-000000000001',
+  'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+  '12 Road 9, Maadi', 'Maadi', 'Cairo'
+);
+
+insert into public.order_vendors (
+  id, order_id, vendor_id, status, subtotal_minor, commission_rate, delivered_at
+) values (
+  '72200000-0000-0000-0000-000000000011',
+  '62200000-0000-0000-0000-000000000011',
+  '42200000-0000-0000-0000-000000000004',
+  'delivered', 10000, 0.1000, now()
+);
+
+insert into public.commission_entries (
+  id, order_vendor_id, vendor_id, rate, base_minor, amount_minor, earned_at
+) values (
+  '82200000-0000-0000-0000-000000000011',
+  '72200000-0000-0000-0000-000000000011',
+  '42200000-0000-0000-0000-000000000004',
+  0.1000, 10000, 1000, now()
+);
+
+set role authenticated;
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000001"}';
+insert into refund_test_ids
+select 'claw_open_case', public.open_refund_case(
+  '72200000-0000-0000-0000-000000000011', 'Open settlement issue', 1000);
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+insert into refund_test_ids
+select 'claw_open_settlement', public.create_settlement(
+  '42200000-0000-0000-0000-000000000004', 'Open batch for the raise test');
+
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  begin
+    perform public.resolve_refund_case(
+      (select id from refund_test_ids where name = 'claw_open_case'), true, 1000, 'Should require voiding first'
+    );
+  exception when check_violation then
+    if sqlerrm like '%part of an active settlement%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 12 FAILED: wrong error for open settlement: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 12 FAILED: refund approved despite an open settlement';
+  end if;
+
+  if (select status from public.refund_cases
+       where id = (select id from refund_test_ids where name = 'claw_open_case')) <> 'open' then
+    raise exception 'TEST 12 FAILED: blocked case changed status';
+  end if;
+
+  perform public.void_settlement(
+    (select id from refund_test_ids where name = 'claw_open_settlement'), 'Void for the refund test');
+
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'claw_open_case'), true, 1000, 'Approved after void');
+
+  if not exists (
+    select 1 from public.commission_adjustments
+     where refund_case_id = (select id from refund_test_ids where name = 'claw_open_case')
+       and amount_minor = -100
+  ) then
+    raise exception 'TEST 12 FAILED: approval after void did not adjust -100';
+  end if;
+
+  if exists (select 1 from public.commission_clawbacks
+              where refund_case_id = (select id from refund_test_ids where name = 'claw_open_case')) then
+    raise exception 'TEST 12 FAILED: approval after void recorded a clawback';
+  end if;
+  raise notice 'TEST 12h PASSED: open settlement still blocks approval; voiding restores the ordinary path';
+  raise notice 'TEST 12 PASSED: clawback carries exactly once, capped at the amount paid';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 13 (N-01, D-08): zero-net settlement and direct repayment.
+-- ---------------------------------------------------------------------------
+-- Vendor E: clawback fully offsets the next batch -> total 0, paid with
+-- amount 0 and no proof. Vendor F: no next settlement -> direct repayment.
+reset role;
+insert into public.vendors (id, name, slug, status, commission_rate)
+values (
+  '42200000-0000-0000-0000-000000000005',
+  'Zero Net Shop', 'zero-net-shop', 'active', 0.1000
+),
+(
+  '42200000-0000-0000-0000-000000000006',
+  'Direct Repay Shop', 'direct-repay-shop', 'active', 0.1000
+);
+
+insert into public.orders (
+  id, user_id, status, subtotal_minor, total_minor, recipient_name,
+  contact_phone, address_line, city, governorate
+) values (
+  '62200000-0000-0000-0000-000000000012',
+  '12200000-0000-0000-0000-000000000001',
+  'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+  '12 Road 9, Maadi', 'Maadi', 'Cairo'
+),
+(
+  '62200000-0000-0000-0000-000000000014',
+  '12200000-0000-0000-0000-000000000001',
+  'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+  '12 Road 9, Maadi', 'Maadi', 'Cairo'
+);
+
+insert into public.order_vendors (
+  id, order_id, vendor_id, status, subtotal_minor, commission_rate, delivered_at
+) values (
+  '72200000-0000-0000-0000-000000000012',
+  '62200000-0000-0000-0000-000000000012',
+  '42200000-0000-0000-0000-000000000005',
+  'delivered', 10000, 0.1000, now()
+),
+(
+  '72200000-0000-0000-0000-000000000014',
+  '62200000-0000-0000-0000-000000000014',
+  '42200000-0000-0000-0000-000000000006',
+  'delivered', 10000, 0.1000, now()
+);
+
+insert into public.commission_entries (
+  id, order_vendor_id, vendor_id, rate, base_minor, amount_minor, earned_at
+) values (
+  '82200000-0000-0000-0000-000000000012',
+  '72200000-0000-0000-0000-000000000012',
+  '42200000-0000-0000-0000-000000000005',
+  0.1000, 10000, 1000, now()
+),
+(
+  '82200000-0000-0000-0000-000000000014',
+  '72200000-0000-0000-0000-000000000014',
+  '42200000-0000-0000-0000-000000000006',
+  0.1000, 10000, 1000, now()
+);
+
+-- Vendor E: pre-settlement refund 5000 (-500), settle 500, pay, then a
+-- post-payment refund 4999 claws back the whole 500.
+set role authenticated;
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000001"}';
+insert into refund_test_ids
+select 'zero_a', public.open_refund_case(
+  '72200000-0000-0000-0000-000000000012', 'Zero-net first issue', 5000);
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+do $$
+begin
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'zero_a'), true, 5000, 'First refund approved');
+end $$;
+
+insert into refund_test_ids
+select 'zero_settlement', public.create_settlement(
+  '42200000-0000-0000-0000-000000000005', 'Zero-net first batch');
+
+do $$
+begin
+  perform public.mark_settlement_paid(
+    (select id from refund_test_ids where name = 'zero_settlement'),
+    500, 'bank_transfer', 'ZERO-TEST13-001');
+end $$;
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000001"}';
+insert into refund_test_ids
+select 'zero_b', public.open_refund_case(
+  '72200000-0000-0000-0000-000000000012', 'Zero-net second issue', 4999);
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+do $$
+begin
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'zero_b'), true, 4999, 'Second refund approved');
+
+  if not exists (
+    select 1 from public.commission_clawbacks
+     where refund_case_id = (select id from refund_test_ids where name = 'zero_b')
+       and amount_minor = -500
+       and status = 'outstanding'
+  ) then
+    raise exception 'TEST 13 FAILED: zero-net clawback is wrong (expected -500 outstanding)';
+  end if;
+  raise notice 'TEST 13a PASSED: clawback -500 recorded for the zero-net vendor';
+end $$;
+
+-- The next batch (new entry 400) is fully offset: total 0.
+reset role;
+insert into public.orders (
+  id, user_id, status, subtotal_minor, total_minor, recipient_name,
+  contact_phone, address_line, city, governorate
+) values (
+  '62200000-0000-0000-0000-000000000013',
+  '12200000-0000-0000-0000-000000000001',
+  'delivered', 4000, 4000, 'Refund Buyer', '01001112233',
+  '12 Road 9, Maadi', 'Maadi', 'Cairo'
+);
+
+insert into public.order_vendors (
+  id, order_id, vendor_id, status, subtotal_minor, commission_rate, delivered_at
+) values (
+  '72200000-0000-0000-0000-000000000013',
+  '62200000-0000-0000-0000-000000000013',
+  '42200000-0000-0000-0000-000000000005',
+  'delivered', 4000, 0.1000, now()
+);
+
+insert into public.commission_entries (
+  id, order_vendor_id, vendor_id, rate, base_minor, amount_minor, earned_at
+) values (
+  '82200000-0000-0000-0000-000000000013',
+  '72200000-0000-0000-0000-000000000013',
+  '42200000-0000-0000-0000-000000000005',
+  0.1000, 4000, 400, now()
+);
+
+set role authenticated;
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+insert into refund_test_ids
+select 'zero_settlement_2', public.create_settlement(
+  '42200000-0000-0000-0000-000000000005', 'Zero-net second batch');
+
+do $$
+declare
+  v_sid uuid := (select id from refund_test_ids where name = 'zero_settlement_2');
+  v_blocked boolean := false;
+begin
+  if (select total_minor from public.settlements where id = v_sid) <> 0 then
+    raise exception 'TEST 13 FAILED: fully offset settlement total is not 0';
+  end if;
+
+  if (select clawback_minor from public.settlements where id = v_sid) <> 400 then
+    raise exception 'TEST 13 FAILED: fully offset settlement clawback_minor is not 400';
+  end if;
+
+  -- A transfer reference for a transfer that never happened is rejected.
+  begin
+    perform public.mark_settlement_paid(
+      v_sid, 0, 'bank_transfer', 'ZERO-TEST13-002', null);
+  exception when check_violation then
+    if sqlerrm like '%fully offset by clawbacks%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 13 FAILED: wrong error for proof on a zero-net batch: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 13 FAILED: proof was accepted for a zero-net batch';
+  end if;
+
+  -- Any positive amount is rejected too.
+  v_blocked := false;
+  begin
+    perform public.mark_settlement_paid(v_sid, 1, null, null, null);
+  exception when check_violation then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 13 FAILED: a positive amount was paid on a zero-net batch';
+  end if;
+
+  perform public.mark_settlement_paid(v_sid, 0, null, null, null);
+
+  if not exists (
+    select 1 from public.settlements
+     where id = v_sid
+       and status = 'paid'
+       and paid_amount_minor = 0
+       and total_minor = 0
+       and transfer_method is null
+       and transfer_reference is null
+       and proof_note is null
+  ) then
+    raise exception 'TEST 13 FAILED: zero-net batch was not paid cleanly';
+  end if;
+
+  -- The clawback was only PARTIALLY applied (400 of 500): it stays
+  -- outstanding with the 100 remainder carried forward.
+  if not exists (
+    select 1 from public.commission_clawbacks
+     where refund_case_id = (select id from refund_test_ids where name = 'zero_b')
+       and status = 'outstanding'
+  ) then
+    raise exception 'TEST 13 FAILED: partially applied clawback is not outstanding';
+  end if;
+
+  if (select coalesce(sum(amount_minor), 0) from public.clawback_applications
+       where clawback_id = (
+         select id from public.commission_clawbacks
+          where refund_case_id = (select id from refund_test_ids where name = 'zero_b')
+       )) <> 400 then
+    raise exception 'TEST 13 FAILED: partial clawback application is not 400';
+  end if;
+  raise notice 'TEST 13b PASSED: zero-net batch pays with amount 0 and no proof; 100 of the clawback carries forward';
+end $$;
+
+-- The 100 remainder applies to the next batch (new entry 200 -> total 100).
+reset role;
+insert into public.orders (
+  id, user_id, status, subtotal_minor, total_minor, recipient_name,
+  contact_phone, address_line, city, governorate
+) values (
+  '62200000-0000-0000-0000-000000000016',
+  '12200000-0000-0000-0000-000000000001',
+  'delivered', 2000, 2000, 'Refund Buyer', '01001112233',
+  '12 Road 9, Maadi', 'Maadi', 'Cairo'
+);
+
+insert into public.order_vendors (
+  id, order_id, vendor_id, status, subtotal_minor, commission_rate, delivered_at
+) values (
+  '72200000-0000-0000-0000-000000000016',
+  '62200000-0000-0000-0000-000000000016',
+  '42200000-0000-0000-0000-000000000005',
+  'delivered', 2000, 0.1000, now()
+);
+
+insert into public.commission_entries (
+  id, order_vendor_id, vendor_id, rate, base_minor, amount_minor, earned_at
+) values (
+  '82200000-0000-0000-0000-000000000016',
+  '72200000-0000-0000-0000-000000000016',
+  '42200000-0000-0000-0000-000000000005',
+  0.1000, 2000, 200, now()
+);
+
+set role authenticated;
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+insert into refund_test_ids
+select 'zero_settlement_3', public.create_settlement(
+  '42200000-0000-0000-0000-000000000005', 'Zero-net third batch');
+
+do $$
+declare
+  v_sid uuid := (select id from refund_test_ids where name = 'zero_settlement_3');
+begin
+  if (select total_minor from public.settlements where id = v_sid) <> 100 then
+    raise exception 'TEST 13 FAILED: remainder batch total is not 100 (200 - 100)';
+  end if;
+
+  if (select clawback_minor from public.settlements where id = v_sid) <> 100 then
+    raise exception 'TEST 13 FAILED: remainder batch clawback_minor is not 100';
+  end if;
+
+  if not exists (
+    select 1 from public.commission_clawbacks
+     where refund_case_id = (select id from refund_test_ids where name = 'zero_b')
+       and status = 'consumed'
+       and consumed_at is not null
+  ) then
+    raise exception 'TEST 13 FAILED: clawback is not consumed after the remainder applied';
+  end if;
+
+  perform public.mark_settlement_paid(
+    v_sid, 100, 'bank_transfer', 'ZERO-TEST13-003');
+  raise notice 'TEST 13b2 PASSED: carried-forward remainder 100 nets the next batch; clawback consumed';
+end $$;
+
+-- Vendor F: settle 1000 and pay, refund 5000 claws back 500, then the
+-- vendor repays directly (no next settlement).
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000001"}';
+insert into refund_test_ids
+select 'repay_case', public.open_refund_case(
+  '72200000-0000-0000-0000-000000000014', 'Direct repayment issue', 5000);
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+insert into refund_test_ids
+select 'repay_settlement', public.create_settlement(
+  '42200000-0000-0000-0000-000000000006', 'Direct repayment batch');
+
+do $$
+declare
+  v_sid uuid := (select id from refund_test_ids where name = 'repay_settlement');
+  v_claw uuid;
+begin
+  perform public.mark_settlement_paid(
+    v_sid, 1000, 'bank_transfer', 'REPAY-TEST13-001');
+
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'repay_case'), true, 5000, 'Refund approved');
+
+  select id into v_claw from public.commission_clawbacks
+   where refund_case_id = (select id from refund_test_ids where name = 'repay_case');
+  if v_claw is null then
+    raise exception 'TEST 13 FAILED: direct-repayment clawback was not recorded';
+  end if;
+  perform set_config('gifto_test.repay_clawback_id', v_claw::text, false);
+  raise notice 'TEST 13c SETUP PASSED: clawback -500 recorded for the direct-repayment vendor';
+end $$;
+
+-- Non-admin direct repayment is refused; a bad reference is refused;
+-- a good reference resolves the clawback and it never applies later.
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_claw uuid := current_setting('gifto_test.repay_clawback_id')::uuid;
+  v_blocked boolean := false;
+begin
+  begin
+    perform public.record_clawback_direct_repayment(v_claw, 'BANK-REPAY-1');
+  exception when insufficient_privilege then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 13 FAILED: a non-admin recorded a direct repayment';
+  end if;
+  raise notice 'TEST 13c PASSED: direct repayment is admin-only';
+end $$;
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+do $$
+declare
+  v_claw uuid := current_setting('gifto_test.repay_clawback_id')::uuid;
+  v_blocked boolean := false;
+begin
+  begin
+    perform public.record_clawback_direct_repayment(v_claw, 'x');
+  exception when check_violation then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 13 FAILED: a one-character repayment reference was accepted';
+  end if;
+
+  perform public.record_clawback_direct_repayment(v_claw, 'BANK-REPAY-1');
+
+  if not exists (
+    select 1 from public.commission_clawbacks
+     where id = v_claw
+       and status = 'direct_repayment'
+       and direct_repayment_reference = 'BANK-REPAY-1'
+       and consumed_at is not null
+  ) then
+    raise exception 'TEST 13 FAILED: direct repayment was not recorded';
+  end if;
+
+  v_blocked := false;
+  begin
+    perform public.record_clawback_direct_repayment(v_claw, 'BANK-REPAY-2');
+  exception when check_violation then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 13 FAILED: a resolved clawback was repaid again';
+  end if;
+  raise notice 'TEST 13d PASSED: direct repayment recorded with reference, once only';
+end $$;
+
+-- The repaid clawback never applies to the vendor's next settlement.
+reset role;
+insert into public.orders (
+  id, user_id, status, subtotal_minor, total_minor, recipient_name,
+  contact_phone, address_line, city, governorate
+) values (
+  '62200000-0000-0000-0000-000000000015',
+  '12200000-0000-0000-0000-000000000001',
+  'delivered', 20000, 20000, 'Refund Buyer', '01001112233',
+  '12 Road 9, Maadi', 'Maadi', 'Cairo'
+);
+
+insert into public.order_vendors (
+  id, order_id, vendor_id, status, subtotal_minor, commission_rate, delivered_at
+) values (
+  '72200000-0000-0000-0000-000000000015',
+  '62200000-0000-0000-0000-000000000015',
+  '42200000-0000-0000-0000-000000000006',
+  'delivered', 20000, 0.1000, now()
+);
+
+insert into public.commission_entries (
+  id, order_vendor_id, vendor_id, rate, base_minor, amount_minor, earned_at
+) values (
+  '82200000-0000-0000-0000-000000000015',
+  '72200000-0000-0000-0000-000000000015',
+  '42200000-0000-0000-0000-000000000006',
+  0.1000, 20000, 2000, now()
+);
+
+set role authenticated;
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+insert into refund_test_ids
+select 'repay_settlement_2', public.create_settlement(
+  '42200000-0000-0000-0000-000000000006', 'Second batch after direct repayment');
+
+do $$
+declare
+  v_sid uuid := (select id from refund_test_ids where name = 'repay_settlement_2');
+begin
+  if (select total_minor from public.settlements where id = v_sid) <> 2000 then
+    raise exception 'TEST 13 FAILED: repaid clawback was netted again (total is not 2000)';
+  end if;
+
+  if (select clawback_minor from public.settlements where id = v_sid) <> 0 then
+    raise exception 'TEST 13 FAILED: repaid clawback left a clawback total';
+  end if;
+
+  if exists (select 1 from public.clawback_applications
+              where clawback_id = current_setting('gifto_test.repay_clawback_id')::uuid) then
+    raise exception 'TEST 13 FAILED: repaid clawback was applied to a settlement';
+  end if;
+
+  perform public.mark_settlement_paid(
+    v_sid, 2000, 'bank_transfer', 'REPAY-TEST13-002');
+  raise notice 'TEST 13e PASSED: directly repaid clawback never applies to a later batch';
+  raise notice 'TEST 13 PASSED: zero-net settlement and direct repayment work';
 end $$;
 
 reset role;

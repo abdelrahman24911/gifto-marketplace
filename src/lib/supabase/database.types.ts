@@ -26,6 +26,8 @@
  * P1-04: D-09 return window, return path, receipt, restock, escalation.
  * P1-05: payout proof on settlements (paid_amount_minor, transfer_method,
  *         transfer_reference, proof_note); mark_settlement_paid takes proof.
+ * N-01: paid-return clawbacks (commission_clawbacks, clawback_applications,
+ *       settlements.clawback_minor, record_clawback_direct_repayment).
  *
  * Regenerate from the live database once the Gifto project exists:
  *   supabase gen types typescript --project-id <ref> > src/lib/supabase/database.types.ts
@@ -1077,6 +1079,8 @@ export type Database = {
           status: SettlementStatus;
           currency: string;
           total_minor: number;
+          // N-01 (D-08): clawbacks netted against this batch.
+          clawback_minor: number;
           note: string | null;
           created_at: string;
           updated_at: string;
@@ -1098,6 +1102,7 @@ export type Database = {
           status?: SettlementStatus;
           currency?: string;
           total_minor?: number;
+          clawback_minor?: number;
           note?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -1118,6 +1123,7 @@ export type Database = {
           status?: SettlementStatus;
           currency?: string;
           total_minor?: number;
+          clawback_minor?: number;
           note?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -1217,6 +1223,113 @@ export type Database = {
             columns: ["released_by"];
             isOneToOne: false;
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      // N-01 (D-08): paid-return clawbacks and their applications.
+      commission_clawbacks: {
+        Row: {
+          id: string;
+          commission_entry_id: string;
+          refund_case_id: string;
+          vendor_id: string;
+          currency: string;
+          amount_minor: number;
+          reason: string | null;
+          status: string;
+          direct_repayment_reference: string | null;
+          created_by: string | null;
+          created_at: string;
+          consumed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          commission_entry_id: string;
+          refund_case_id: string;
+          vendor_id: string;
+          currency?: string;
+          amount_minor: number;
+          reason?: string | null;
+          status?: string;
+          direct_repayment_reference?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          consumed_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          commission_entry_id?: string;
+          refund_case_id?: string;
+          vendor_id?: string;
+          currency?: string;
+          amount_minor?: number;
+          reason?: string | null;
+          status?: string;
+          direct_repayment_reference?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          consumed_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "commission_clawbacks_commission_entry_id_fkey";
+            columns: ["commission_entry_id"];
+            isOneToOne: false;
+            referencedRelation: "commission_entries";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "commission_clawbacks_refund_case_id_fkey";
+            columns: ["refund_case_id"];
+            isOneToOne: true;
+            referencedRelation: "refund_cases";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "commission_clawbacks_vendor_id_fkey";
+            columns: ["vendor_id"];
+            isOneToOne: false;
+            referencedRelation: "vendors";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      clawback_applications: {
+        Row: {
+          id: string;
+          clawback_id: string;
+          settlement_id: string;
+          amount_minor: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          clawback_id: string;
+          settlement_id: string;
+          amount_minor: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          clawback_id?: string;
+          settlement_id?: string;
+          amount_minor?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "clawback_applications_clawback_id_fkey";
+            columns: ["clawback_id"];
+            isOneToOne: false;
+            referencedRelation: "commission_clawbacks";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "clawback_applications_settlement_id_fkey";
+            columns: ["settlement_id"];
+            isOneToOne: false;
+            referencedRelation: "settlements";
             referencedColumns: ["id"];
           },
         ];
@@ -1697,6 +1810,10 @@ export type Database = {
         };
         Returns: undefined;
       };
+      record_clawback_direct_repayment: {
+        Args: { p_clawback_id: string; p_reference: string };
+        Returns: undefined;
+      };
       acknowledge_refund_case: {
         Args: { p_case_id: string };
         Returns: undefined;
@@ -1838,8 +1955,9 @@ export type Database = {
         Args: {
           p_settlement_id: string;
           p_paid_amount_minor: number;
-          p_transfer_method: string;
-          p_transfer_reference: string;
+          // N-01: null for a batch fully offset by clawbacks (no transfer).
+          p_transfer_method: string | null;
+          p_transfer_reference: string | null;
           p_proof_note?: string | null;
         };
         Returns: undefined;

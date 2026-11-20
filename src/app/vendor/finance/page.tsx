@@ -39,12 +39,24 @@ import {
 } from "../ui";
 
 import type {
+  CommissionClawbackRecord,
   CommissionEntryRecord,
   FinanceEntryState,
   SettlementRecord,
 } from "@/lib/finance";
 
 export const metadata = { title: "Finance — Gifto" };
+
+type VendorClawbackRow = CommissionClawbackRecord & {
+  clawback_applications: { settlement_id: string; amount_minor: number }[];
+};
+
+type VendorClawbackCaseRow = {
+  id: string;
+  order_vendor:
+    | { order: { public_reference: string | null } | { public_reference: string | null }[] | null }
+    | null;
+};
 
 const ENTRY_COLUMNS =
   "id, vendor_id, status, rate, base_minor, amount_minor, earned_at, reversed_at";
@@ -154,7 +166,8 @@ export default async function VendorFinancePage({
     ledgerQuery = ledgerQuery.gte("earned_at", rangeStart.toISOString());
   }
 
-  const [entriesResult, settlementsResult, ledger] = await Promise.all([
+  const [entriesResult, settlementsResult, ledger, clawbacksResult] =
+    await Promise.all([
     fetchAllRows<CommissionEntryRecord>((from, to) =>
       supabase
         .from("commission_entries")
@@ -169,7 +182,7 @@ export default async function VendorFinancePage({
         supabase
           .from("settlements")
           .select(
-            "id, vendor_id, status, total_minor, note, created_at, paid_at, created_by, paid_by, voided_at, voided_by, void_reason, paid_amount_minor, transfer_method, transfer_reference, proof_note, settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
+            "id, vendor_id, status, total_minor, clawback_minor, note, created_at, paid_at, created_by, paid_by, voided_at, voided_by, void_reason, paid_amount_minor, transfer_method, transfer_reference, proof_note, settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
           )
           .eq("vendor_id", access.vendorId)
           .order("created_at", { ascending: false })
@@ -182,6 +195,15 @@ export default async function VendorFinancePage({
       .order("id", { ascending: false })
       .range(rangeValues.from, rangeValues.to)
       .returns<LedgerEntry[]>(),
+    // N-01 (D-08): paid-return clawbacks against this shop.
+    supabase
+      .from("commission_clawbacks")
+      .select(
+        "id, commission_entry_id, refund_case_id, vendor_id, currency, amount_minor, reason, status, direct_repayment_reference, created_by, created_at, consumed_at, clawback_applications(settlement_id, amount_minor)",
+      )
+      .eq("vendor_id", access.vendorId)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false }),
   ]);
 
   const entries = entriesResult.rows;
@@ -189,6 +211,38 @@ export default async function VendorFinancePage({
   const ledgerRows = ledger.data ?? [];
   const ledgerTotal = ledger.count ?? 0;
   const currentPage = clampPage(requestedPage, ledgerTotal);
+  const clawbacks = (
+    (clawbacksResult.data ?? []) as unknown as VendorClawbackRow[]
+  ).map((clawback) => ({
+    ...clawback,
+    clawback_applications: clawback.clawback_applications ?? [],
+  }));
+  const clawbackCaseIds = Array.from(
+    new Set(clawbacks.map((clawback) => clawback.refund_case_id)),
+  );
+  const { data: clawbackCaseData } = clawbackCaseIds.length
+    ? await supabase
+        .from("refund_cases")
+        .select("id, order_vendor:order_vendors(order:orders(public_reference))")
+        .in("id", clawbackCaseIds)
+    : { data: [] };
+  const clawbackCases = new Map(
+    ((clawbackCaseData ?? []) as unknown as VendorClawbackCaseRow[]).map(
+      (refundCase) => [refundCase.id, refundCase],
+    ),
+  );
+  const outstandingClawbackMinor = clawbacks
+    .filter((clawback) => clawback.status === "outstanding")
+    .reduce(
+      (sum, clawback) =>
+        sum +
+        Math.abs(clawback.amount_minor) -
+        clawback.clawback_applications.reduce(
+          (applied, application) => applied + application.amount_minor,
+          0,
+        ),
+      0,
+    );
 
   if (requestedPage > 1 && currentPage !== requestedPage) {
     redirect(financeHref(access.vendorId, view, range, currentPage));
@@ -461,6 +515,10 @@ export default async function VendorFinancePage({
                         {settlement.transfer_reference
                           ? ` · reference ${settlement.transfer_reference}`
                           : ""}
+                        {settlement.paid_amount_minor === 0 &&
+                        !settlement.transfer_method
+                          ? " · no transfer — fully offset by paid-return clawbacks"
+                          : ""}
                       </p>
                     ) : null}
                     <details className="mt-3 rounded-xl border border-line bg-paper px-4 py-3">
@@ -494,6 +552,16 @@ export default async function VendorFinancePage({
                               : formatEgp(adjustmentsMinor)}
                           </dd>
                         </div>
+                        {settlement.clawback_minor > 0 ? (
+                          <div className="flex justify-between gap-3">
+                            <dt className="text-ink-mute">
+                              Paid-return clawbacks
+                            </dt>
+                            <dd className="font-medium tabular-nums text-ink">
+                              −{formatEgp(settlement.clawback_minor)}
+                            </dd>
+                          </div>
+                        ) : null}
                         <div className="flex justify-between gap-3 border-t border-line pt-1">
                           <dt className="font-medium text-ink">
                             Net commission due
@@ -568,6 +636,59 @@ export default async function VendorFinancePage({
               })}
             </ul>
           )}
+
+          {clawbacks.length > 0 ? (
+            <section className="mt-8">
+              <VendorSectionHeading
+                title="Paid-return clawbacks"
+                description="Refunds approved after a batch was paid are carried into the next settlement instead of changing the paid batch. An outstanding clawback is taken from the next batch Gifto opens for this shop."
+              />
+              {outstandingClawbackMinor > 0 ? (
+                <p className="mt-3 text-sm text-ink-soft">
+                  Outstanding clawbacks:{" "}
+                  <strong className="text-ink">
+                    {formatEgp(outstandingClawbackMinor)}
+                  </strong>{" "}
+                  to be taken from the next settlement.
+                </p>
+              ) : null}
+              <ul className="mt-3 flex flex-col divide-y divide-line overflow-hidden rounded-2xl border border-line bg-paper-soft">
+                {clawbacks.map((clawback) => {
+                  const refundCase = clawbackCases.get(clawback.refund_case_id);
+                  const order = refundCase?.order_vendor?.order;
+                  const orderReference = order
+                    ? (Array.isArray(order) ? order[0] : order)
+                        ?.public_reference ?? "Order reference unavailable"
+                    : "Order reference unavailable";
+                  const appliedMinor = clawback.clawback_applications.reduce(
+                    (sum, application) => sum + application.amount_minor,
+                    0,
+                  );
+                  return (
+                    <li key={clawback.id} className="px-4 py-4 sm:px-5">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-ink">
+                            {orderReference}
+                          </p>
+                          <p className="mt-1 text-xs text-ink-mute">
+                            {clawback.status === "outstanding"
+                              ? `Outstanding · ${formatEgp(Math.abs(clawback.amount_minor) - appliedMinor)} still to be taken from the next settlement`
+                              : clawback.status === "consumed"
+                                ? "Consumed by a later settlement"
+                                : `Repaid directly${clawback.direct_repayment_reference ? ` · reference ${clawback.direct_repayment_reference}` : ""}`}
+                          </p>
+                        </div>
+                        <p className="font-medium tabular-nums text-ink">
+                          −{formatEgp(Math.abs(clawback.amount_minor))}
+                        </p>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ) : null}
         </section>
       ) : (
         <section className="mt-6">
