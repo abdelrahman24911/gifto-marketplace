@@ -1,3 +1,5 @@
+> **HISTORICAL — 2026-11-20 (P0-08).** Dated snapshot of a past verification (see the date in the file). Its numbers and hosted-state claims were true when written and are not current. Current state: `README.md`, `docs/HOSTED_STATE.md` (single hosted-state table), `docs/DECISIONS.md`. Kept as a record; its findings were not edited.
+
 # Gifto Marketplace — Next Phase Plan
 
 > **Historical note (2026-10-26):** this plan predates Phase 9A. Migrations 8-13 are now applied, guest checkout and failed-COD-delivery handling are implemented, and the eight Docker RLS suites plus the failed-delivery browser E2E have passed. See `docs/STATUS_REPORT.md`.

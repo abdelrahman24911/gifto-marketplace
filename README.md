@@ -54,7 +54,7 @@ npm run dev       # local dev server
 npm run build     # production build (webpack; --webpack works everywhere)
 npm run build:turbo  # production build via Turbopack (needs native SWC bindings)
 npm run lint      # eslint
-npm test          # vitest run — unit tests (money, cart, catalog, cart-store, slugify, site-url, guest-order, orders, indexing, product JSON-LD, refunds, vendor settings)
+npm test          # vitest run — 37 files, 357 cases (recounted 2026-11-20; see "Verification status")
 ```
 
 On win32/x64 this machine cannot load the native SWC bindings, so Turbopack builds
@@ -64,7 +64,10 @@ Type check: `npm run typecheck` (alias for `npx tsc --noEmit`, TypeScript strict
 
 Unit tests live next to the modules they cover (`src/lib/*.test.ts`) and run in a
 plain Node environment via Vitest - no browser, no database. The RLS suites below
-cover the database side.
+cover the database side. Counts: 37 Vitest files, 357 cases
+(`find src -name "*.test.ts" | wc -l` → 37; 355 `it(` + 1 `it.each` with 2 rows
+= 357, recounted 2026-11-20; the 3 `test(` hits in the files are `RegExp.test()`
+calls, not cases).
 
 ## Database / Migrations
 
@@ -78,8 +81,10 @@ supabase migration list   # verify applied migrations
 
 Only ever apply migrations to the **Gifto** project. Do not link or push to the FL Tase3 project.
 
-Migrations 1–27 are the verified hosted state for the Gifto project
-(`hqusykdyjpruysxezsrn`) and are recorded in `supabase_migrations.schema_migrations`. Migration 11
+Current hosted state is tracked in exactly one place: `docs/HOSTED_STATE.md`.
+Do not rely on any hosted-state claim elsewhere in this file or in `docs/` —
+the table there is the single source of truth. Locally, migrations run to 32
+(`ls supabase/migrations/ | wc -l` → 32, recounted 2026-11-20): migration 11
 adds guest COD checkout; migration 12 hardens the order tables to least-privilege grants; migration
 13 adds failed-COD-delivery handling and the parent-only `partially_completed` status. Migration 14
 adds managed vendor onboarding; 15 adds active-vendor hardening, stock-column grants, normalized
@@ -92,7 +97,9 @@ requests, analytics indexes, and atomic settlement payout; 26-27 add occasion di
 occasion matching-rule replacement; 28 adds order status history, the audited status RPC, and
 delivered-at indexes; 29 enforces vendor delivery coverage at checkout and on direct suborder
 inserts; 30 adds refund cases, an append-only commission-adjustment ledger, guest/customer/admin
-refund RPCs, and net-commission settlement creation. Migrations 28-30 are applied locally only and
+refund RPCs, and net-commission settlement creation; 31 locks the parent order row before
+recounting suborders (parent-status race fix); 32 adds token-gated guest order cancellation.
+Migrations 28-32 are applied locally only and
 have not been pushed to the hosted project. Apply migrations in order. Pushing requires a valid CLI
 login (`supabase login`) and the project database password for `db push`.
 
@@ -116,7 +123,9 @@ and the backup drill are tracked in `docs/HOSTED_STATE.md`.
 
 ### Verifying RLS locally
 
-Thirteen suites exercise the policies against a disposable `supabase/postgres` container
+Fourteen suites exercise the policies against a disposable `supabase/postgres` container
+(`ls supabase/tests/*_test.sql | wc -l` → 14, recounted 2026-11-20; all 14 pass on a
+fresh schema after migrations 1–32, run 2026-11-20)
 (which already ships the `auth` schema, `auth.users`, `auth.uid()`, and the
 `anon`/`authenticated`/`service_role` roles). They simulate Supabase request context the
 way PostgREST does and abort non-zero on any failure. Each test sets both
@@ -141,6 +150,7 @@ transaction and ends with `rollback`, even on success.
 | `supabase/tests/rls_order_audit_test.sql` | Migration 28: audited status RPC, stale-page protection, required admin reasons, actor resolution, event read isolation |
 | `supabase/tests/rls_delivery_coverage_test.sql` | Migration 29: exact governorate matching, city/address area matching, empty-list allow behavior, trigger enforcement on direct suborder inserts |
 | `supabase/tests/rls_refunds_test.sql` | Migration 30: customer/guest case creation, buyer isolation, admin approval, commission-adjustment ledger, net settlement and active-settlement guard |
+| `supabase/tests/concurrency_parent_status_test.sql` | Migration 31: parent-order status race — concurrent suborder transitions, parent lock ordering, audit events; discovered by `scripts/run-rls-suites.sh` like the other suites |
 
 Three details matter when running them:
 
@@ -158,13 +168,13 @@ Three details matter when running them:
 ```bash
 docker run -d --name gifto-rls-test -e POSTGRES_PASSWORD=postgres \
   -p 65432:5432 public.ecr.aws/supabase/postgres:17.11.0.003
-# wait for the init gate described above, then for each of the thirteen suites:
+# wait for the init gate described above, then for each of the fourteen suites:
 docker exec gifto-rls-test psql -U postgres -c \
   'drop schema public cascade; create schema public; grant usage on schema public to anon, authenticated, service_role;'
 docker cp supabase/tests/storage_stub.sql gifto-rls-test:/tmp/storage_stub.sql
 docker exec -e PGPASSWORD=postgres gifto-rls-test \
   psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -f /tmp/storage_stub.sql
-for s in rls_foundation rls_onboarding rls_catalog rls_orders rls_commissions rls_inventory rls_hardening rls_guest_orders rls_occasions rls_vendor_dashboard rls_order_audit rls_delivery_coverage rls_refunds; do
+for s in rls_foundation rls_onboarding rls_catalog rls_orders rls_commissions rls_inventory rls_hardening rls_guest_orders rls_occasions rls_vendor_dashboard rls_order_audit rls_delivery_coverage rls_refunds concurrency_parent_status; do
   docker exec gifto-rls-test psql -U postgres -c \
     'drop schema public cascade; create schema public; grant usage on schema public to anon, authenticated, service_role;'
   docker cp supabase/migrations gifto-rls-test:/tmp/migrations
@@ -288,12 +298,13 @@ Running it through the API requires platform-admin — it is a development conve
   is redirected to the order page. Every price is recomputed in the database.
 - `/account/orders` and `/account/orders/[id]` — customer history and detail, with self-service
   cancellation while the order is still `placed` (`cancel_order`, which restocks).
+- `/orders/[id]` — the token-gated guest confirmation page, with the same placed-only
+  self-service cancellation for guests (`cancel_guest_order`, migration 32; P0-05).
 - `/vendor/orders` — the shop queue: delivery details, line items, and the lifecycle buttons
   (confirm / ship / deliver / cancel) allowed by `VENDOR_NEXT_STATUSES`. Only owners, managers
   and admins see the buttons; staff get a read-only queue. After dispatch, a vendor can record a
   failed COD delivery, which cancels the line, restocks it, and asks for confirmation first.
-- `docs/DECISIONS.md` D-06: delivery is free at launch (`delivery_fee_minor = 0`); a fee model is
-  planned later and will be configured in Supabase.
+- `docs/DECISIONS.md` D-06: delivery is free at launch (`delivery_fee_minor = 0`); later, a flat fee per shop, paid by the customer and kept by the delivering vendor, reviewed after 100 orders.
 
 ### Phase 6 commissions schema (implemented)
 
@@ -339,6 +350,15 @@ Running it through the API requires platform-admin — it is a development conve
   writes to the refund tables are not granted; all changes go through RPCs.
 - Migration 29 adds delivery coverage at checkout and a trigger on
   `order_vendors`, so direct suborder inserts cannot bypass the address check.
+  The checkout governorate input is still free text (dropdown/normalisation is P1-06).
+- Return policy (D-09, decided 2026-11-20): 7 days from delivery, suborder-level
+  only, admin approves and the vendor inspects, return courier paid by the customer
+  unless the gift is wrong/damaged (then the vendor pays), inspect-then-restock
+  manually, never automatic. The terms are published on `/refund-policy` and
+  `/delivery-returns` (P0-06) and the payout hold rule is written up in
+  `docs/RUNBOOK_RETURNS_AND_SETTLEMENTS.md` (P0-07). Still open: no in-system
+  clawback for a refund after a paid settlement (N-01), and customers cannot yet
+  cancel their own open refund case in the product (N-03).
 
 ### Phase 7 inventory adjustments (implemented)
 
@@ -409,8 +429,12 @@ D-04/D-05; return treatment is D-09):
   `/vendor/products/[id]` (edit, owner-only delete), `/vendor/products/[id]/inventory` (audited
   stock adjustments + movement history), `/vendor/orders` (fulfilment queue).
   Guarded by `/vendor` in `src/proxy.ts`.
-- Admin: `/admin` (vendor approval and commission, category creation) and `/admin/orders`
-  (read-only oversight of every order across all shops, with commission shown per suborder).
+- Admin: `/admin` (vendor approval and commission, category creation),
+  `/admin/orders` (oversight of every order across all shops, with a detail page
+  per order showing commission per suborder and an admin status override —
+  address correction is not built yet), `/admin/settlements` (settlement
+  list/detail/create/paid/void, with a returns-before-payout warning on the
+  detail page), and `/admin/refunds` (refund-case queue and resolution).
 - Money helpers in `src/lib/money.ts` (`parseEgpToMinor`, `formatEgp`) keep all arithmetic
   in integer piastres.
 
@@ -427,19 +451,25 @@ photos (the monogram panel remains as the graceful fallback).
   (`is_public_vendor` must hold, and the product must be `active`).
 - `rejected` — declined; not public.
 
-## Architecture notes (planned — not yet implemented)
+## Architecture notes (decided direction — not yet built)
 
 The catalog (Phase 3), the order/checkout backend (Phase 4), the checkout screens (Phase 5), the
 commission ledger and settlements (Phase 6), audited inventory adjustments (Phase 7), image upload,
-and guest COD checkout (Phase 11) are implemented. The following are documented for direction only:
+guest COD checkout (Phase 11), refunds (migration 30), the order audit trail (migration 28),
+delivery-coverage enforcement (migration 29), legal pages (6 routes, draft content), and
+sitemap/robots/Product JSON-LD (indexing off by default) are implemented. The following are
+documented for direction only:
 
-- **Catalog extras**: tags and product options/variants.
-- **Settlement automation**: settlements are a manual admin batch today; the cadence and payout
-  reconciliation are still open (`docs/DECISIONS.md` D-08).
-- **Delivery fee**: free at launch (D-06); a distance/zone fee model will be added later
-  and configured in Supabase.
-- **Subscriptions (optional)**: `subscription_plans`, `vendor_subscriptions`, entitlements
-  checked server-side; kept separate from per-order commission.
+- **Catalog extras**: tags are implemented (`src/lib/tagging.ts`, occasion/tag curation in
+  migration 26); product options/variants are not implemented.
+- **Settlement automation**: settlements are a manual admin batch today. The cadence and payout
+  direction are decided (`docs/DECISIONS.md` D-08: weekly every Sunday, vendor remits Gifto's
+  commission to Gifto, "mark paid" attests receipt and requires a bank transfer reference);
+  automating the cadence and recording the transfer reference are P1-05.
+- **Delivery fee**: free at launch (D-06); later, a flat fee per shop, paid by the customer and
+  kept by the delivering vendor, reviewed after 100 orders.
+- **Subscriptions**: no subscription at launch (D-07, decided 2026-11-20) — commission-only,
+  revisited after the pilot. `subscription_plans` / `vendor_subscriptions` do not exist.
 
 ## Security model
 
@@ -472,18 +502,18 @@ aspirational.
 |---|---|
 | `npm run lint` | 0 errors, 0 warnings |
 | `npm run typecheck` | clean |
-| `npm test` | 357 passing unit tests across 37 files |
+| `npm test` | 357 passing unit tests across 37 files (recounted 2026-11-20) |
 | `npm run build` | exit 0 (all routes), including Tailwind CSS verification |
-| DB suites in disposable container | All thirteen suites passed on a fresh schema after migrations 1-30, including `rls_order_audit_test.sql`, `rls_delivery_coverage_test.sql`, and `rls_refunds_test.sql` |
-| Migration 30 settlement regression | Full suite caught a zero-value payout regression in `mark_settlement_paid`; fixed and re-ran all thirteen suites successfully |
-| Phase 1 dashboard validation | `npm run lint`, `npm run typecheck`, `npm test` (356), and `npm run build` pass; admin orders list/detail, vendor/admin analytics, category edit/delete, and support pagination/search are implemented |
+| DB suites in disposable container | All fourteen suites passed on a fresh schema after migrations 1–32 (run 2026-11-20, P0-04/P0-05; P0-02 ran thirteen suites on migrations 1–30), including `rls_order_audit_test.sql`, `rls_delivery_coverage_test.sql`, `rls_refunds_test.sql`, `rls_guest_orders_test.sql`, and `concurrency_parent_status_test.sql` |
+| Migration 30 settlement regression | Full suite caught a zero-value payout regression in `mark_settlement_paid`; fixed and re-ran all thirteen suites successfully (thirteen at the time) |
+| Phase 1 dashboard validation | `npm run lint`, `npm run typecheck`, `npm test` (356 at the time; 357 now, recounted 2026-11-20), and `npm run build` pass; admin orders list/detail, vendor/admin analytics, category edit/delete, and support pagination/search are implemented |
 | Migrations 14-15 local apply + suites | `supabase start` applied migrations 1-15 and `seed.sql` successfully; all eight guarded suites then passed against the local Supabase CLI stack |
 | Migrations 16-18 local apply + commissions suite | `supabase db reset --local` applied migrations 1-18 and `seed.sql`; updated `rls_commissions_test.sql` passed all 15 tests in the disposable container, including preserved lines, required reasons, active-allocation uniqueness, re-settlement and reversal after release |
 | Phase 2B app checks | vendor finance and admin settlement list/detail/create/paid/void actions typecheck, lint, pass unit tests and build |
 | Browser E2E for failed COD delivery | 11/11 checks passed against the live app and hosted DB: two-shop guest checkout, mixed terminal outcomes, failed-delivery restock, ledger, commission, guest confirmation, repeated-cancel no-op, and fixture cleanup |
 | Page smoke test (`next start`, earlier) | `/`, `/categories`, `/shops`, `/cart` → 200; unknown paths → 404; `/account`, `/account/orders`, `/vendor/orders`, `/admin` → 307 to login. `/checkout` was protected then; it is now intentionally public for guests. |
 | End-to-end render against hosted DB | seeded a temporary category/shop/product, confirmed all public pages rendered it (price formatted as `EGP 150.00`), then deleted the fixture |
-| Hosted migrations | migrations 1–19 applied and recorded; migration 11 schema/function ACLs, migration 12 grants, migrations 14–18 settlement/vendor changes and migration 19 view privileges verified live |
+| Current hosted state | See `docs/HOSTED_STATE.md` — the single hosted-state table. The hosted smoke-test rows below are earlier execution history, not current hosted state. |
 | Hosted guest checkout smoke test (rollback-only) | `place_guest_order` created the order, suborder, item and inventory movement; stock 25→24; repeated idempotency key returned the same order; wrong token and wrong-token replay rejected; order rolled back and stock restored |
 | Hosted authenticated checkout smoke test (rollback-only) | `place_order_with_idempotency` created the order; stock 15→14; vendor status update worked; `order_vendors.subtotal_minor` update blocked; anon `orders` select blocked; rolled back with zero residue |
 | Hosted privilege check | `anon` has no order-table privileges; `authenticated` has select-only on orders/items/movements plus `status`/`updated_at` update on suborders; `service_role` retains full access |

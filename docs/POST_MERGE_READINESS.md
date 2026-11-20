@@ -1,3 +1,5 @@
+> **HISTORICAL — 2026-11-20 (P0-08).** Dated snapshot of a past verification (see the date in the file). Its numbers and hosted-state claims were true when written and are not current. Current state: `README.md`, `docs/HOSTED_STATE.md` (single hosted-state table), `docs/DECISIONS.md`. Kept as a record; its findings were not edited.
+
 # Gifto Marketplace — Post-Merge Readiness Audit
 
 > **Historical note (2026-10-26):** this audit predates Phase 9A/9B. Migrations 1-13 are now applied to the hosted project, including migrations 8-9 and 13. See `docs/STATUS_REPORT.md` for current deployment status.

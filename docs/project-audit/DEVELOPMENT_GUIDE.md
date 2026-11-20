@@ -68,7 +68,7 @@ npm run start      # Serve production build
 ```bash
 npm test
 # Runs src/**/*.test.ts in Node environment
-# 4 test files: money.test.ts, cart.test.ts, cart-store.test.ts, slugify.test.ts
+# 37 test files (recounted 2026-11-20, P0-08): money.test.ts, cart.test.ts, cart-store.test.ts, slugify.test.ts, and 33 more
 ```
 
 ### Type check
@@ -84,7 +84,7 @@ npm run lint
 ```
 
 ### RLS test suites (database)
-The 7 SQL test suites require a disposable `supabase/postgres` container. Procedure documented in `README.md`:
+The 14 SQL test suites require a disposable `supabase/postgres` container. Procedure documented in `README.md`:
 
 ```bash
 # 1. Start a disposable Postgres container
