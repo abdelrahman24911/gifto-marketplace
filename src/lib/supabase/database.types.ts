@@ -1779,6 +1779,20 @@ export type Database = {
           total_count: number;
         }[];
       };
+      search_products: {
+        Args: {
+          p_query?: string | null;
+          p_category_id?: string | null;
+          p_min_minor?: number | null;
+          p_max_minor?: number | null;
+          p_limit?: number;
+          p_offset?: number;
+        };
+        Returns: {
+          id: string;
+          total_count: number;
+        }[];
+      };
       replace_occasion_products: {
         Args: { p_occasion_id: string; p_product_ids: string[] };
         Returns: undefined;

@@ -251,8 +251,41 @@ describe("public catalog queries", () => {
     expect(query.limit).toBe(500);
   });
 
-  it("keeps search filters and pages on the inner-joined product query", async () => {
-    db.results.products = { data: [], error: null, count: 0 };
+  it("searches through the trigram RPC and preserves its ranked order", async () => {
+    db.results.rpc = {
+      data: [
+        { id: "product-2", total_count: 3 },
+        { id: "product-1", total_count: 3 },
+      ],
+      error: null,
+    };
+    db.results.products = {
+      data: [
+        {
+          id: "product-1",
+          name: "Rose Vase",
+          slug: "rose-vase",
+          price_minor: 10_000,
+          stock: 1,
+          vendor_id: "vendor-1",
+          vendor: { name: "Shop", slug: "shop" },
+          category: null,
+          product_images: [],
+        },
+        {
+          id: "product-2",
+          name: "Ceramic Vase",
+          slug: "ceramic-vase",
+          price_minor: 20_000,
+          stock: 2,
+          vendor_id: "vendor-1",
+          vendor: { name: "Shop", slug: "shop" },
+          category: null,
+          product_images: [],
+        },
+      ],
+      error: null,
+    };
 
     const result = await searchProducts({
       q: "vase",
@@ -262,19 +295,55 @@ describe("public catalog queries", () => {
       pageSize: 12,
     });
 
-    expect(result).toEqual({ ok: true, products: [], total: 0 });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.total).toBe(3);
+    expect(result.products.map((product) => product.id)).toEqual([
+      "product-2",
+      "product-1",
+    ]);
+
+    expect(db.rpcCalls).toEqual([
+      {
+        name: "search_products",
+        args: {
+          p_query: "vase",
+          p_category_id: null,
+          p_min_minor: 10_000,
+          p_max_minor: 50_000,
+          p_limit: 12,
+          p_offset: 12,
+        },
+      },
+    ]);
 
     const query = db.queries[0];
+    expect(query.table).toBe("products");
     expect(query.select).toContain("vendor:public_vendors!inner(");
     expect(query.filters).toEqual([
+      "in:id=product-2,product-1",
       "eq:status=active",
-      "ilike:name=%vase%",
-      "gte:price_minor=10000",
-      "lte:price_minor=50000",
     ]);
-    expect(query.orders).toEqual(["created_at:desc", "id:desc"]);
-    expect(query.range).toEqual([12, 23]);
-    expect(query.countRequested).toBe(true);
+  });
+
+  it("returns an empty search without querying products when the RPC has no rows", async () => {
+    const result = await searchProducts({ q: "nothing-matches" });
+
+    expect(result).toEqual({ ok: true, products: [], total: 0 });
+    expect(db.rpcCalls).toEqual([
+      {
+        name: "search_products",
+        args: {
+          p_query: "nothing-matches",
+          p_category_id: null,
+          p_min_minor: null,
+          p_max_minor: null,
+          p_limit: 25,
+          p_offset: 0,
+        },
+      },
+    ]);
+    expect(db.queries).toEqual([]);
   });
 });
 

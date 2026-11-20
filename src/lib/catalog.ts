@@ -839,7 +839,21 @@ export type SearchResult =
   | { ok: true; products: CatalogProduct[]; total: number }
   | { ok: false };
 
-/** Text + category + price search over active products, one page at a time. */
+type SearchRankRow = {
+  id: string;
+  total_count: number;
+};
+
+/**
+ * Text + category + price search over active products, one page at a time.
+ *
+ * Text matching lives in the search_products() RPC (migration 38): ranked
+ * trigram search over name and description with a GIN index — name
+ * matches first, description-only matches included. The application
+ * never builds a LIKE pattern, so user input cannot inject wildcards
+ * (L-12). Category and price filters are applied inside the RPC so the
+ * total is the filtered total.
+ */
 export async function searchProducts({
   q,
   categorySlug,
@@ -849,7 +863,7 @@ export async function searchProducts({
   pageSize = DEFAULT_PAGE_SIZE,
 }: SearchParams): Promise<SearchResult> {
   const supabase = await createClient();
-  const { window } = normalizePageOptions({ page, pageSize });
+  const { window, pageSize: limit } = normalizePageOptions({ page, pageSize });
 
   let categoryId: string | null = null;
   if (categorySlug) {
@@ -863,26 +877,41 @@ export async function searchProducts({
     categoryId = category.id;
   }
 
-  let query = supabase
+  const term = q?.trim() || null;
+  const { data: ranking, error: rankingError } = await supabase.rpc(
+    "search_products",
+    {
+      p_query: term,
+      p_category_id: categoryId,
+      p_min_minor: minMinor,
+      p_max_minor: maxMinor,
+      p_limit: limit,
+      p_offset: window.from,
+    },
+  );
+
+  if (rankingError) return { ok: false };
+
+  const rows = (ranking ?? []) as SearchRankRow[];
+  if (rows.length === 0) return { ok: true, products: [], total: 0 };
+
+  const ids = rows.map((row) => row.id);
+  const { data, error } = await supabase
     .from("products")
-    .select(PRODUCT_SELECT, { count: "exact" })
+    .select(PRODUCT_SELECT)
+    .in("id", ids)
     .eq("status", "active")
-    .order("created_at", { ascending: false })
-    .order("id", { ascending: false })
-    .range(window.from, window.to);
+    .returns<ProductRow[]>();
 
-  const term = q?.trim();
-  if (term) query = query.ilike("name", `%${term}%`);
-  if (categoryId) query = query.eq("category_id", categoryId);
-  if (typeof minMinor === "number") query = query.gte("price_minor", minMinor);
-  if (typeof maxMinor === "number") query = query.lte("price_minor", maxMinor);
+  if (error) return { ok: false };
 
-  const { data, error, count } = await query.returns<ProductRow[]>();
-  if (error || typeof count !== "number") return { ok: false };
+  const productById = new Map(
+    toCatalogProducts(data ?? []).map((product) => [product.id, product]),
+  );
+  const products = ids.flatMap((id) => {
+    const product = productById.get(id);
+    return product ? [product] : [];
+  });
 
-  return {
-    ok: true,
-    products: toCatalogProducts(data ?? []),
-    total: count,
-  };
+  return { ok: true, products, total: rows[0]?.total_count ?? products.length };
 }
