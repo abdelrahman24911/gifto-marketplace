@@ -97,6 +97,12 @@ export default async function AccountPage() {
 
       <nav className="mt-3 flex flex-wrap gap-2">
         <Link
+          href="/account/addresses"
+          className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50"
+        >
+          {t("savedAddresses")}
+        </Link>
+        <Link
           href="/account/orders"
           className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50"
         >

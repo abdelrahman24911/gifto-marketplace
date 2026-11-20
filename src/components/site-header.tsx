@@ -49,6 +49,7 @@ async function HeaderActions({
   const accountLinks = user
     ? [
         { href: "/account", label: t("account") },
+        { href: "/account/addresses", label: t("savedAddresses") },
         { href: "/account/orders", label: t("myOrders") },
         { href: "/wishlist", label: t("wishlist") },
         ...(isPlatformAdmin
