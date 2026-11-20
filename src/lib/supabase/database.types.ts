@@ -18,6 +18,9 @@
  * Phase 23: vendor support requests and admin queue.
  * Phase 24: analytics vendor/date index.
  * Phase 26: occasions, tags, matching joins, slug redirects and suggestions.
+ * Phase 28: order status audit events and vendor status transition RPC.
+ * Phase 29: delivery coverage helper and order_vendors trigger.
+ * Phase 30: refund cases, commission adjustments, refund RPCs.
  *
  * Regenerate from the live database once the Gifto project exists:
  *   supabase gen types typescript --project-id <ref> > src/lib/supabase/database.types.ts
@@ -48,6 +51,9 @@ export type SettlementStatus = "open" | "paid" | "voided";
 export type SupportRequestStatus = "open" | "in_progress" | "resolved";
 export type OccasionMatchMode = "manual" | "automatic" | "hybrid";
 export type TagSuggestionStatus = "pending" | "approved" | "rejected";
+export type OrderStatusActorRole = "customer" | "vendor" | "admin" | "system";
+export type RefundCaseStatus = "open" | "approved" | "rejected" | "cancelled";
+export type RefundCaseSource = "customer" | "guest" | "admin";
 
 /** The Storage bucket reserved for catalog media (upload arrives later). */
 export const PRODUCT_IMAGES_BUCKET = "product-images";
@@ -562,6 +568,77 @@ export type Database = {
           },
         ];
       };
+      order_status_events: {
+        Row: {
+          id: number;
+          order_id: string;
+          order_vendor_id: string;
+          vendor_id: string;
+          from_status: OrderStatus;
+          to_status: OrderStatus;
+          actor_id: string | null;
+          actor_role: OrderStatusActorRole;
+          reason_code: string | null;
+          note: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: never;
+          order_id: string;
+          order_vendor_id: string;
+          vendor_id: string;
+          from_status: OrderStatus;
+          to_status: OrderStatus;
+          actor_id?: string | null;
+          actor_role: OrderStatusActorRole;
+          reason_code?: string | null;
+          note?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: never;
+          order_id?: string;
+          order_vendor_id?: string;
+          vendor_id?: string;
+          from_status?: OrderStatus;
+          to_status?: OrderStatus;
+          actor_id?: string | null;
+          actor_role?: OrderStatusActorRole;
+          reason_code?: string | null;
+          note?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "order_status_events_actor_id_fkey";
+            columns: ["actor_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "order_status_events_order_id_fkey";
+            columns: ["order_id"];
+            isOneToOne: false;
+            referencedRelation: "orders";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "order_status_events_order_vendor_id_fkey";
+            columns: ["order_vendor_id"];
+            isOneToOne: false;
+            referencedRelation: "order_vendors";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "order_status_events_vendor_id_fkey";
+            columns: ["vendor_id"];
+            isOneToOne: false;
+            referencedRelation: "vendors";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       order_items: {
         Row: {
           id: string;
@@ -724,6 +801,161 @@ export type Database = {
             columns: ["vendor_id"];
             isOneToOne: false;
             referencedRelation: "vendors";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      commission_adjustments: {
+        Row: {
+          id: string;
+          commission_entry_id: string;
+          refund_case_id: string;
+          vendor_id: string;
+          currency: string;
+          amount_minor: number;
+          reason: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          commission_entry_id: string;
+          refund_case_id: string;
+          vendor_id: string;
+          currency?: string;
+          amount_minor: number;
+          reason?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          commission_entry_id?: string;
+          refund_case_id?: string;
+          vendor_id?: string;
+          currency?: string;
+          amount_minor?: number;
+          reason?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "commission_adjustments_commission_entry_id_fkey";
+            columns: ["commission_entry_id"];
+            isOneToOne: false;
+            referencedRelation: "commission_entries";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "commission_adjustments_refund_case_id_fkey";
+            columns: ["refund_case_id"];
+            isOneToOne: true;
+            referencedRelation: "refund_cases";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "commission_adjustments_vendor_id_fkey";
+            columns: ["vendor_id"];
+            isOneToOne: false;
+            referencedRelation: "vendors";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "commission_adjustments_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      refund_cases: {
+        Row: {
+          id: string;
+          order_id: string;
+          order_vendor_id: string;
+          vendor_id: string;
+          source: RefundCaseSource;
+          opened_by: string | null;
+          reason: string;
+          requested_amount_minor: number | null;
+          status: RefundCaseStatus;
+          resolution_note: string | null;
+          refund_amount_minor: number | null;
+          resolved_by: string | null;
+          resolved_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          order_id: string;
+          order_vendor_id: string;
+          vendor_id: string;
+          source: RefundCaseSource;
+          opened_by?: string | null;
+          reason: string;
+          requested_amount_minor?: number | null;
+          status?: RefundCaseStatus;
+          resolution_note?: string | null;
+          refund_amount_minor?: number | null;
+          resolved_by?: string | null;
+          resolved_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          order_id?: string;
+          order_vendor_id?: string;
+          vendor_id?: string;
+          source?: RefundCaseSource;
+          opened_by?: string | null;
+          reason?: string;
+          requested_amount_minor?: number | null;
+          status?: RefundCaseStatus;
+          resolution_note?: string | null;
+          refund_amount_minor?: number | null;
+          resolved_by?: string | null;
+          resolved_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "refund_cases_order_id_fkey";
+            columns: ["order_id"];
+            isOneToOne: false;
+            referencedRelation: "orders";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "refund_cases_order_vendor_id_fkey";
+            columns: ["order_vendor_id"];
+            isOneToOne: false;
+            referencedRelation: "order_vendors";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "refund_cases_vendor_id_fkey";
+            columns: ["vendor_id"];
+            isOneToOne: false;
+            referencedRelation: "vendors";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "refund_cases_opened_by_fkey";
+            columns: ["opened_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "refund_cases_resolved_by_fkey";
+            columns: ["resolved_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
         ];
@@ -1265,6 +1497,47 @@ export type Database = {
         Args: { p_order_id: string; p_token_hash: string };
         Returns: Json | null;
       };
+      get_guest_refund_cases: {
+        Args: { p_order_id: string; p_token_hash: string };
+        Returns: {
+          id: string;
+          order_vendor_id: string;
+          status: RefundCaseStatus;
+          reason: string;
+          requested_amount_minor: number | null;
+          refund_amount_minor: number | null;
+          resolution_note: string | null;
+          created_at: string;
+          resolved_at: string | null;
+        }[];
+      };
+      open_refund_case: {
+        Args: {
+          p_order_vendor_id: string;
+          p_reason: string;
+          p_requested_amount_minor?: number | null;
+        };
+        Returns: string;
+      };
+      open_guest_refund_case: {
+        Args: {
+          p_order_id: string;
+          p_token_hash: string;
+          p_order_vendor_id: string;
+          p_reason: string;
+          p_requested_amount_minor?: number | null;
+        };
+        Returns: string;
+      };
+      resolve_refund_case: {
+        Args: {
+          p_case_id: string;
+          p_approved: boolean;
+          p_refund_amount_minor?: number | null;
+          p_note?: string | null;
+        };
+        Returns: undefined;
+      };
       consume_checkout_quota: {
         Args: {
           p_bucket: string;
@@ -1276,6 +1549,21 @@ export type Database = {
       cancel_order: {
         Args: { p_order_id: string };
         Returns: undefined;
+      };
+      set_order_vendor_status: {
+        Args: {
+          p_order_vendor_id: string;
+          p_next_status: OrderStatus;
+          p_expected_status: OrderStatus;
+          p_reason_code?: string | null;
+          p_note?: string | null;
+        };
+        Returns: {
+          order_id: string;
+          vendor_id: string;
+          previous_status: OrderStatus;
+          status: OrderStatus;
+        }[];
       };
       create_settlement: {
         Args: { p_vendor_id: string; p_note?: string | null };
@@ -1375,6 +1663,8 @@ export type Database = {
       settlement_status: SettlementStatus;
       occasion_match_mode: OccasionMatchMode;
       tag_suggestion_status: TagSuggestionStatus;
+      refund_case_status: RefundCaseStatus;
+      refund_case_source: RefundCaseSource;
     };
     CompositeTypes: Record<string, never>;
   };
