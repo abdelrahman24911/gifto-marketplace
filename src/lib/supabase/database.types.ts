@@ -647,6 +647,57 @@ export type Database = {
           },
         ];
       };
+      order_address_corrections: {
+        Row: {
+          id: number;
+          order_id: string;
+          actor_id: string | null;
+          reason_code: string;
+          note: string | null;
+          before: Json;
+          after: Json;
+          coverage_warning_acknowledged: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: never;
+          order_id: string;
+          actor_id?: string | null;
+          reason_code: string;
+          note?: string | null;
+          before: Json;
+          after: Json;
+          coverage_warning_acknowledged?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: never;
+          order_id?: string;
+          actor_id?: string | null;
+          reason_code?: string;
+          note?: string | null;
+          before?: Json;
+          after?: Json;
+          coverage_warning_acknowledged?: boolean;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "order_address_corrections_actor_id_fkey";
+            columns: ["actor_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "order_address_corrections_order_id_fkey";
+            columns: ["order_id"];
+            isOneToOne: false;
+            referencedRelation: "orders";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       order_items: {
         Row: {
           id: string;
@@ -1728,6 +1779,20 @@ export type Database = {
           previous_status: OrderStatus;
           status: OrderStatus;
         }[];
+      };
+      correct_order_address: {
+        Args: {
+          p_order_id: string;
+          p_recipient_name: string;
+          p_contact_phone: string;
+          p_address_line: string;
+          p_city: string;
+          p_governorate: string;
+          p_reason_code: string;
+          p_note?: string | null;
+          p_acknowledge_coverage_break?: boolean;
+        };
+        Returns: Json;
       };
       create_settlement: {
         Args: { p_vendor_id: string; p_note?: string | null };

@@ -147,7 +147,7 @@ transaction and ends with `rollback`, even on success.
 | `supabase/tests/rls_guest_orders_test.sql` | Phase 11: guest COD checkout with no Auth user, service-role-only RPCs, catalog pricing, idempotent retries, token-gated confirmation, checkout quota, authenticated path unchanged |
 | `supabase/tests/rls_occasions_test.sql` | Phase 26/27: occasion/tag curation, vendor suggestions, slug redirects, matching modes, storage policies, least-privilege grants |
 | `supabase/tests/rls_vendor_dashboard_test.sql` | Migrations 20-25: vendor profile privacy, media isolation, checkout pause, support queue, analytics index |
-| `supabase/tests/rls_order_audit_test.sql` | Migration 28: audited status RPC, stale-page protection, required admin reasons, actor resolution, event read isolation |
+| `supabase/tests/rls_order_audit_test.sql` | Migration 28: audited status RPC, stale-page protection, required admin reasons, actor resolution, event read isolation; migration 40 (P1-13): admin address correction with mandatory reason, delivered/returned guard, coverage-break confirmation, and its own append-only audit table |
 | `supabase/tests/rls_delivery_coverage_test.sql` | Migration 29: exact governorate matching, city/address area matching, empty-list allow behavior, trigger enforcement on direct suborder inserts |
 | `supabase/tests/rls_refunds_test.sql` | Migration 30: customer/guest case creation, buyer isolation, admin approval, commission-adjustment ledger, net settlement and active-settlement guard |
 | `supabase/tests/concurrency_parent_status_test.sql` | Migration 31: parent-order status race — concurrent suborder transitions, parent lock ordering, audit events; discovered by `scripts/run-rls-suites.sh` like the other suites |

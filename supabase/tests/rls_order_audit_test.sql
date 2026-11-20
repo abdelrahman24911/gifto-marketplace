@@ -459,6 +459,293 @@ begin
   raise notice 'TEST 6 PASSED: admin reads every event';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST 7 (P1-13, H-10): an admin corrects the address on a placed order;
+-- the audit row records actor, reason and before/after values, and the
+-- correction writes no status event.
+-- ---------------------------------------------------------------------------
+
+reset role;
+do $$
+begin
+  if has_function_privilege('anon',
+      'public.correct_order_address(uuid, text, text, text, text, text, text, text, boolean)',
+      'execute')
+     or not has_function_privilege('authenticated',
+      'public.correct_order_address(uuid, text, text, text, text, text, text, text, boolean)',
+      'execute') then
+    raise exception 'TEST 7 FAILED: address-correction RPC grants are wrong';
+  end if;
+
+  if has_table_privilege('authenticated', 'public.order_address_corrections', 'insert')
+     or has_table_privilege('authenticated', 'public.order_address_corrections', 'update')
+     or has_table_privilege('authenticated', 'public.order_address_corrections', 'delete')
+     or not has_table_privilege('authenticated', 'public.order_address_corrections', 'select') then
+    raise exception 'TEST 7 FAILED: correction audit table privileges are too broad';
+  end if;
+  raise notice 'TEST 7 PASSED: correction RPC and audit table grants are least-privilege';
+end $$;
+
+set role authenticated;
+set request.jwt.claim.sub = 'a1110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"a1110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_oid uuid;
+begin
+  v_oid := public.place_order(
+    '[{"product_id":"a5110000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Audit Buyer', '01001112233', '12 Audit Street', 'Alexandria', 'Alexandria');
+  perform set_config('gifto_test.addr_order1', v_oid::text, false);
+end $$;
+
+set request.jwt.claim.sub = 'a3110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"a3110000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_oid uuid;
+  v_result jsonb;
+  v_correction public.order_address_corrections;
+  v_events int;
+begin
+  v_oid := current_setting('gifto_test.addr_order1')::uuid;
+  v_events := (select count(*) from public.order_status_events where order_id = v_oid);
+
+  v_result := public.correct_order_address(
+    v_oid, 'Audit Buyer', '01009998877', '14 Corrected Street',
+    'Smouha', 'Alexandria', 'wrong_address', null);
+
+  if not (v_result ->> 'ok')::boolean then
+    raise exception 'TEST 7 FAILED: admin correction was rejected: %', v_result;
+  end if;
+
+  if (select address_line from public.orders where id = v_oid) <> '14 Corrected Street'
+     or (select contact_phone from public.orders where id = v_oid) <> '01009998877'
+     or (select city from public.orders where id = v_oid) <> 'Smouha' then
+    raise exception 'TEST 7 FAILED: corrected address was not stored';
+  end if;
+
+  select * into v_correction from public.order_address_corrections
+   where order_id = v_oid
+   order by created_at desc, id desc
+   limit 1;
+
+  if v_correction.actor_id <> 'a3110000-0000-0000-0000-000000000001'
+     or v_correction.reason_code <> 'wrong_address'
+     or v_correction.before ->> 'address_line' <> '12 Audit Street'
+     or v_correction.before ->> 'contact_phone' <> '01001112233'
+     or v_correction.after ->> 'address_line' <> '14 Corrected Street'
+     or v_correction.after ->> 'city' <> 'Smouha'
+     or v_correction.coverage_warning_acknowledged then
+    raise exception 'TEST 7 FAILED: correction audit row is wrong';
+  end if;
+
+  if (select count(*) from public.order_status_events where order_id = v_oid) <> v_events then
+    raise exception 'TEST 7 FAILED: address correction wrote a status event';
+  end if;
+
+  raise notice 'TEST 7 PASSED: admin correction stored with actor, reason and before/after audit';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 8 (P1-13, H-10): vendors, customers and bad input cannot correct.
+-- ---------------------------------------------------------------------------
+
+set request.jwt.claim.sub = 'a2110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"a2110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_oid uuid;
+begin
+  v_oid := current_setting('gifto_test.addr_order1')::uuid;
+  begin
+    perform public.correct_order_address(
+      v_oid, 'Audit Buyer', '01009998877', '15 Another Street',
+      'Smouha', 'Alexandria', 'wrong_address', null);
+    raise exception 'TEST 8 FAILED: vendor correction was accepted';
+  exception when insufficient_privilege then
+    null;
+  end;
+end $$;
+
+set request.jwt.claim.sub = 'a1110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"a1110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_oid uuid;
+begin
+  v_oid := current_setting('gifto_test.addr_order1')::uuid;
+  begin
+    perform public.correct_order_address(
+      v_oid, 'Audit Buyer', '01009998877', '15 Another Street',
+      'Smouha', 'Alexandria', 'wrong_address', null);
+    raise exception 'TEST 8 FAILED: customer correction was accepted';
+  exception when insufficient_privilege then
+    null;
+  end;
+end $$;
+
+set request.jwt.claim.sub = 'a3110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"a3110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_oid uuid;
+begin
+  v_oid := current_setting('gifto_test.addr_order1')::uuid;
+
+  begin
+    perform public.correct_order_address(
+      v_oid, 'Audit Buyer', '01009998877', '15 Another Street',
+      'Smouha', 'Alexandria', 'not-a-reason', null);
+    raise exception 'TEST 8 FAILED: unknown correction reason was accepted';
+  exception when invalid_parameter_value then
+    null;
+  end;
+
+  begin
+    perform public.correct_order_address(
+      v_oid, 'Audit Buyer', '01009998877', '15 Another Street',
+      'Smouha', 'Alexandria', 'other', null);
+    raise exception 'TEST 8 FAILED: other without a note was accepted';
+  exception when check_violation then
+    null;
+  end;
+
+  begin
+    perform public.correct_order_address(
+      v_oid, 'Audit Buyer', '01009998877', '15 Another Street',
+      'Smouha', 'Alexandria', 'other', repeat('x', 1001));
+    raise exception 'TEST 8 FAILED: over-long correction note was accepted';
+  exception when string_data_right_truncation then
+    null;
+  end;
+
+  if (select address_line from public.orders where id = v_oid) <> '14 Corrected Street' then
+    raise exception 'TEST 8 FAILED: rejected correction changed the address';
+  end if;
+
+  raise notice 'TEST 8 PASSED: non-admins and invalid corrections are rejected';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 9 (P1-13, H-10): correction after delivery is rejected.
+-- ---------------------------------------------------------------------------
+
+set request.jwt.claim.sub = 'a2110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"a2110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_oid uuid; v_ov uuid;
+begin
+  v_oid := current_setting('gifto_test.addr_order1')::uuid;
+  select id into v_ov from public.order_vendors
+   where order_id = v_oid and vendor_id = 'a1100000-0000-0000-0000-0000000000a1';
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
+  perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
+end $$;
+
+set request.jwt.claim.sub = 'a3110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"a3110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_oid uuid; v_before int;
+begin
+  v_oid := current_setting('gifto_test.addr_order1')::uuid;
+  v_before := (select count(*) from public.order_address_corrections where order_id = v_oid);
+
+  begin
+    perform public.correct_order_address(
+      v_oid, 'Audit Buyer', '01009998877', '16 Too Late Street',
+      'Smouha', 'Alexandria', 'wrong_address', null);
+    raise exception 'TEST 9 FAILED: post-delivery correction was accepted';
+  exception when check_violation then
+    null;
+  end;
+
+  if (select address_line from public.orders where id = v_oid) <> '14 Corrected Street' then
+    raise exception 'TEST 9 FAILED: rejected post-delivery correction changed the address';
+  end if;
+  if (select count(*) from public.order_address_corrections where order_id = v_oid) <> v_before then
+    raise exception 'TEST 9 FAILED: rejected post-delivery correction wrote an audit row';
+  end if;
+
+  raise notice 'TEST 9 PASSED: correction after delivery is rejected';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 10 (P1-13, H-10): a coverage-breaking correction needs an explicit
+-- second confirmation naming the affected shop, and never applies silently.
+-- ---------------------------------------------------------------------------
+
+reset role;
+do $$
+begin
+  -- Shop A now delivers to Alexandria only.
+  update public.vendors
+     set delivery_coverage = '{"governorates": ["Alexandria"]}'::jsonb
+   where id = 'a1100000-0000-0000-0000-0000000000a1';
+end $$;
+
+set role authenticated;
+set request.jwt.claim.sub = 'a1110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"a1110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_oid uuid;
+begin
+  v_oid := public.place_order(
+    '[{"product_id":"a5110000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Audit Buyer', '01001112233', '22 Audit Street', 'Alexandria', 'Alexandria');
+  perform set_config('gifto_test.addr_order2', v_oid::text, false);
+end $$;
+
+set request.jwt.claim.sub = 'a3110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"a3110000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_oid uuid;
+  v_result jsonb;
+  v_correction public.order_address_corrections;
+begin
+  v_oid := current_setting('gifto_test.addr_order2')::uuid;
+
+  -- Without the second confirmation: rejected, nothing changes.
+  v_result := public.correct_order_address(
+    v_oid, 'Audit Buyer', '01001112233', '22 Audit Street',
+    'Nasr City', 'Cairo', 'customer_request', 'Customer moved to Cairo');
+  if (v_result ->> 'ok')::boolean
+     or v_result ->> 'error' <> 'coverage_break'
+     or not (v_result -> 'vendors' ? 'Audit Shop A') then
+    raise exception 'TEST 10 FAILED: coverage break was not reported: %', v_result;
+  end if;
+
+  if (select governorate from public.orders where id = v_oid) <> 'Alexandria' then
+    raise exception 'TEST 10 FAILED: unconfirmed coverage-breaking correction changed the address';
+  end if;
+  if exists (select 1 from public.order_address_corrections where order_id = v_oid) then
+    raise exception 'TEST 10 FAILED: unconfirmed coverage-breaking correction wrote an audit row';
+  end if;
+
+  -- With the explicit confirmation: applies, and the audit row records it.
+  v_result := public.correct_order_address(
+    v_oid, 'Audit Buyer', '01001112233', '22 Audit Street',
+    'Nasr City', 'Cairo', 'customer_request', 'Customer moved to Cairo', true);
+  if not (v_result ->> 'ok')::boolean then
+    raise exception 'TEST 10 FAILED: confirmed correction was rejected: %', v_result;
+  end if;
+
+  if (select governorate from public.orders where id = v_oid) <> 'Cairo' then
+    raise exception 'TEST 10 FAILED: confirmed correction was not stored';
+  end if;
+
+  select * into v_correction from public.order_address_corrections
+   where order_id = v_oid
+   order by created_at desc, id desc
+   limit 1;
+  if not v_correction.coverage_warning_acknowledged
+     or v_correction.reason_code <> 'customer_request'
+     or v_correction.after ->> 'governorate' <> 'Cairo' then
+    raise exception 'TEST 10 FAILED: confirmed correction audit row is wrong';
+  end if;
+
+  raise notice 'TEST 10 PASSED: coverage break needs confirmation naming the shop, then applies audited';
+end $$;
+
 reset role;
 rollback;
+
 

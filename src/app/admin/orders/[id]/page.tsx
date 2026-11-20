@@ -5,6 +5,10 @@ import { Breadcrumb, EmptyState } from "@/components/ui/section";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { formatEgp } from "@/lib/money";
 import {
+  ADDRESS_CORRECTION_REASONS,
+  type AddressCorrectionValues,
+} from "@/lib/order-address";
+import {
   ORDER_STATUS_REASON_LABELS,
   isOrderStatusReasonCode,
 } from "@/lib/order-status-reasons";
@@ -15,6 +19,7 @@ import {
   AdminPageHeader,
   AdminStatStrip,
 } from "../../ui";
+import { AdminAddressCorrection } from "../address-correction";
 import {
   ADMIN_ORDER_STATUS_STYLES,
   formatOrderDateTime,
@@ -40,7 +45,7 @@ export default async function AdminOrderDetailPage({
   const { id } = await params;
   const { supabase } = await requirePlatformAdmin();
 
-  const [orderResult, eventsResult] = await Promise.all([
+  const [orderResult, eventsResult, correctionsResult] = await Promise.all([
     supabase
       .from("orders")
       .select(
@@ -55,6 +60,14 @@ export default async function AdminOrderDetailPage({
       )
       .eq("order_id", id)
       .order("created_at", { ascending: true }),
+    // P1-13: address-correction audit (own table, not status events).
+    supabase
+      .from("order_address_corrections")
+      .select(
+        "id, actor_id, reason_code, note, before, after, coverage_warning_acknowledged, created_at",
+      )
+      .eq("order_id", id)
+      .order("created_at", { ascending: false }),
   ]);
 
   if (orderResult.error) {
@@ -85,7 +98,22 @@ export default async function AdminOrderDetailPage({
     : "placed";
   const suborders = order.order_vendors ?? [];
   const events = eventsResult.data ?? [];
+  const corrections = correctionsResult.data ?? [];
   const reference = order.public_reference ?? `#${order.id.slice(0, 8)}`;
+  // P1-13: correction is allowed only while no shop line has been
+  // delivered or returned; the RPC enforces the same guard.
+  const canCorrectAddress = !suborders.some((suborder) =>
+    ["delivered", "returned"].includes(suborder.status ?? ""),
+  );
+  const addressValues: AddressCorrectionValues = {
+    recipientName: order.recipient_name,
+    contactPhone: order.contact_phone,
+    addressLine: order.address_line,
+    city: order.city,
+    governorate: order.governorate,
+    reasonCode: "",
+    note: "",
+  };
 
   return (
     <div className="w-full">
@@ -356,6 +384,83 @@ export default async function AdminOrderDetailPage({
                 </div>
               ) : null}
             </dl>
+
+            <AdminAddressCorrection
+              orderId={order.id}
+              current={addressValues}
+              canCorrect={canCorrectAddress}
+            />
+
+            {corrections.length > 0 ? (
+              <div className="mt-4">
+                <h3 className="text-sm font-semibold text-ink">
+                  Address corrections
+                </h3>
+                <ol className="mt-2 flex flex-col gap-2">
+                  {corrections.map((correction) => {
+                    const before =
+                      correction.before &&
+                      typeof correction.before === "object" &&
+                      !Array.isArray(correction.before)
+                        ? (correction.before as Record<string, unknown>)
+                        : {};
+                    const after =
+                      correction.after &&
+                      typeof correction.after === "object" &&
+                      !Array.isArray(correction.after)
+                        ? (correction.after as Record<string, unknown>)
+                        : {};
+                    const changed = (
+                      [
+                        ["recipient_name", "Recipient"],
+                        ["contact_phone", "Phone"],
+                        ["address_line", "Address"],
+                        ["city", "City"],
+                        ["governorate", "Governorate"],
+                      ] as const
+                    ).filter(
+                      ([key]) =>
+                        String(before[key] ?? "") !== String(after[key] ?? ""),
+                    );
+                    const reason =
+                      correction.reason_code in ADDRESS_CORRECTION_REASONS
+                        ? ADDRESS_CORRECTION_REASONS[
+                            correction.reason_code as keyof typeof ADDRESS_CORRECTION_REASONS
+                          ]
+                        : correction.reason_code;
+
+                    return (
+                      <li
+                        key={correction.id}
+                        className="rounded-xl border border-line bg-paper px-4 py-3 text-sm"
+                      >
+                        <p className="font-medium text-ink">{reason}</p>
+                        <p className="mt-0.5 text-xs text-ink-mute">
+                          {formatOrderDateTime(correction.created_at)}
+                          {correction.actor_id
+                            ? ` · by admin (${correction.actor_id.slice(0, 8)})`
+                            : ""}
+                          {correction.coverage_warning_acknowledged
+                            ? " · coverage warning acknowledged"
+                            : ""}
+                        </p>
+                        {changed.map(([key, label]) => (
+                          <p key={key} className="mt-1 text-xs text-ink-soft">
+                            {label}: {String(before[key] ?? "—")} →{" "}
+                            {String(after[key] ?? "—")}
+                          </p>
+                        ))}
+                        {correction.note ? (
+                          <p className="mt-2 rounded-lg bg-paper-deep px-3 py-2 text-xs text-ink-soft">
+                            {correction.note}
+                          </p>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ol>
+              </div>
+            ) : null}
           </section>
 
           <section className="rounded-2xl border border-line bg-paper-soft p-5">
