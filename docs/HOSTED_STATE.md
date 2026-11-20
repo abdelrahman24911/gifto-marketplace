@@ -32,10 +32,37 @@
 | Production `is_demo` count | 0 | UNVERIFIED | No hosted database access; no read-only count query run. Nothing was deleted. | 2026-11-20 |
 | Backups (Supabase) | On, with a known retention window | UNVERIFIED | No Supabase dashboard access in this session. | 2026-11-20 |
 | PITR (point-in-time recovery) | On | UNVERIFIED | No Supabase dashboard access in this session. | 2026-11-20 |
-| Staging Supabase project | Exists, separate from production | OPEN — does not exist as far as this session can establish | No staging project reference exists in the repo or README; no dashboard access to confirm. Treated as not existing until proven otherwise. | 2026-11-20 |
-| Staging Vercel environment | Exists | OPEN — does not exist as far as this session can establish | No staging environment reference exists in the repo; no Vercel access to confirm. | 2026-11-20 |
-| Monitoring (error tracking / uptime) | Live provider configured | OPEN — no provider configured (P0-02) | No Sentry SDK or config in the repo at `34f30a6`; no UptimeRobot check recorded. Owner-approved choice (2026-11-20): Sentry + UptimeRobot, free tiers, env placeholders only. | 2026-11-20 |
-| CI | GitHub Actions runs lint, typecheck, Vitest, and all 13 RLS suites on every push/PR | OPEN — no CI exists at `34f30a6` (P0-02) | No `.github/` directory in the repo at base HEAD; no SQL-suite runner exists. | 2026-11-20 |
+| Staging Supabase project | Exists, separate from production | OPEN — does not exist as far as this session can establish | No staging project reference exists in the repo or README; no dashboard access to confirm. Treated as not existing until proven otherwise. **Staging setup task (P0-02):** owner to create a separate Supabase project (disposable data, its own project ref and keys) plus a staging Vercel environment pointing at it; a change reaches staging by deploying the branch there and a second person verifies it before any production deploy. Nothing in this repo can create the hosted staging project. | 2026-11-20 |
+| Staging Vercel environment | Exists | OPEN — does not exist as far as this session can establish | No staging environment reference exists in the repo; no Vercel access to confirm. See staging Supabase task above. | 2026-11-20 |
+| Monitoring (error tracking / uptime) | Live provider configured | OPEN — wired, not live (P0-02) | Sentry SDK `@sentry/nextjs` installed; `sentry.client/server/edge.config.ts` + `src/instrumentation.ts` added, all no-ops without a DSN (no DSN/key committed). UptimeRobot monitors defined in `docs/monitoring/UPTIME_ROBOT.md` (production homepage, 5-min checks) — **not yet created in the dashboard**, alert contact not yet supplied. **Provider choice (Sentry + UptimeRobot, free tiers) is Muse-recommended only; no separate explicit owner approval was recorded, so it is not an owner-approved decision.** To go live: owner creates a Sentry project and an UptimeRobot account, sets `NEXT_PUBLIC_SENTRY_DSN` / `SENTRY_DSN` in Vercel, and creates the two monitors. | 2026-11-20 |
+| CI | GitHub Actions runs lint, typecheck, Vitest, and all 13 RLS suites on every push/PR | BUILT, NOT YET RUN ON GITHUB (P0-02) | `.github/workflows/ci.yml` created (app job: lint, typecheck, Vitest, build; rls job: disposable `supabase/postgres:17.11.0.003`, all migrations, `scripts/run-rls-suites.sh`). Locally verified 2026-11-20: lint pass, typecheck pass, Vitest 37 files / 357 tests pass, build pass, all 13 RLS suites pass on disposable local Postgres 16 with `scripts/auth-emulation.sql`. **The GitHub Actions run itself has not happened — this branch has not been pushed — so no run link/ID exists yet.** | 2026-11-20 |
+| Backup drill | One recorded restore drill with matching row counts | BLOCKED (P0-02) | No backup dump or dashboard backup access was available in this session (no hosted access), so no restore was performed. Runnable procedure added: `scripts/backup-drill.sh <dump> <source counts>` restores into a disposable database and compares orders / order_vendors / commission_entries / settlements counts. To run: owner supplies a backup dump (or dashboard access) plus the source counts. | 2026-11-20 |
+
+## P0-02 notes (2026-11-20)
+
+- **Pre-existing typecheck failure fixed in this prompt:** `src/app/layout.tsx`
+  used `LayoutProps<"/">`, a name that does not exist in this codebase
+  (introduced in `70a4e14`); typecheck failed on the base HEAD. Fixed
+  minimally to `{ children: ReactNode }` with a `ReactNode` import. Without
+  this fix CI could never be green. Vitest and lint already passed on base.
+- **Build required a database at build time:** `src/app/sitemap.ts` queried
+  the catalog while prerendering, so `next build` failed without
+  `NEXT_PUBLIC_SUPABASE_URL` and hung on a dummy URL. The sitemap is now
+  `export const dynamic = "force-dynamic"` (live catalog data is generated
+  per request, not baked in at build). Build now passes with only
+  `NEXT_PUBLIC_SITE_URL` set. Runtime behaviour is unchanged apart from
+  sitemap freshness.
+- **RLS verification (first real run of the owner-reported claim):** all 13
+  suites pass on disposable local Postgres 16 (2026-11-20, ~29s), after
+  applying migrations 1–30 plus `storage_stub.sql` and the test-only
+  `scripts/auth-emulation.sql` (emulates the Supabase platform's `auth`
+  schema/roles on plain Postgres; skipped automatically where `auth.users`
+  already exists, i.e. in the CI container). No suite was weakened, skipped,
+  or edited. Three initial failures were gaps in the emulation itself
+  (missing USAGE on the `auth` schema, `service_role` without BYPASSRLS) and
+  were fixed in the emulation file only.
+- **What CI still needs:** a push of this branch so GitHub Actions actually
+  runs (no push was made in this session).
 
 ## What would unblock verification
 
@@ -66,3 +93,6 @@ in commit `70a4e14`, SEO phase). `npm run lint` passes; `npm run test`
 "typecheck passes" on HEAD `34f30a6` is therefore **not verified — it fails
 in a clean `npm ci` run**. This is a pre-existing finding, recorded here so
 P0-02 CI is not blamed for it; it must be fixed before CI can ever be green.
+**Update (P0-02, 2026-11-20): fixed** — `layout.tsx` now uses
+`{ children: ReactNode }`; `npm run typecheck` passes. See "P0-02 notes"
+below.

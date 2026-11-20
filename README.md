@@ -103,6 +103,17 @@ migrations 14–18 live in `supabase/rollbacks/`; roll back 18 before 17, then 1
 columns or void history exist. Migration 19 deliberately has no executable rollback: restoring the
 pre-19 broad write grants on the security-definer view would reopen the exposure.
 
+### Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request, in two jobs:
+`app` (lint, typecheck, Vitest, build) and `rls` (all RLS suites on a
+disposable `supabase/postgres:17.11.0.003` container, via
+`scripts/run-rls-suites.sh`). CI uses no production credential and never
+touches a hosted project. The RLS suites can also be run locally with the
+same script against a disposable database — see `scripts/run-rls-suites.sh`
+for the required environment variables. Hosted state, staging, monitoring,
+and the backup drill are tracked in `docs/HOSTED_STATE.md`.
+
 ### Verifying RLS locally
 
 Thirteen suites exercise the policies against a disposable `supabase/postgres` container

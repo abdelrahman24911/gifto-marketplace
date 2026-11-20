@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Fraunces, Geist, Geist_Mono } from "next/font/google";
+import type { ReactNode } from "react";
 
 import { NavigationGuardProvider } from "@/components/navigation-guard";
 import { isIndexingEnabled } from "@/lib/indexing";
@@ -64,7 +65,7 @@ export const metadata: Metadata = {
 // `cacheComponents`.
 export const dynamic = "force-dynamic";
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
       lang="en"

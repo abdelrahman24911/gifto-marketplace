@@ -8,6 +8,11 @@ import {
 } from "@/lib/catalog";
 import { getSiteUrl } from "@/lib/site-url";
 
+// The sitemap lists live catalog data, so it is generated per request rather
+// than prerendered at build time: prerendering would bake in stale entries
+// and require a live database during `next build` (which CI does not have).
+export const dynamic = "force-dynamic";
+
 const STATIC_PATHS = [
   "/",
   "/occasions",

@@ -1,0 +1,85 @@
+# Gifto CI (P0-02, H-17, M-19).
+#
+# Two jobs, both required to pass:
+#   app — lint, typecheck, Vitest, build (Node, no database needed)
+#   rls — all RLS suites on a disposable supabase/postgres container
+#         (never a hosted project), via scripts/run-rls-suites.sh
+#
+# No production credential of any kind is used or needed here. The workflow
+# uses no secrets. Monitoring DSNs are not set in CI; Sentry config files
+# are no-ops without a DSN.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  app:
+    name: app (lint, typecheck, test, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build
+        env:
+          # Build needs a valid site URL; the app is fully dynamic, so no
+          # Supabase credentials are required at build time.
+          NEXT_PUBLIC_SITE_URL: http://localhost:3000
+
+  rls:
+    name: rls (all SQL suites on disposable Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # Same image/tag as the README local recipe. 17.6.1.106 segfaults on
+        # denied EXECUTE; 17.11.0.003 is the known-good tag.
+        image: public.ecr.aws/supabase/postgres:17.11.0.003
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: gifto_rls_test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for the Supabase image to create auth roles
+        # pg_isready is not enough: the image creates anon/authenticated and
+        # the auth schema after Postgres starts accepting connections.
+        run: |
+          for i in $(seq 1 60); do
+            if PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -tAc \
+              "select count(*) from pg_roles where rolname in ('anon','authenticated')" | grep -qx "2" \
+              && PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -tAc \
+              "select to_regrole('service_role') is not null" | grep -qx "t"; then
+              echo "auth roles ready"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "timed out waiting for auth roles" >&2
+          exit 1
+      - name: Create disposable test database
+        run: PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "create database gifto_rls_test;"
+      - name: Run all RLS suites
+        run: bash scripts/run-rls-suites.sh
