@@ -745,7 +745,355 @@ begin
   raise notice 'TEST 10 PASSED: coverage break needs confirmation naming the shop, then applies audited';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST 11 (N-05): set_order_vendor_status validates the transition
+-- itself, inside the RPC.
+-- ---------------------------------------------------------------------------
+-- Edge list diffed against migration 35's assert_order_vendor_transition
+-- trigger and src/lib/orders.ts VENDOR_NEXT_STATUSES / ADMIN_NEXT_STATUSES
+-- — all three agree:
+--   placed -> confirmed, cancelled
+--   confirmed -> shipped, cancelled
+--   shipped -> delivered, cancelled
+--   shipped -> returned, iff refund_receipt_allows_return
+--   delivered -> returned, iff admin OR refund_receipt_allows_return
+-- The legal shipped->returned edge (via confirm_refund_receipt) is
+-- covered end-to-end by rls_refunds_test.sql TEST 8/14c, which drives it
+-- through this RPC; here a direct shipped->returned call without the
+-- refund flag must be rejected by the RPC.
+set role authenticated;
+set request.jwt.claim.sub = 'a1110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"a1110000-0000-0000-0000-000000000001"}';
+do $$
+begin
+  perform set_config('gifto_test.audit_order_e1', public.place_order(
+    '[{"product_id":"a5110000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Audit Buyer', '01001112233', '12 Audit Street', 'Alexandria', 'Alexandria')::text, false);
+  perform set_config('gifto_test.audit_order_e2', public.place_order(
+    '[{"product_id":"a5110000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Audit Buyer', '01001112233', '12 Audit Street', 'Alexandria', 'Alexandria')::text, false);
+  perform set_config('gifto_test.audit_order_e3', public.place_order(
+    '[{"product_id":"a5110000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Audit Buyer', '01001112233', '12 Audit Street', 'Alexandria', 'Alexandria')::text, false);
+  perform set_config('gifto_test.audit_order_e4', public.place_order(
+    '[{"product_id":"a5110000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Audit Buyer', '01001112233', '12 Audit Street', 'Alexandria', 'Alexandria')::text, false);
+  perform set_config('gifto_test.audit_order_e5', public.place_order(
+    '[{"product_id":"a5110000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Audit Buyer', '01001112233', '12 Audit Street', 'Alexandria', 'Alexandria')::text, false);
+  perform set_config('gifto_test.audit_order_e6', public.place_order(
+    '[{"product_id":"a5110000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Audit Buyer', '01001112233', '12 Audit Street', 'Alexandria', 'Alexandria')::text, false);
+  perform set_config('gifto_test.audit_order_e7', public.place_order(
+    '[{"product_id":"a5110000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Audit Buyer', '01001112233', '12 Audit Street', 'Alexandria', 'Alexandria')::text, false);
+  perform set_config('gifto_test.audit_order_e8', public.place_order(
+    '[{"product_id":"a5110000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Audit Buyer', '01001112233', '12 Audit Street', 'Alexandria', 'Alexandria')::text, false);
+end $$;
+
 reset role;
+do $$
+begin
+  perform set_config('gifto_test.audit_ov_e1', (select id::text from public.order_vendors where order_id = current_setting('gifto_test.audit_order_e1')::uuid), false);
+  perform set_config('gifto_test.audit_ov_e2', (select id::text from public.order_vendors where order_id = current_setting('gifto_test.audit_order_e2')::uuid), false);
+  perform set_config('gifto_test.audit_ov_e3', (select id::text from public.order_vendors where order_id = current_setting('gifto_test.audit_order_e3')::uuid), false);
+  perform set_config('gifto_test.audit_ov_e4', (select id::text from public.order_vendors where order_id = current_setting('gifto_test.audit_order_e4')::uuid), false);
+  perform set_config('gifto_test.audit_ov_e5', (select id::text from public.order_vendors where order_id = current_setting('gifto_test.audit_order_e5')::uuid), false);
+  perform set_config('gifto_test.audit_ov_e6', (select id::text from public.order_vendors where order_id = current_setting('gifto_test.audit_order_e6')::uuid), false);
+  perform set_config('gifto_test.audit_ov_e7', (select id::text from public.order_vendors where order_id = current_setting('gifto_test.audit_order_e7')::uuid), false);
+  perform set_config('gifto_test.audit_ov_e8', (select id::text from public.order_vendors where order_id = current_setting('gifto_test.audit_order_e8')::uuid), false);
+end $$;
+
+-- 11a: every legal edge succeeds through the RPC and writes exactly one
+-- audit event each.
+set role authenticated;
+set request.jwt.claim.sub = 'a2110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"a2110000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_ov uuid;
+  v_before int;
+  v_after int;
+begin
+  -- E1: placed -> confirmed -> shipped -> delivered (vendor), then
+  -- delivered -> returned (admin, tested below).
+  v_ov := current_setting('gifto_test.audit_ov_e1')::uuid;
+  select count(*) into v_before from public.order_status_events where order_vendor_id = v_ov;
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+  select count(*) into v_after from public.order_status_events where order_vendor_id = v_ov;
+  if v_after <> v_before + 1 then
+    raise exception 'TEST 11 FAILED: placed->confirmed did not write exactly one event';
+  end if;
+
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', 'TRK-0001');
+  perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
+  select count(*) into v_after from public.order_status_events where order_vendor_id = v_ov;
+  if v_after <> 3 then
+    raise exception 'TEST 11 FAILED: E1 has % events after three legal edges (expected 3)', v_after;
+  end if;
+  if (select status from public.order_vendors where id = v_ov) <> 'delivered' then
+    raise exception 'TEST 11 FAILED: E1 did not reach delivered';
+  end if;
+
+  -- E2: placed -> cancelled.
+  v_ov := current_setting('gifto_test.audit_ov_e2')::uuid;
+  perform public.set_order_vendor_status(v_ov, 'cancelled', 'placed');
+  if (select count(*) from public.order_status_events where order_vendor_id = v_ov) <> 1 then
+    raise exception 'TEST 11 FAILED: placed->cancelled did not write exactly one event';
+  end if;
+
+  -- E3: placed -> confirmed -> cancelled.
+  v_ov := current_setting('gifto_test.audit_ov_e3')::uuid;
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+  perform public.set_order_vendor_status(v_ov, 'cancelled', 'confirmed');
+  if (select count(*) from public.order_status_events where order_vendor_id = v_ov) <> 2 then
+    raise exception 'TEST 11 FAILED: confirmed->cancelled did not write exactly one event each';
+  end if;
+
+  -- E4: placed -> confirmed -> shipped -> cancelled (failed delivery).
+  v_ov := current_setting('gifto_test.audit_ov_e4')::uuid;
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', 'TRK-0001');
+  perform public.set_order_vendor_status(v_ov, 'cancelled', 'shipped', 'unreachable', 'Customer did not answer');
+  if (select count(*) from public.order_status_events where order_vendor_id = v_ov) <> 3 then
+    raise exception 'TEST 11 FAILED: shipped->cancelled did not write exactly one event each';
+  end if;
+  raise notice 'TEST 11a PASSED: every legal vendor edge succeeds with exactly one event each';
+end $$;
+
+-- E1's final legal edge is the admin's delivered -> returned.
+set request.jwt.claim.sub = 'a3110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"a3110000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_ov uuid;
+begin
+  v_ov := current_setting('gifto_test.audit_ov_e1')::uuid;
+  perform public.set_order_vendor_status(
+    v_ov, 'returned', 'delivered', 'damaged', 'Item arrived broken');
+  if (select count(*) from public.order_status_events where order_vendor_id = v_ov) <> 4 then
+    raise exception 'TEST 11 FAILED: delivered->returned did not write exactly one event';
+  end if;
+  if (select status from public.order_vendors where id = v_ov) <> 'returned' then
+    raise exception 'TEST 11 FAILED: E1 did not reach returned';
+  end if;
+  raise notice 'TEST 11a2 PASSED: admin delivered->returned succeeds with exactly one event';
+end $$;
+
+-- 11b: illegal edges are rejected by the RPC with the trigger's exact
+-- message, no status change, and no audit event.
+set role authenticated;
+set request.jwt.claim.sub = 'a2110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"a2110000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_ov uuid;
+  v_before int;
+begin
+  -- E5 to delivered, then delivered -> shipped / delivered -> confirmed.
+  v_ov := current_setting('gifto_test.audit_ov_e5')::uuid;
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', 'TRK-0001');
+  perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
+
+  select count(*) into v_before from public.order_status_events where order_vendor_id = v_ov;
+  begin
+    -- Courier and tracking are supplied so the courier rule passes and
+    -- only the edge check can reject this jump.
+    perform public.set_order_vendor_status(v_ov, 'shipped', 'delivered', null, null, 'Test Courier', 'TRK-0001');
+    raise exception 'TEST 11 FAILED: delivered->shipped was accepted';
+  exception when check_violation then
+    if sqlerrm not like '%cannot move from "delivered" to "shipped"%' then
+      raise exception 'TEST 11 FAILED: delivered->shipped raised the wrong error: %', sqlerrm;
+    end if;
+  end;
+  if (select status from public.order_vendors where id = v_ov) <> 'delivered'
+     or (select count(*) from public.order_status_events where order_vendor_id = v_ov) <> v_before then
+    raise exception 'TEST 11 FAILED: rejected delivered->shipped changed state or wrote an event';
+  end if;
+
+  begin
+    perform public.set_order_vendor_status(v_ov, 'confirmed', 'delivered');
+    raise exception 'TEST 11 FAILED: delivered->confirmed was accepted';
+  exception when check_violation then
+    if sqlerrm not like '%cannot move from "delivered" to "confirmed"%' then
+      raise exception 'TEST 11 FAILED: delivered->confirmed raised the wrong error: %', sqlerrm;
+    end if;
+  end;
+  if (select status from public.order_vendors where id = v_ov) <> 'delivered'
+     or (select count(*) from public.order_status_events where order_vendor_id = v_ov) <> v_before then
+    raise exception 'TEST 11 FAILED: rejected delivered->confirmed changed state or wrote an event';
+  end if;
+
+  -- E7 to shipped, then shipped -> returned without the refund flag.
+  v_ov := current_setting('gifto_test.audit_ov_e7')::uuid;
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', 'TRK-0001');
+  select count(*) into v_before from public.order_status_events where order_vendor_id = v_ov;
+  begin
+    perform public.set_order_vendor_status(v_ov, 'returned', 'shipped');
+    raise exception 'TEST 11 FAILED: shipped->returned without a refund receipt was accepted';
+  exception when check_violation then
+    if sqlerrm not like '%cannot move from "shipped" to "returned"%' then
+      raise exception 'TEST 11 FAILED: shipped->returned raised the wrong error: %', sqlerrm;
+    end if;
+  end;
+  if (select status from public.order_vendors where id = v_ov) <> 'shipped'
+     or (select count(*) from public.order_status_events where order_vendor_id = v_ov) <> v_before then
+    raise exception 'TEST 11 FAILED: rejected shipped->returned changed state or wrote an event';
+  end if;
+
+  -- E6 still placed: placed -> delivered, placed -> shipped (with a
+  -- courier, so the courier rule passes and only the edge check can
+  -- reject), and placed -> returned as an admin with a reason (so the
+  -- reason rules pass and only the edge check can reject).
+  v_ov := current_setting('gifto_test.audit_ov_e6')::uuid;
+  select count(*) into v_before from public.order_status_events where order_vendor_id = v_ov;
+  begin
+    perform public.set_order_vendor_status(v_ov, 'delivered', 'placed');
+    raise exception 'TEST 11 FAILED: placed->delivered was accepted';
+  exception when check_violation then
+    if sqlerrm not like '%cannot move from "placed" to "delivered"%' then
+      raise exception 'TEST 11 FAILED: placed->delivered raised the wrong error: %', sqlerrm;
+    end if;
+  end;
+  begin
+    perform public.set_order_vendor_status(v_ov, 'shipped', 'placed', null, null, 'Test Courier', 'TRK-0001');
+    raise exception 'TEST 11 FAILED: placed->shipped was accepted';
+  exception when check_violation then
+    if sqlerrm not like '%cannot move from "placed" to "shipped"%' then
+      raise exception 'TEST 11 FAILED: placed->shipped raised the wrong error: %', sqlerrm;
+    end if;
+  end;
+  if (select status from public.order_vendors where id = v_ov) <> 'placed'
+     or (select count(*) from public.order_status_events where order_vendor_id = v_ov) <> v_before then
+    raise exception 'TEST 11 FAILED: rejected placed jumps changed state or wrote an event';
+  end if;
+
+  -- E2 is cancelled: cancelled -> confirmed.
+  v_ov := current_setting('gifto_test.audit_ov_e2')::uuid;
+  select count(*) into v_before from public.order_status_events where order_vendor_id = v_ov;
+  begin
+    perform public.set_order_vendor_status(v_ov, 'confirmed', 'cancelled');
+    raise exception 'TEST 11 FAILED: cancelled->confirmed was accepted';
+  exception when check_violation then
+    if sqlerrm not like '%cannot move from "cancelled" to "confirmed"%' then
+      raise exception 'TEST 11 FAILED: cancelled->confirmed raised the wrong error: %', sqlerrm;
+    end if;
+  end;
+  if (select status from public.order_vendors where id = v_ov) <> 'cancelled'
+     or (select count(*) from public.order_status_events where order_vendor_id = v_ov) <> v_before then
+    raise exception 'TEST 11 FAILED: rejected cancelled->confirmed changed state or wrote an event';
+  end if;
+
+  -- E1 is returned: returned -> confirmed and returned -> cancelled.
+  v_ov := current_setting('gifto_test.audit_ov_e1')::uuid;
+  select count(*) into v_before from public.order_status_events where order_vendor_id = v_ov;
+  begin
+    perform public.set_order_vendor_status(v_ov, 'confirmed', 'returned');
+    raise exception 'TEST 11 FAILED: returned->confirmed was accepted';
+  exception when check_violation then
+    if sqlerrm not like '%cannot move from "returned" to "confirmed"%' then
+      raise exception 'TEST 11 FAILED: returned->confirmed raised the wrong error: %', sqlerrm;
+    end if;
+  end;
+  begin
+    perform public.set_order_vendor_status(v_ov, 'cancelled', 'returned');
+    raise exception 'TEST 11 FAILED: returned->cancelled was accepted';
+  exception when check_violation then
+    if sqlerrm not like '%cannot move from "returned" to "cancelled"%' then
+      raise exception 'TEST 11 FAILED: returned->cancelled raised the wrong error: %', sqlerrm;
+    end if;
+  end;
+  if (select status from public.order_vendors where id = v_ov) <> 'returned'
+     or (select count(*) from public.order_status_events where order_vendor_id = v_ov) <> v_before then
+    raise exception 'TEST 11 FAILED: rejected returned jumps changed state or wrote an event';
+  end if;
+  raise notice 'TEST 11b PASSED: illegal edges rejected by the RPC with the trigger message and no event';
+end $$;
+
+-- placed -> returned as an admin WITH a reason: the reason rules pass,
+-- so only the RPC edge check can reject it.
+set request.jwt.claim.sub = 'a3110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"a3110000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_ov uuid;
+  v_before int;
+begin
+  v_ov := current_setting('gifto_test.audit_ov_e6')::uuid;
+  select count(*) into v_before from public.order_status_events where order_vendor_id = v_ov;
+  begin
+    perform public.set_order_vendor_status(v_ov, 'returned', 'placed', 'damaged', 'Item arrived broken');
+    raise exception 'TEST 11 FAILED: placed->returned was accepted';
+  exception when check_violation then
+    if sqlerrm not like '%cannot move from "placed" to "returned"%' then
+      raise exception 'TEST 11 FAILED: placed->returned raised the wrong error: %', sqlerrm;
+    end if;
+  end;
+  if (select status from public.order_vendors where id = v_ov) <> 'placed'
+     or (select count(*) from public.order_status_events where order_vendor_id = v_ov) <> v_before then
+    raise exception 'TEST 11 FAILED: rejected placed->returned changed state or wrote an event';
+  end if;
+  raise notice 'TEST 11b2 PASSED: placed->returned with a reason is rejected by the RPC edge check alone';
+end $$;
+
+-- 11c: the RPC rejects on its own — with the BEFORE trigger disabled,
+-- the illegal edge is still rejected and a legal edge still succeeds.
+-- The suite ends with a rollback, but the trigger is re-enabled
+-- explicitly so no later statement can observe the gap.
+reset role;
+alter table public.order_vendors disable trigger order_vendors_assert_transition;
+set role authenticated;
+set request.jwt.claim.sub = 'a2110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"a2110000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_ov uuid;
+  v_before int;
+begin
+  v_ov := current_setting('gifto_test.audit_ov_e8')::uuid;
+  select count(*) into v_before from public.order_status_events where order_vendor_id = v_ov;
+  begin
+    perform public.set_order_vendor_status(v_ov, 'returned', 'placed');
+    raise exception 'TEST 11 FAILED: placed->returned was accepted with the trigger disabled';
+  exception when check_violation then
+    if sqlerrm not like '%cannot move from "placed" to "returned"%' then
+      raise exception 'TEST 11 FAILED: trigger-disabled placed->returned raised the wrong error: %', sqlerrm;
+    end if;
+  end;
+  if (select status from public.order_vendors where id = v_ov) <> 'placed'
+     or (select count(*) from public.order_status_events where order_vendor_id = v_ov) <> v_before then
+    raise exception 'TEST 11 FAILED: trigger-disabled rejection changed state or wrote an event';
+  end if;
+
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+  if (select status from public.order_vendors where id = v_ov) <> 'confirmed' then
+    raise exception 'TEST 11 FAILED: legal edge failed with the trigger disabled';
+  end if;
+  if (select count(*) from public.order_status_events where order_vendor_id = v_ov) <> v_before + 1 then
+    raise exception 'TEST 11 FAILED: legal edge with the trigger disabled did not write exactly one event';
+  end if;
+  raise notice 'TEST 11c PASSED: the RPC rejects illegal edges with the trigger disabled; legal edges still work';
+end $$;
+
+reset role;
+alter table public.order_vendors enable trigger order_vendors_assert_transition;
+do $$
+begin
+  if not exists (
+    select 1 from pg_trigger
+     where tgname = 'order_vendors_assert_transition'
+       and tgenabled = 'O'
+  ) then
+    raise exception 'TEST 11 FAILED: the transition trigger was not re-enabled';
+  end if;
+  raise notice 'TEST 11c2 PASSED: the transition trigger is re-enabled';
+end $$;
+
+reset role;
+
 rollback;
 
 
