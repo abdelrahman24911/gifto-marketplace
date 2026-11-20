@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { requireUser } from "@/lib/auth";
 import { parseEgpToMinor } from "@/lib/money";
+import { notifyRefundCaseOpened } from "@/lib/mail";
 import { refundReasonError } from "@/lib/refunds";
 
 export type OpenRefundState =
@@ -43,7 +44,7 @@ export async function openRefundCase(
   }
 
   const { supabase } = await requireUser({ verifyWithAuthServer: true });
-  const { error } = await supabase.rpc("open_refund_case", {
+  const { data: caseId, error } = await supabase.rpc("open_refund_case", {
     p_order_vendor_id: orderVendorId,
     p_reason: reason,
     p_requested_amount_minor: requestedAmount,
@@ -61,5 +62,9 @@ export async function openRefundCase(
 
   revalidatePath(`/account/orders/${orderId}`);
   revalidatePath("/admin/refunds");
+
+  // P1-01: customer confirmation email. Never rolls the case back.
+  if (caseId) await notifyRefundCaseOpened(caseId);
+
   return { success: "Refund request sent to the Gifto team.", attempt };
 }

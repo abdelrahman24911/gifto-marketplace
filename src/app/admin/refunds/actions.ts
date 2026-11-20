@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { requirePlatformAdmin } from "@/lib/auth";
 import { parseEgpToMinor } from "@/lib/money";
+import { notifyRefundCaseResolved } from "@/lib/mail";
 
 export type ResolveRefundState =
   | { error: string; attempt: number }
@@ -66,6 +67,10 @@ export async function resolveRefundCase(
   revalidatePath("/admin/settlements");
   revalidatePath("/admin/commissions");
   revalidatePath("/vendor/finance");
+
+  // P1-01: customer refund-resolution email. Never rolls the decision back.
+  await notifyRefundCaseResolved(caseId);
+
   return {
     success:
       decision === "approve"

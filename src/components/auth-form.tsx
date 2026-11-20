@@ -167,6 +167,13 @@ export function AuthForm({ mode, initialError }: { mode: Mode; initialError?: st
             <Link href="/signup" className="font-medium text-zinc-900 underline">
               Create an account
             </Link>
+            {" · "}
+            <Link
+              href="/forgot-password"
+              className="font-medium text-zinc-900 underline"
+            >
+              Forgot your password?
+            </Link>
           </>
         ) : (
           <>

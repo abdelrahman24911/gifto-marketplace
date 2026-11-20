@@ -9,6 +9,7 @@ import {
   sha256Hex,
 } from "@/lib/guest-order";
 import { parseEgpToMinor } from "@/lib/money";
+import { notifyRefundCaseOpened } from "@/lib/mail";
 import { refundReasonError } from "@/lib/refunds";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -55,7 +56,7 @@ export async function openGuestRefundCase(
   }
 
   const service = createServiceClient();
-  const { error } = await service.rpc("open_guest_refund_case", {
+  const { data: caseId, error } = await service.rpc("open_guest_refund_case", {
     p_order_id: orderId,
     p_token_hash: sha256Hex(token),
     p_order_vendor_id: orderVendorId,
@@ -75,5 +76,9 @@ export async function openGuestRefundCase(
 
   revalidatePath(`/orders/${orderId}`);
   revalidatePath("/admin/refunds");
+
+  // P1-01: customer confirmation email. Never rolls the case back.
+  if (caseId) await notifyRefundCaseOpened(caseId);
+
   return { success: "Refund request sent to the Gifto team.", attempt };
 }

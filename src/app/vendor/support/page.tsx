@@ -134,8 +134,9 @@ export default async function VendorSupportPage({
             </p>
             <SupportRequestForm vendorId={access.vendorId} />
             <p className="mt-3 text-xs text-ink-mute">
-              No email or push notifications are sent for support requests.
-              Check back here for the status.
+              When email is configured, the shop&apos;s contact email receives
+              an update when the status changes. Until then, no email is sent
+              — check back here for the status.
             </p>
           </section>
 

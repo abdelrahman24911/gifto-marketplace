@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { requirePlatformAdmin } from "@/lib/auth";
 import { isOrderStatusReasonCode } from "@/lib/order-status-reasons";
+import { notifyOrderStatusChanged } from "@/lib/mail";
 import {
   ADMIN_NEXT_STATUSES,
   ORDER_STATUS_LABELS,
@@ -102,6 +103,9 @@ export async function setAdminSuborderStatus(
   revalidatePath("/admin/commissions");
   revalidatePath("/account/orders");
   revalidatePath(`/account/orders/${updated.order_id}`);
+
+  // P1-01: customer status email. A failed send never rolls the change back.
+  await notifyOrderStatusChanged(suborderId, expected, next);
 
   return {
     success:

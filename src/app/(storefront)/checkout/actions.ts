@@ -16,6 +16,7 @@ import {
 } from "@/lib/guest-order";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { notifyOrderPlaced } from "@/lib/mail";
 import {
   coverageFromJson,
   deliveryCoverageAllows,
@@ -270,6 +271,10 @@ export async function placeOrder(
     revalidatePath("/admin/orders");
     revalidatePath("/shops");
 
+    // P1-01: vendor + customer order emails. A failed send never rolls the
+    // order back — notifyOrderPlaced catches and logs its own failures.
+    await notifyOrderPlaced(data);
+
     return { orderId: data, isGuest: false, attempt };
   }
 
@@ -316,6 +321,9 @@ export async function placeOrder(
     revalidatePath("/vendor/orders");
     revalidatePath("/admin/orders");
     revalidatePath("/shops");
+
+    // P1-01: vendor + customer order emails (never rolls the order back).
+    await notifyOrderPlaced(data);
 
     return { orderId: data, isGuest: true, attempt };
   } catch {

@@ -8,6 +8,7 @@ import {
   isOrderStatus,
 } from "@/lib/orders";
 import { isOrderStatusReasonCode } from "@/lib/order-status-reasons";
+import { notifyOrderStatusChanged } from "@/lib/mail";
 import { requireVendorRole } from "@/lib/vendor";
 
 export type SuborderState =
@@ -115,6 +116,9 @@ export async function setSuborderStatus(
   revalidatePath("/vendor/orders");
   revalidatePath("/account/orders");
   revalidatePath(`/account/orders/${updated.order_id}`);
+
+  // P1-01: customer status email. A failed send never rolls the change back.
+  await notifyOrderStatusChanged(suborderId, expected, next);
 
   return {
     success:

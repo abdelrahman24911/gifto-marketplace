@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requirePlatformAdmin } from "@/lib/auth";
+import { notifySupportRequestStatusChanged } from "@/lib/mail";
 import { isSupportStatus } from "@/lib/support-requests";
 
 import type { SupportRequestStatus } from "@/lib/supabase/database.types";
@@ -57,6 +58,10 @@ export async function updateSupportRequestStatus(
 
   revalidatePath("/admin/support");
   revalidatePath("/vendor/support");
+
+  // P1-01: vendor status email. A failed send never rolls the update back.
+  await notifySupportRequestStatusChanged(id, status);
+
   return {
     success: "Support status updated.",
     status,

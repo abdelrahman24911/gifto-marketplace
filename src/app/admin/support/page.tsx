@@ -182,7 +182,7 @@ export default async function AdminSupportPage({
         <AdminPageHeader
           eyebrow="Partner care"
           title="Support queue"
-          description="Manual triage for requests submitted from vendor dashboards. Status changes are recorded here; no reply or notification is sent automatically."
+          description="Manual triage for requests submitted from vendor dashboards. Status changes are recorded here and, when email is configured, emailed to the shop's contact address."
         />
       </div>
 
