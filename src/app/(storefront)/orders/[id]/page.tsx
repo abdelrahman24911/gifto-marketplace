@@ -9,7 +9,31 @@ import {
 } from "@/lib/guest-order";
 import { formatEgp } from "@/lib/money";
 import { ORDER_STATUS_HELP, ORDER_STATUS_LABELS, isOrderStatus } from "@/lib/orders";
+import {
+  REFUND_CASE_STATUS_LABELS,
+  REFUND_CASE_STATUS_STYLES,
+  canRequestRefund,
+} from "@/lib/refunds";
 import { createServiceClient } from "@/lib/supabase/service";
+
+import { GuestRefundRequestForm } from "./refund-request-form";
+
+import type {
+  OrderStatus,
+  RefundCaseStatus,
+} from "@/lib/supabase/database.types";
+
+type GuestRefundCase = {
+  id: string;
+  order_vendor_id: string;
+  status: RefundCaseStatus;
+  reason: string;
+  requested_amount_minor: number | null;
+  refund_amount_minor: number | null;
+  resolution_note: string | null;
+  created_at: string;
+  resolved_at: string | null;
+};
 
 export const metadata = {
   title: "Order confirmed — Gifto",
@@ -99,6 +123,17 @@ export default async function GuestOrderPage({
   const reference = order.reference ?? `#${order.id.slice(0, 8)}`;
   const status = isOrderStatus(order.status) ? order.status : "placed";
 
+  const { data: refundData, error: refundError } = await service.rpc(
+    "get_guest_refund_cases",
+    {
+      p_order_id: id,
+      p_token_hash: sha256Hex(token),
+    },
+  );
+  const refundCases = refundError
+    ? []
+    : ((refundData ?? []) as GuestRefundCase[]);
+
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-10">
       <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">
@@ -143,8 +178,25 @@ export default async function GuestOrderPage({
         </dl>
       </section>
 
+      {refundError ? (
+        <p
+          role="alert"
+          className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          Refund requests could not be loaded. Refresh the page to try again.
+        </p>
+      ) : null}
+
       <section className="mt-6 flex flex-col gap-4">
-        {order.vendors.map((vendor) => (
+        {order.vendors.map((vendor) => {
+          const vendorCases = refundCases.filter(
+            (refundCase) => refundCase.order_vendor_id === vendor.id,
+          );
+          const hasOpenCase = vendorCases.some(
+            (refundCase) => refundCase.status === "open",
+          );
+
+          return (
           <div
             key={vendor.id}
             className="rounded-2xl border border-zinc-200 bg-white p-5"
@@ -190,8 +242,56 @@ export default async function GuestOrderPage({
                 {formatEgp(vendor.subtotal_minor)}
               </span>
             </p>
+
+            {vendorCases.length > 0 ? (
+              <div className="mt-4 flex flex-col gap-2 border-t border-zinc-100 pt-4">
+                {vendorCases.map((refundCase) => (
+                  <div
+                    key={refundCase.id}
+                    className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-3 text-sm"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span
+                        className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${REFUND_CASE_STATUS_STYLES[refundCase.status]}`}
+                      >
+                        Refund {REFUND_CASE_STATUS_LABELS[refundCase.status]}
+                      </span>
+                      <span className="text-xs text-zinc-500">
+                        {new Date(refundCase.created_at).toLocaleDateString(
+                          "en-GB",
+                          { dateStyle: "medium" },
+                        )}
+                      </span>
+                    </div>
+                    <p className="mt-2 whitespace-pre-line text-zinc-700">
+                      {refundCase.reason}
+                    </p>
+                    {refundCase.refund_amount_minor !== null ? (
+                      <p className="mt-1 text-xs font-medium text-zinc-700">
+                        Approved amount:{" "}
+                        {formatEgp(refundCase.refund_amount_minor)}
+                      </p>
+                    ) : null}
+                    {refundCase.resolution_note ? (
+                      <p className="mt-1 text-xs text-zinc-600">
+                        Gifto note: {refundCase.resolution_note}
+                      </p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {canRequestRefund(vendor.status as OrderStatus) && !hasOpenCase ? (
+              <GuestRefundRequestForm
+                orderId={order.id}
+                orderVendorId={vendor.id}
+                subtotalMinor={vendor.subtotal_minor}
+              />
+            ) : null}
           </div>
-        ))}
+          );
+        })}
       </section>
 
       <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-5">

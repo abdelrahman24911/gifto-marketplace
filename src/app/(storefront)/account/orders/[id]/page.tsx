@@ -11,8 +11,31 @@ import {
   ORDER_STATUS_STYLES,
   isOrderStatus,
 } from "@/lib/orders";
+import {
+  REFUND_CASE_STATUS_LABELS,
+  REFUND_CASE_STATUS_STYLES,
+  canRequestRefund,
+} from "@/lib/refunds";
 
 import { CancelOrderButton } from "./cancel-order-button";
+import { RefundRequestForm } from "./refund-request-form";
+
+import type {
+  OrderStatus,
+  RefundCaseStatus,
+} from "@/lib/supabase/database.types";
+
+type RefundCaseRow = {
+  id: string;
+  order_vendor_id: string;
+  status: RefundCaseStatus;
+  reason: string;
+  requested_amount_minor: number | null;
+  refund_amount_minor: number | null;
+  resolution_note: string | null;
+  created_at: string;
+  resolved_at: string | null;
+};
 
 export const metadata = { title: "Order — Gifto" };
 
@@ -57,6 +80,15 @@ export default async function AccountOrderPage({
   const suborders = order.order_vendors ?? [];
   const vendorProfiles = await loadOrderVendorProfiles(suborders);
   const canCancel = order.status === "placed";
+
+  const { data: refundCases, error: refundError } = await supabase
+    .from("refund_cases")
+    .select(
+      "id, order_vendor_id, status, reason, requested_amount_minor, refund_amount_minor, resolution_note, created_at, resolved_at",
+    )
+    .eq("order_id", id)
+    .order("created_at", { ascending: false })
+    .returns<RefundCaseRow[]>();
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-10">
@@ -117,10 +149,25 @@ export default async function AccountOrderPage({
         </dl>
       </section>
 
+      {refundError ? (
+        <p
+          role="alert"
+          className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          Refund requests could not be loaded. Refresh the page to try again.
+        </p>
+      ) : null}
+
       <section className="mt-6 flex flex-col gap-4">
         {suborders.map((suborder) => {
           const items = suborder.order_items ?? [];
           const vendor = vendorProfiles.get(suborder.vendor_id) ?? null;
+          const suborderCases = (refundCases ?? []).filter(
+            (refundCase) => refundCase.order_vendor_id === suborder.id,
+          );
+          const hasOpenCase = suborderCases.some(
+            (refundCase) => refundCase.status === "open",
+          );
 
           return (
             <div
@@ -188,6 +235,54 @@ export default async function AccountOrderPage({
                   {formatEgp(suborder.subtotal_minor)}
                 </span>
               </p>
+
+              {suborderCases.length > 0 ? (
+                <div className="mt-4 flex flex-col gap-2 border-t border-zinc-100 pt-4">
+                  {suborderCases.map((refundCase) => (
+                    <div
+                      key={refundCase.id}
+                      className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-3 text-sm"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span
+                          className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${REFUND_CASE_STATUS_STYLES[refundCase.status]}`}
+                        >
+                          Refund {REFUND_CASE_STATUS_LABELS[refundCase.status]}
+                        </span>
+                        <span className="text-xs text-zinc-500">
+                          {new Date(refundCase.created_at).toLocaleDateString(
+                            "en-GB",
+                            { dateStyle: "medium" },
+                          )}
+                        </span>
+                      </div>
+                      <p className="mt-2 whitespace-pre-line text-zinc-700">
+                        {refundCase.reason}
+                      </p>
+                      {refundCase.refund_amount_minor !== null ? (
+                        <p className="mt-1 text-xs font-medium text-zinc-700">
+                          Approved amount:{" "}
+                          {formatEgp(refundCase.refund_amount_minor)}
+                        </p>
+                      ) : null}
+                      {refundCase.resolution_note ? (
+                        <p className="mt-1 text-xs text-zinc-600">
+                          Gifto note: {refundCase.resolution_note}
+                        </p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              {canRequestRefund(suborder.status as OrderStatus) &&
+              !hasOpenCase ? (
+                <RefundRequestForm
+                  orderId={order.id}
+                  orderVendorId={suborder.id}
+                  subtotalMinor={suborder.subtotal_minor}
+                />
+              ) : null}
             </div>
           );
         })}

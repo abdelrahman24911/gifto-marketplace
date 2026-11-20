@@ -10,6 +10,11 @@ export const adminNavGroups: DashboardNavGroup[] = [
         icon: "overview",
         exact: true,
       },
+      {
+        label: "Analytics",
+        href: "/admin/analytics",
+        icon: "analytics",
+      },
     ],
   },
   {
@@ -20,6 +25,7 @@ export const adminNavGroups: DashboardNavGroup[] = [
     label: "Commerce",
     items: [
       { label: "Orders", href: "/admin/orders", icon: "orders" },
+      { label: "Refunds", href: "/admin/refunds", icon: "orders" },
       {
         label: "Commissions",
         href: "/admin/commissions",
