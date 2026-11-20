@@ -1550,6 +1550,10 @@ export type Database = {
         Args: { p_order_id: string };
         Returns: undefined;
       };
+      cancel_guest_order: {
+        Args: { p_order_id: string; p_token_hash: string };
+        Returns: undefined;
+      };
       set_order_vendor_status: {
         Args: {
           p_order_vendor_id: string;

@@ -17,6 +17,7 @@ import {
 import { createServiceClient } from "@/lib/supabase/service";
 
 import { GuestRefundRequestForm } from "./refund-request-form";
+import { GuestCancelOrderButton } from "./cancel-order-form";
 
 import type {
   OrderStatus,
@@ -136,19 +137,34 @@ export default async function GuestOrderPage({
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-10">
-      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">
-        <h1 className="text-2xl font-semibold tracking-tight text-emerald-900">
-          Order confirmed
-        </h1>
-        <p className="mt-1 text-sm text-emerald-800">
-          Reference {reference} · cash on delivery
-        </p>
-      </div>
+      {status === "cancelled" ? (
+        <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-5 py-4">
+          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
+            Order cancelled
+          </h1>
+          <p className="mt-1 text-sm text-zinc-600">
+            Reference {reference} · stock was returned to the shops.
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">
+          <h1 className="text-2xl font-semibold tracking-tight text-emerald-900">
+            Order confirmed
+          </h1>
+          <p className="mt-1 text-sm text-emerald-800">
+            Reference {reference} · cash on delivery
+          </p>
+        </div>
+      )}
 
       <p className="mt-4 text-sm text-zinc-600">
         {ORDER_STATUS_HELP[status]} A copy of this confirmation stays available
         in this browser; keep the reference above for your records.
       </p>
+
+      {status === "placed" ? (
+        <GuestCancelOrderButton orderId={order.id} />
+      ) : null}
 
       <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">

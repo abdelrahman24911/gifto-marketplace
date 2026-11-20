@@ -599,6 +599,288 @@ begin
   raise notice 'TEST 14 PASSED: anon cannot reach the authenticated checkout RPC';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST 15: cancel_guest_order is executable only by service_role (P0-05)
+-- ---------------------------------------------------------------------------
+reset role;
+do $$
+begin
+  if has_function_privilege('anon', 'public.cancel_guest_order(uuid,text)', 'execute')
+     or has_function_privilege('authenticated', 'public.cancel_guest_order(uuid,text)', 'execute') then
+    raise exception 'TEST 15 FAILED: a weaker role can execute cancel_guest_order';
+  end if;
+  if not has_function_privilege('service_role', 'public.cancel_guest_order(uuid,text)', 'execute') then
+    raise exception 'TEST 15 FAILED: service_role cannot execute cancel_guest_order';
+  end if;
+  raise notice 'TEST 15 PASSED: cancel_guest_order is service_role-only';
+end $$;
+-- ---------------------------------------------------------------------------
+-- TEST 16: correct token cancels a placed guest order and restocks once (P0-05)
+-- ---------------------------------------------------------------------------
+-- Table reads run as the superuser (service_role holds no SELECT on
+-- products); only the RPC calls run as service_role.
+reset role;
+do $$
+declare v_stock_before int;
+begin
+  select stock into v_stock_before from public.products
+   where id = '51100000-0000-0000-0000-000000000101';
+  perform set_config('gifto_test.cancel_stock_before', v_stock_before::text, false);
+end $$;
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_hash text := encode(digest('guest-token-cancel', 'sha256'), 'hex');
+  v_oid uuid;
+begin
+  v_oid := public.place_guest_order(
+    '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
+    'Cancel Guest', '01001112233', null,
+    '12 Main Street', 'Alexandria', 'Alexandria', null,
+    gen_random_uuid(), v_hash);
+  perform set_config('gifto_test.cancel_order_id', v_oid::text, false);
+  perform set_config('gifto_test.cancel_hash', v_hash, false);
+  raise notice 'TEST 16a PASSED: fresh placed guest order created for cancellation';
+end $$;
+
+reset role;
+do $$
+declare
+  v_stock_before int := current_setting('gifto_test.cancel_stock_before')::int;
+begin
+  if (select stock from public.products where id = '51100000-0000-0000-0000-000000000101') <> v_stock_before - 1 then
+    raise exception 'TEST 16 FAILED: stock was not decremented on placement';
+  end if;
+end $$;
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+begin
+  perform public.cancel_guest_order(
+    current_setting('gifto_test.cancel_order_id')::uuid,
+    current_setting('gifto_test.cancel_hash'));
+end $$;
+
+reset role;
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.cancel_order_id')::uuid;
+  v_stock_before int := current_setting('gifto_test.cancel_stock_before')::int;
+begin
+  if (select status from public.orders where id = v_oid) <> 'cancelled' then
+    raise exception 'TEST 16 FAILED: parent order was not cancelled';
+  end if;
+  if (select count(*) from public.order_vendors where order_id = v_oid and status <> 'cancelled') <> 0 then
+    raise exception 'TEST 16 FAILED: a suborder was not cancelled';
+  end if;
+  if (select stock from public.products where id = '51100000-0000-0000-0000-000000000101') <> v_stock_before then
+    raise exception 'TEST 16 FAILED: stock was not restocked exactly once';
+  end if;
+  if (select count(*) from public.inventory_movements
+       where order_id = v_oid and reason = 'order_cancelled') <> 1 then
+    raise exception 'TEST 16 FAILED: restock movement not recorded exactly once';
+  end if;
+  if (select count(*) from public.order_status_events e
+       join public.order_vendors ov on ov.id = e.order_vendor_id
+      where ov.order_id = v_oid and e.to_status = 'cancelled'
+        and e.actor_role = 'system') <> 1 then
+    raise exception 'TEST 16 FAILED: cancellation audit event missing or wrong actor';
+  end if;
+  raise notice 'TEST 16 PASSED: correct token cancels, restocks once, audit event recorded (system)';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 17: a wrong token is rejected and changes nothing (P0-05)
+-- ---------------------------------------------------------------------------
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_hash text := encode(digest('guest-token-cancel-two', 'sha256'), 'hex');
+  v_oid uuid;
+begin
+  v_oid := public.place_guest_order(
+    '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
+    'Cancel Guest Two', '01001112233', null,
+    '12 Main Street', 'Alexandria', 'Alexandria', null,
+    gen_random_uuid(), v_hash);
+  perform set_config('gifto_test.cancel2_order_id', v_oid::text, false);
+end $$;
+
+do $$
+declare v_oid uuid := current_setting('gifto_test.cancel2_order_id')::uuid;
+begin
+  begin
+    perform public.cancel_guest_order(v_oid, repeat('f', 64));
+    raise exception 'TEST 17 FAILED: a wrong token cancelled the order';
+  exception when insufficient_privilege then
+    null;
+  end;
+end $$;
+
+reset role;
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.cancel2_order_id')::uuid;
+  v_stock_before int := current_setting('gifto_test.cancel_stock_before')::int;
+begin
+  if (select status from public.orders where id = v_oid) <> 'placed' then
+    raise exception 'TEST 17 FAILED: order status changed after a wrong-token attempt';
+  end if;
+  if (select stock from public.products where id = '51100000-0000-0000-0000-000000000101') <> v_stock_before - 1 then
+    raise exception 'TEST 17 FAILED: stock changed after a wrong-token attempt';
+  end if;
+  raise notice 'TEST 17 PASSED: wrong token rejected with a generic error, nothing changed';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 18: a signed-in user's order cannot be cancelled through this RPC (P0-05)
+-- ---------------------------------------------------------------------------
+set role authenticated;
+set request.jwt.claim.sub = '31100000-0000-0000-0000-000000000101';
+set request.jwt.claims = '{"sub":"31100000-0000-0000-0000-000000000101"}';
+do $$
+declare v_oid uuid;
+begin
+  v_oid := public.place_order(
+    '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
+    'Owner Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria', null);
+  perform set_config('gifto_test.signed_order_id', v_oid::text, false);
+end $$;
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare v_oid uuid := current_setting('gifto_test.signed_order_id')::uuid;
+begin
+  begin
+    perform public.cancel_guest_order(v_oid, repeat('a', 64));
+    raise exception 'TEST 18 FAILED: a signed-in order was cancelled via the guest RPC';
+  exception when insufficient_privilege then
+    null;
+  end;
+end $$;
+
+reset role;
+do $$
+declare v_oid uuid := current_setting('gifto_test.signed_order_id')::uuid;
+begin
+  if (select status from public.orders where id = v_oid) <> 'placed' then
+    raise exception 'TEST 18 FAILED: signed-in order status changed';
+  end if;
+  raise notice 'TEST 18 PASSED: signed-in orders cannot be cancelled through cancel_guest_order';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 19: a non-placed guest order is rejected; a second call on a
+-- cancelled order is a no-op that never restocks twice (P0-05)
+-- ---------------------------------------------------------------------------
+-- Earlier tests consumed the seed stock of product 101 (5 units); top it up
+-- so this test can place its own order. The suite rolls everything back.
+reset role;
+update public.products set stock = stock + 2
+ where id = '51100000-0000-0000-0000-000000000101';
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_hash text := encode(digest('guest-token-cancel-three', 'sha256'), 'hex');
+  v_oid uuid;
+begin
+  v_oid := public.place_guest_order(
+    '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
+    'Cancel Guest Three', '01001112233', null,
+    '12 Main Street', 'Alexandria', 'Alexandria', null,
+    gen_random_uuid(), v_hash);
+  perform set_config('gifto_test.cancel3_order_id', v_oid::text, false);
+  perform set_config('gifto_test.cancel3_hash', v_hash, false);
+end $$;
+
+set role authenticated;
+set request.jwt.claim.sub = '31100000-0000-0000-0000-000000000101';
+set request.jwt.claims = '{"sub":"31100000-0000-0000-0000-000000000101"}';
+do $$
+declare v_ov uuid;
+begin
+  select id into v_ov from public.order_vendors
+   where order_id = current_setting('gifto_test.cancel3_order_id')::uuid;
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+end $$;
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.cancel3_order_id')::uuid;
+  v_hash text := current_setting('gifto_test.cancel3_hash');
+begin
+  begin
+    perform public.cancel_guest_order(v_oid, v_hash);
+    raise exception 'TEST 19 FAILED: a confirmed order was cancelled';
+  exception when check_violation then
+    null;
+  end;
+end $$;
+
+reset role;
+do $$
+declare v_oid uuid := current_setting('gifto_test.cancel3_order_id')::uuid;
+begin
+  if (select status from public.orders where id = v_oid) <> 'confirmed' then
+    raise exception 'TEST 19 FAILED: confirmed order status changed';
+  end if;
+  raise notice 'TEST 19a PASSED: non-placed guest order rejected';
+end $$;
+
+-- Second call on the TEST 16 cancelled order: must succeed and change nothing.
+reset role;
+do $$
+declare v_stock_now int;
+begin
+  select stock into v_stock_now from public.products
+   where id = '51100000-0000-0000-0000-000000000101';
+  perform set_config('gifto_test.cancel_stock_now', v_stock_now::text, false);
+end $$;
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+begin
+  perform public.cancel_guest_order(
+    current_setting('gifto_test.cancel_order_id')::uuid,
+    current_setting('gifto_test.cancel_hash'));
+end $$;
+
+reset role;
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.cancel_order_id')::uuid;
+  v_stock_now int := current_setting('gifto_test.cancel_stock_now')::int;
+begin
+  if (select status from public.orders where id = v_oid) <> 'cancelled' then
+    raise exception 'TEST 19 FAILED: second call changed the cancelled order';
+  end if;
+  if (select stock from public.products where id = '51100000-0000-0000-0000-000000000101') <> v_stock_now then
+    raise exception 'TEST 19 FAILED: second call restocked again (double restock)';
+  end if;
+  if (select count(*) from public.inventory_movements
+       where order_id = v_oid and reason = 'order_cancelled') <> 1 then
+    raise exception 'TEST 19 FAILED: second call recorded another restock movement';
+  end if;
+  raise notice 'TEST 19 PASSED: second call on a cancelled order is a no-op, no double restock';
+end $$;
+
 reset role;
 
 rollback;
