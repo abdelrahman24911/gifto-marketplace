@@ -265,6 +265,31 @@ export function CheckoutForm({
         >
           {pending ? "Placing order…" : "Place order (cash on delivery)"}
         </button>
+
+        <p className="text-xs leading-relaxed text-zinc-500">
+          By placing this order you agree to the{" "}
+          <Link
+            href="/terms"
+            className="font-medium text-zinc-700 underline underline-offset-2 hover:text-zinc-900"
+          >
+            Terms
+          </Link>
+          {", the "}
+          <Link
+            href="/privacy"
+            className="font-medium text-zinc-700 underline underline-offset-2 hover:text-zinc-900"
+          >
+            Privacy Policy
+          </Link>
+          {" and the "}
+          <Link
+            href="/refund-policy"
+            className="font-medium text-zinc-700 underline underline-offset-2 hover:text-zinc-900"
+          >
+            Refund Policy
+          </Link>
+          .
+        </p>
       </form>
 
       <aside className="rounded-2xl border border-zinc-200 bg-white p-5">

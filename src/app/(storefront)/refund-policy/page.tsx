@@ -18,9 +18,9 @@ export default function RefundPolicyPage() {
       eyebrow="Legal"
       intro="The working approach to cancellations and refunds when a Gifto order does not go to plan."
       reviewItems={[
-        "Owner-approved eligibility rules for cancellations, refunds, and replacements.",
+        "Approved rules for replacements and for perishable or personalised gifts.",
         "Refund timing and the approved method for cash-on-delivery orders.",
-        "Who bears return-delivery costs and how damaged items are assessed.",
+        "How damaged items are assessed and what evidence is needed.",
         "The formal escalation route if a shop and customer cannot agree.",
       ]}
     >
@@ -33,12 +33,30 @@ export default function RefundPolicyPage() {
         </p>
       </PolicySection>
 
+      <PolicySection title="Returns within 7 days of delivery">
+        <p>
+          You can ask for a return within 7 days of delivery. An order from
+          several shops is handled shop by shop: a return covers one
+          shop&apos;s part of the order at a time.
+        </p>
+        <p>
+          Gifto&apos;s team approves the request, and the shop inspects the
+          returned gift. You pay the return courier, unless the gift is wrong
+          or damaged — then the shop pays. A returned gift is checked before
+          it goes back on sale; restocking is never automatic.
+        </p>
+      </PolicySection>
+
       <PolicySection title="Before the gift is delivered">
         <p>
           Contact the shop as soon as possible if you need to change or cancel an
           order. Whether a cancellation is possible depends on whether the gift
           has been prepared, personalised, or dispatched. Nothing in this draft
           guarantees cancellation after preparation has started.
+        </p>
+        <p>
+          While an order is still placed — no shop has started it — it can also
+          be cancelled from its order page.
         </p>
       </PolicySection>
 

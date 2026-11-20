@@ -64,6 +64,55 @@
 - **What CI still needs:** a push of this branch so GitHub Actions actually
   runs (no push was made in this session).
 
+## P0-06 notes (2026-11-20) — legal pages approval state (H-16, still Partial)
+
+All six routes verified present and footer-linked: `terms`, `privacy`,
+`refund-policy`, `delivery-returns`, `help`, `contact` under
+`src/app/(storefront)/`, sharing `src/components/policy-page.tsx`.
+
+- **Checkout link (done):** `src/app/(storefront)/checkout/checkout-form.tsx`
+  now shows Terms / Privacy Policy / Refund Policy links plus the line
+  "By placing this order you agree to the Terms, the Privacy Policy and
+  the Refund Policy" directly under the place-order button. No blocking
+  checkbox (owner did not ask for one), no checkout redesign.
+- **D-09 returns terms (done, from the owner decision recorded in P0-00):**
+  `/refund-policy` and `/delivery-returns` now state the decided terms in
+  customer language — 7 days from delivery, suborder-level, Gifto approves
+  and the shop inspects, return courier paid by the customer unless the
+  gift is wrong/damaged (then the shop pays), inspect-then-restock manually,
+  never automatic. Their `reviewItems` gap lists were trimmed to what D-09
+  does not answer. The refund-policy page also notes that a still-placed
+  order can be cancelled from its order page (true for signed-in and guest
+  orders since P0-05).
+- **Approval: NONE supplied in this session.** No owner/lawyer approval of
+  the final wording of any of the six pages, and no legal entity or contact
+  details, were supplied. The draft banner ("Publishing status") therefore
+  remains on **all six pages** — nothing was removed, and no page is final.
+- **Still missing, per page (the in-page gap lists are the spec):**
+  - Terms: legal entity + registered address + formal notice details;
+    final liability / dispute-resolution / governing-law / jurisdiction
+    wording; approved cancellation, suspension, account-closure rules;
+    process for reporting unlawful/infringing content.
+  - Privacy: entity name, registered address, data-controller contact;
+    retention periods; access/correction/deletion process and response
+    time; international-transfer and processor disclosures.
+  - Refund policy: refund timing and method for COD orders; how damaged
+    items are assessed and what evidence is needed; approved rules for
+    replacements and for perishable/personalised gifts; formal escalation
+    route if shop and customer cannot agree.
+  - Delivery & returns: refund timing/method for COD; public support
+    channel and response-time expectations.
+  - Help: public support email, phone/WhatsApp, support hours; final
+    seller-onboarding and invitation process.
+  - Contact: public support email; phone/WhatsApp number and hours;
+    registered business name and address.
+- **Decided but NOT promised on the customer pages:** D-09 also says a
+  customer can cancel their own open refund case — that is not built yet
+  (N-03: `cancel_refund_case` RPC + UI), so the pages do not claim it.
+- **H-16 remains Partial.** It closes only when the owner/lawyer approves
+  the final wording per page, the missing details above are supplied, and
+  the banner is removed from the approved pages.
+
 ## What would unblock verification
 
 - A Supabase CLI login (`supabase login`) plus the project database password,

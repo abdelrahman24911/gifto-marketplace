@@ -18,7 +18,7 @@ export default function DeliveryReturnsPage() {
       eyebrow="Support"
       intro="How gifts reach you, and what to do if something is wrong with the order."
       reviewItems={[
-        "The owner-approved delivery and returns process, including who pays return delivery.",
+        "Refund timing and the approved method for cash-on-delivery orders.",
         "The public support channel and response-time expectations.",
       ]}
     >
@@ -47,6 +47,32 @@ export default function DeliveryReturnsPage() {
         </p>
       </PolicySection>
 
+      <PolicySection title="Returns within 7 days of delivery">
+        <p>
+          You can ask for a return within 7 days of delivery. An order from
+          several shops is handled shop by shop: a return covers one
+          shop&apos;s part of the order at a time.
+        </p>
+        <p>
+          Gifto&apos;s team approves the request, and the shop inspects the
+          returned gift. You pay the return courier, unless the gift is wrong
+          or damaged — then the shop pays. A returned gift is checked before
+          it goes back on sale; restocking is never automatic.
+        </p>
+        <p>
+          Cash refunds cannot be reversed automatically; the refund method and
+          timing for cash-on-delivery orders are still being finalised. Read
+          the{" "}
+          <GuardedLink
+            href="/refund-policy"
+            className="font-medium text-berry underline underline-offset-2 hover:text-berry-deep"
+          >
+            refund policy
+          </GuardedLink>{" "}
+          for what can be confirmed today.
+        </p>
+      </PolicySection>
+
       <PolicySection title="If something is wrong">
         <p>
           If a gift arrives damaged, is not what you ordered, or does not arrive,
@@ -56,15 +82,10 @@ export default function DeliveryReturnsPage() {
         </p>
         <p>
           Return eligibility depends on the product and the shop&apos;s
-          preparation process. A final returns policy is awaiting owner approval;
-          read the{" "}
-          <GuardedLink
-            href="/refund-policy"
-            className="font-medium text-berry underline underline-offset-2 hover:text-berry-deep"
-          >
-            refund policy
-          </GuardedLink>{" "}
-          for what can be confirmed today.
+          preparation process. Perishable gifts, flowers, food, cakes, and
+          personalised products may not be returnable once prepared, except
+          where the item is faulty, damaged, or different from what was
+          ordered.
         </p>
       </PolicySection>
 
