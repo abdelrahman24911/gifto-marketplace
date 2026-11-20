@@ -99,6 +99,17 @@ vi.mock("next/navigation", () => ({
 
 import { markSettlementPaid } from "./actions";
 
+// The mock settlement's derived net commission is 800 minor (EGP 8.00),
+// so a valid payout proof pays exactly that amount with a reference.
+function paidFormData(): FormData {
+  const formData = new FormData();
+  formData.set("settlement_id", "settlement-1");
+  formData.set("paid_amount", "8.00");
+  formData.set("transfer_method", "bank_transfer");
+  formData.set("transfer_reference", "BANK-REF-1");
+  return formData;
+}
+
 beforeEach(() => {
   state.mode = "missing";
   state.authRejected = false;
@@ -170,15 +181,45 @@ describe("markSettlementPaid verification guard", () => {
 
   it("preserves the existing RPC lifecycle for complete totals", async () => {
     state.mode = "complete";
-    const formData = new FormData();
-    formData.set("settlement_id", "settlement-1");
 
-    await expect(markSettlementPaid(null, formData)).resolves.toMatchObject({
-      success: "Settlement marked paid. The external payout should already be complete.",
+    await expect(markSettlementPaid(null, paidFormData())).resolves.toMatchObject({
+      success:
+        "Commission receipt recorded. Gifto's receipt of the commission is now on file with the transfer reference.",
     });
     expect(state.rpc).toHaveBeenCalledWith("mark_settlement_paid", {
       p_settlement_id: "settlement-1",
+      p_paid_amount_minor: 800,
+      p_transfer_method: "bank_transfer",
+      p_transfer_reference: "BANK-REF-1",
+      p_proof_note: null,
     });
+  });
+
+  it("rejects a wrong amount, a missing reference and a bad method before the RPC", async () => {
+    state.mode = "complete";
+
+    const wrongAmount = paidFormData();
+    wrongAmount.set("paid_amount", "9.00");
+    await expect(
+      markSettlementPaid(null, wrongAmount),
+    ).resolves.toMatchObject({
+      error:
+        "The amount received (EGP 9.00) does not match the commission due (EGP 8.00).",
+    });
+
+    const noReference = paidFormData();
+    noReference.set("transfer_reference", "");
+    await expect(markSettlementPaid(null, noReference)).resolves.toMatchObject({
+      error: "Enter the transfer reference (3–200 characters).",
+    });
+
+    const badMethod = paidFormData();
+    badMethod.set("transfer_method", "wire");
+    await expect(markSettlementPaid(null, badMethod)).resolves.toMatchObject({
+      error: "Choose how the commission was transferred.",
+    });
+
+    expect(state.rpc).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -191,10 +232,8 @@ describe("markSettlementPaid verification guard", () => {
       state.rpc.mockResolvedValue({
         error: { code: "23514", message },
       });
-      const formData = new FormData();
-      formData.set("settlement_id", "settlement-1");
 
-      const result = await markSettlementPaid(null, formData);
+      const result = await markSettlementPaid(null, paidFormData());
 
       expect(result).toEqual({ error: message, attempt: 1 });
       expect(result && "success" in result).toBe(false);
@@ -211,10 +250,8 @@ describe("markSettlementPaid verification guard", () => {
           message: "This settlement was voided and cannot be marked paid.",
         },
       });
-    const firstFormData = new FormData();
-    firstFormData.set("settlement_id", "settlement-1");
-    const secondFormData = new FormData();
-    secondFormData.set("settlement_id", "settlement-1");
+    const firstFormData = paidFormData();
+    const secondFormData = paidFormData();
 
     // This only verifies application behavior when the RPC reports the
     // lifecycle outcome; row-lock concurrency is a database concern.

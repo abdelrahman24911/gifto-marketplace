@@ -7,8 +7,10 @@ import { requirePlatformAdmin } from "@/lib/auth";
 import { fetchAllRows } from "@/lib/fetch-all";
 import {
   commissionEntriesById,
+  isTransferMethod,
   settlementTotalsResult,
 } from "@/lib/finance";
+import { formatEgp, parseEgpToMinor } from "@/lib/money";
 
 import type {
   CommissionEntryRecord,
@@ -138,18 +140,66 @@ export async function markSettlementPaid(
     };
   }
 
+  // P1-05 (D-08): marking paid attests that Gifto received the
+  // commission. The amount, the transfer method and the vendor's transfer
+  // reference are part of the attestation; the database rejects a wrong
+  // amount or a missing reference, and this validation surfaces the same
+  // errors before the RPC call.
+  const paidAmountMinor = parseEgpToMinor(
+    String(formData.get("paid_amount") ?? ""),
+  );
+  const transferMethod = String(formData.get("transfer_method") ?? "").trim();
+  const transferReference = String(
+    formData.get("transfer_reference") ?? "",
+  ).trim();
+  const proofNote = String(formData.get("proof_note") ?? "").trim();
+
+  if (paidAmountMinor === null || paidAmountMinor < 0) {
+    return {
+      error: "Enter the amount Gifto received, in pounds, of zero or more.",
+      attempt,
+    };
+  }
+  if (!isTransferMethod(transferMethod)) {
+    return { error: "Choose how the commission was transferred.", attempt };
+  }
+  if (transferReference.length < 3 || transferReference.length > 200) {
+    return {
+      error: "Enter the transfer reference (3–200 characters).",
+      attempt,
+    };
+  }
+  if (proofNote.length > 500) {
+    return {
+      error: "A proof note must be 500 characters or fewer.",
+      attempt,
+    };
+  }
+
+  // The derived D-08 amount is the net commission (sum of the lines).
+  // Check it here for a fast, specific error; the RPC re-checks it and
+  // is the authority, so a race cannot slip a wrong amount through.
+  if (paidAmountMinor !== totalsResult.totals.commissionMinor) {
+    return {
+      error: `The amount received (${formatEgp(paidAmountMinor)}) does not match the commission due (${formatEgp(totalsResult.totals.commissionMinor)}).`,
+      attempt,
+    };
+  }
+
   const { error } = await supabase.rpc("mark_settlement_paid", {
     p_settlement_id: settlementId,
+    p_paid_amount_minor: paidAmountMinor,
+    p_transfer_method: transferMethod,
+    p_transfer_reference: transferReference,
+    p_proof_note: proofNote || null,
   });
 
   if (error) {
     return {
       error:
-        error.code === "23514"
+        error.code === "23514" || error.code === "22023"
           ? error.message
-          : error.code === "22023"
-            ? "That settlement no longer exists."
-            : "The settlement could not be marked paid. Refresh the page and try again.",
+          : "The settlement could not be marked paid. Refresh the page and try again.",
       attempt,
     };
   }
@@ -159,7 +209,8 @@ export async function markSettlementPaid(
   revalidatePath("/vendor/finance");
 
   return {
-    success: "Settlement marked paid. The external payout should already be complete.",
+    success:
+      "Commission receipt recorded. Gifto's receipt of the commission is now on file with the transfer reference.",
     attempt,
   };
 }

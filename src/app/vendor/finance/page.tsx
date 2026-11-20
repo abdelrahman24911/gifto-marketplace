@@ -13,10 +13,13 @@ import {
   buildSettlementLineLookup,
   commissionEntriesById,
   getEntryFinanceState,
+  settlementAdjustmentsMinor,
+  settlementEarnedCommissionMinor,
   settlementEffectiveStatus,
   settlementTotalsResult,
   totalsForEntries,
   totalsForFinanceState,
+  TRANSFER_METHOD_LABELS,
 } from "@/lib/finance";
 import { formatEgp } from "@/lib/money";
 import {
@@ -166,7 +169,7 @@ export default async function VendorFinancePage({
         supabase
           .from("settlements")
           .select(
-            "id, vendor_id, status, total_minor, note, created_at, paid_at, created_by, paid_by, voided_at, voided_by, void_reason, settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
+            "id, vendor_id, status, total_minor, note, created_at, paid_at, created_by, paid_by, voided_at, voided_by, void_reason, paid_amount_minor, transfer_method, transfer_reference, proof_note, settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
           )
           .eq("vendor_id", access.vendorId)
           .order("created_at", { ascending: false })
@@ -256,9 +259,11 @@ export default async function VendorFinancePage({
         title="Finance"
         description={
           <>
-            Commission on delivered shop lines for {access.vendorName}. Gifto
-            records its fee here; shop payouts are handled directly outside
-            this dashboard.
+            Commission on delivered shop lines for {access.vendorName}.
+            Under D-08 the shop remits Gifto&apos;s commission every Sunday
+            for the prior week&apos;s delivered orders; each batch below
+            reconciles to the piaster, including the transfer reference
+            Gifto recorded.
           </>
         }
         actions={
@@ -362,7 +367,7 @@ export default async function VendorFinancePage({
         <section className="mt-6">
           <VendorSectionHeading
             title="Settlement history"
-            description="Voided batches stay visible with their original lines and total. Their commission becomes available to settle again."
+            description="Voided batches stay visible with their original lines and total. Their commission becomes available to settle again. Open a batch to reconcile it against the numbers Gifto recorded."
           />
           {settlements.length === 0 ? (
             <div className="mt-4">
@@ -384,6 +389,12 @@ export default async function VendorFinancePage({
                   },
                 );
                 const totals = totalsResult.totals;
+                const earnedCommissionMinor =
+                  settlementEarnedCommissionMinor(settlement, entriesById);
+                const adjustmentsMinor = settlementAdjustmentsMinor(
+                  settlement,
+                  entriesById,
+                );
                 return (
                   <li
                     key={settlement.id}
@@ -441,8 +452,107 @@ export default async function VendorFinancePage({
                     {status === "paid" && settlement.paid_at ? (
                       <p className="mt-2 text-xs text-ink-mute">
                         Recorded paid {formatDate(settlement.paid_at)}
+                        {settlement.paid_amount_minor !== null
+                          ? ` · ${formatEgp(settlement.paid_amount_minor)} received`
+                          : ""}
+                        {settlement.transfer_method
+                          ? ` · ${TRANSFER_METHOD_LABELS[settlement.transfer_method]}`
+                          : ""}
+                        {settlement.transfer_reference
+                          ? ` · reference ${settlement.transfer_reference}`
+                          : ""}
                       </p>
                     ) : null}
+                    <details className="mt-3 rounded-xl border border-line bg-paper px-4 py-3">
+                      <summary className="cursor-pointer text-sm font-medium text-ink">
+                        Reconcile this batch
+                      </summary>
+                      <dl className="mt-3 space-y-1 text-sm">
+                        <div className="flex justify-between gap-3">
+                          <dt className="text-ink-mute">Delivered gross</dt>
+                          <dd className="font-medium tabular-nums text-ink">
+                            {totals.grossMinor === null
+                              ? "Unavailable"
+                              : formatEgp(totals.grossMinor)}
+                          </dd>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <dt className="text-ink-mute">Commission earned</dt>
+                          <dd className="font-medium tabular-nums text-ink">
+                            {earnedCommissionMinor === null
+                              ? "Unavailable"
+                              : formatEgp(earnedCommissionMinor)}
+                          </dd>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <dt className="text-ink-mute">
+                            Refund adjustments
+                          </dt>
+                          <dd className="font-medium tabular-nums text-ink">
+                            {adjustmentsMinor === null
+                              ? "Unavailable"
+                              : formatEgp(adjustmentsMinor)}
+                          </dd>
+                        </div>
+                        <div className="flex justify-between gap-3 border-t border-line pt-1">
+                          <dt className="font-medium text-ink">
+                            Net commission due
+                          </dt>
+                          <dd className="font-semibold tabular-nums text-ink">
+                            {formatEgp(settlement.total_minor)}
+                          </dd>
+                        </div>
+                        {status === "paid" ? (
+                          <>
+                            <div className="flex justify-between gap-3 border-t border-line pt-1">
+                              <dt className="font-medium text-ink">
+                                Amount Gifto received
+                              </dt>
+                              <dd className="font-semibold tabular-nums text-ink">
+                                {settlement.paid_amount_minor === null
+                                  ? "Not recorded"
+                                  : formatEgp(settlement.paid_amount_minor)}
+                              </dd>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                              <dt className="text-ink-mute">
+                                Transfer method
+                              </dt>
+                              <dd className="font-medium text-ink">
+                                {settlement.transfer_method
+                                  ? TRANSFER_METHOD_LABELS[
+                                      settlement.transfer_method
+                                    ]
+                                  : "Not recorded"}
+                              </dd>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                              <dt className="text-ink-mute">
+                                Transfer reference
+                              </dt>
+                              <dd className="font-medium text-ink">
+                                {settlement.transfer_reference ??
+                                  "Not recorded"}
+                              </dd>
+                            </div>
+                            {settlement.proof_note ? (
+                              <div className="flex justify-between gap-3">
+                                <dt className="text-ink-mute">Proof note</dt>
+                                <dd className="font-medium text-ink">
+                                  {settlement.proof_note}
+                                </dd>
+                              </div>
+                            ) : null}
+                          </>
+                        ) : null}
+                      </dl>
+                      <p className="mt-2 text-xs text-ink-mute">
+                        These are the same numbers Gifto recorded for this
+                        batch, to the piaster. If a figure looks wrong,
+                        contact Gifto support before the next Sunday
+                        remittance.
+                      </p>
+                    </details>
                     {status === "voided" ? (
                       <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
                         Voided{" "}

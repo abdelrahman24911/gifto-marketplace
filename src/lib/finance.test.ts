@@ -4,6 +4,9 @@ import {
   buildSettlementLineLookup,
   commissionEntriesById,
   getEntryFinanceState,
+  isTransferMethod,
+  settlementAdjustmentsMinor,
+  settlementEarnedCommissionMinor,
   settlementEffectiveStatus,
   settlementLineGrossMinor,
   settlementTotals,
@@ -83,6 +86,10 @@ const settlements: SettlementRecord[] = [
     voided_at: null,
     voided_by: null,
     void_reason: null,
+    paid_amount_minor: null,
+    transfer_method: null,
+    transfer_reference: null,
+    proof_note: null,
     settlement_lines: [
       { commission_entry_id: "entry-open", amount_minor: 800, released_at: null, released_by: null, release_reason: null },
     ],
@@ -100,6 +107,10 @@ const settlements: SettlementRecord[] = [
     voided_at: null,
     voided_by: null,
     void_reason: null,
+    paid_amount_minor: 1_125,
+    transfer_method: "bank_transfer",
+    transfer_reference: "BANK-REF-1",
+    proof_note: "Weekly remittance",
     settlement_lines: [
       { commission_entry_id: "entry-paid", amount_minor: 1_125, released_at: null, released_by: null, release_reason: null },
     ],
@@ -117,6 +128,10 @@ const settlements: SettlementRecord[] = [
     voided_at: "2026-11-05T13:00:00.000Z",
     voided_by: "admin-3",
     void_reason: "Wrong payout week",
+    paid_amount_minor: null,
+    transfer_method: null,
+    transfer_reference: null,
+    proof_note: null,
     settlement_lines: [
       {
         commission_entry_id: "entry-released",
@@ -374,5 +389,58 @@ describe("finance helpers", () => {
   it("renders unavailable gross for missing detail entries", () => {
     expect(settlementLineGrossMinor(undefined)).toBeNull();
     expect(settlementLineGrossMinor(entries[0])).toBe(entries[0].base_minor);
+  });
+});
+
+describe("P1-05 payout proof helpers", () => {
+  it("splits a settlement's net commission into earned and adjustments", () => {
+    const byId = commissionEntriesById(entries);
+
+    // The paid settlement's line equals its entry: no adjustments.
+    expect(settlementEarnedCommissionMinor(settlements[1], byId)).toBe(1_125);
+    expect(settlementAdjustmentsMinor(settlements[1], byId)).toBe(0);
+
+    // A line reduced by a refund: earned 800, adjustment -400, net 400.
+    const adjusted = {
+      ...settlements[0],
+      settlement_lines: [
+        {
+          commission_entry_id: "entry-open",
+          amount_minor: 400,
+          released_at: null,
+          released_by: null,
+          release_reason: null,
+        },
+      ],
+    };
+    expect(settlementEarnedCommissionMinor(adjusted, byId)).toBe(800);
+    expect(settlementAdjustmentsMinor(adjusted, byId)).toBe(-400);
+  });
+
+  it("returns null instead of an incomplete adjustment", () => {
+    const byId = commissionEntriesById(entries);
+    const missing = {
+      ...settlements[0],
+      settlement_lines: [
+        {
+          commission_entry_id: "entry-missing",
+          amount_minor: 100,
+          released_at: null,
+          released_by: null,
+          release_reason: null,
+        },
+      ],
+    };
+    expect(settlementEarnedCommissionMinor(missing, byId)).toBeNull();
+    expect(settlementAdjustmentsMinor(missing, byId)).toBeNull();
+  });
+
+  it("accepts only the three transfer methods", () => {
+    expect(isTransferMethod("bank_transfer")).toBe(true);
+    expect(isTransferMethod("cash")).toBe(true);
+    expect(isTransferMethod("other")).toBe(true);
+    expect(isTransferMethod("wire")).toBe(false);
+    expect(isTransferMethod(null)).toBe(false);
+    expect(isTransferMethod(undefined)).toBe(false);
   });
 });

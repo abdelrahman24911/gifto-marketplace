@@ -22,6 +22,25 @@ export type SettlementLineRecord = {
   release_reason: string | null;
 };
 
+// P1-05 (D-08): how the vendor transferred Gifto's commission. The
+// settlement itself stores no bank account numbers — only the transfer
+// reference the vendor gives Gifto, which is shown to both parties.
+export const TRANSFER_METHODS = ["bank_transfer", "cash", "other"] as const;
+export type TransferMethod = (typeof TRANSFER_METHODS)[number];
+
+export const TRANSFER_METHOD_LABELS: Record<TransferMethod, string> = {
+  bank_transfer: "Bank transfer",
+  cash: "Cash",
+  other: "Other",
+};
+
+export function isTransferMethod(value: unknown): value is TransferMethod {
+  return (
+    typeof value === "string" &&
+    (TRANSFER_METHODS as readonly string[]).includes(value)
+  );
+}
+
 export type SettlementRecord = {
   id: string;
   vendor_id: string;
@@ -35,6 +54,13 @@ export type SettlementRecord = {
   voided_at: string | null;
   voided_by: string | null;
   void_reason: string | null;
+  // P1-05 payout proof: the exact amount Gifto received, how it was
+  // transferred, the vendor's transfer reference, and an optional note.
+  // Set exactly when the settlement is paid; never edited afterwards.
+  paid_amount_minor: number | null;
+  transfer_method: TransferMethod | null;
+  transfer_reference: string | null;
+  proof_note: string | null;
   settlement_lines: SettlementLineRecord[];
 };
 
@@ -249,6 +275,42 @@ export function settlementTotalsResult(
   }
   if (!totals.complete) return { totals, state: "missing_entries" };
   return { totals, state: "complete" };
+}
+
+/**
+ * P1-05: the refund adjustments baked into the settlement's net lines —
+ * sum(line amount − entry amount) over the matched lines. Null when any
+ * line's entry is missing, so a caller never presents an incomplete
+ * adjustment as exact. Zero when the settlement has no adjustments.
+ */
+export function settlementAdjustmentsMinor(
+  settlement: Pick<SettlementRecord, "settlement_lines">,
+  entriesById: ReadonlyMap<string, CommissionEntryRecord>,
+): number | null {
+  let adjustments = 0;
+  for (const line of settlement.settlement_lines) {
+    const entry = entriesById.get(line.commission_entry_id);
+    if (!entry) return null;
+    adjustments += line.amount_minor - entry.amount_minor;
+  }
+  return adjustments;
+}
+
+/**
+ * P1-05: the commission earned before refund adjustments — sum of the
+ * matched entries' amounts. Null when any line's entry is missing.
+ */
+export function settlementEarnedCommissionMinor(
+  settlement: Pick<SettlementRecord, "settlement_lines">,
+  entriesById: ReadonlyMap<string, CommissionEntryRecord>,
+): number | null {
+  let earned = 0;
+  for (const line of settlement.settlement_lines) {
+    const entry = entriesById.get(line.commission_entry_id);
+    if (!entry) return null;
+    earned += entry.amount_minor;
+  }
+  return earned;
 }
 
 export function commissionEntriesById(

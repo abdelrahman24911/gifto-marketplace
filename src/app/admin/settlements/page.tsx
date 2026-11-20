@@ -102,7 +102,7 @@ export default async function AdminSettlementsPage({
       supabase
         .from("settlements")
         .select(
-          "id, vendor_id, status, total_minor, note, created_at, paid_at, created_by, paid_by, voided_at, voided_by, void_reason, vendor:vendors(name, slug), settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
+          "id, vendor_id, status, total_minor, note, created_at, paid_at, created_by, paid_by, voided_at, voided_by, void_reason, paid_amount_minor, transfer_method, transfer_reference, proof_note, vendor:vendors(name, slug), settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
         )
         .order("created_at", { ascending: false })
         .order("id", { ascending: false })
@@ -152,6 +152,10 @@ export default async function AdminSettlementsPage({
     voided_at: settlement.voided_at,
     voided_by: settlement.voided_by,
     void_reason: settlement.void_reason,
+    paid_amount_minor: settlement.paid_amount_minor,
+    transfer_method: settlement.transfer_method,
+    transfer_reference: settlement.transfer_reference,
+    proof_note: settlement.proof_note,
     settlement_lines: settlement.settlement_lines ?? [],
   }));
 
@@ -513,6 +517,9 @@ export default async function AdminSettlementsPage({
                         ? formatDate(settlement.paid_at)
                         : "date not recorded"}{" "}
                       by {actorLabel(row?.paid_by ?? null, actors)}
+                      {settlement.transfer_reference
+                        ? ` · reference ${settlement.transfer_reference}`
+                        : ""}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-4 text-sm">

@@ -5,9 +5,12 @@ import { requirePlatformAdmin } from "@/lib/auth";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
 import {
   commissionEntriesById,
+  settlementAdjustmentsMinor,
+  settlementEarnedCommissionMinor,
   settlementEffectiveStatus,
   settlementLineGrossMinor,
   settlementTotalsResult,
+  TRANSFER_METHOD_LABELS,
 } from "@/lib/finance";
 import { formatEgp } from "@/lib/money";
 
@@ -17,7 +20,7 @@ import {
   AdminPageHeader,
   AdminStatStrip,
 } from "../../ui";
-import { SettlementPaidButton } from "./settlement-paid-button";
+import { SettlementPaidForm } from "./settlement-paid-form";
 import { SettlementVoidButton } from "./settlement-void-button";
 
 import type {
@@ -40,6 +43,10 @@ type SettlementDetailRow = {
   voided_at: string | null;
   voided_by: string | null;
   void_reason: string | null;
+  paid_amount_minor: number | null;
+  transfer_method: SettlementRecord["transfer_method"];
+  transfer_reference: string | null;
+  proof_note: string | null;
   vendor: { name: string; slug: string } | null;
   settlement_lines: {
     commission_entry_id: string;
@@ -107,7 +114,7 @@ export default async function SettlementDetailPage({
   const { data: settlementData, error: settlementError } = await supabase
     .from("settlements")
     .select(
-      "id, vendor_id, status, total_minor, note, created_at, paid_at, created_by, paid_by, voided_at, voided_by, void_reason, vendor:vendors(name, slug), settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
+      "id, vendor_id, status, total_minor, note, created_at, paid_at, created_by, paid_by, voided_at, voided_by, void_reason, paid_amount_minor, transfer_method, transfer_reference, proof_note, vendor:vendors(name, slug), settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -128,6 +135,10 @@ export default async function SettlementDetailPage({
     voided_at: row.voided_at,
     voided_by: row.voided_by,
     void_reason: row.void_reason,
+    paid_amount_minor: row.paid_amount_minor,
+    transfer_method: row.transfer_method,
+    transfer_reference: row.transfer_reference,
+    proof_note: row.proof_note,
     settlement_lines: row.settlement_lines ?? [],
   };
 
@@ -154,6 +165,13 @@ export default async function SettlementDetailPage({
     failed: Boolean(entryError),
   });
   const totals = totalsResult.totals;
+  // P1-05: the commission due breaks down into commission earned on
+  // delivery, less refund adjustments already baked into the lines.
+  const earnedCommissionMinor = settlementEarnedCommissionMinor(
+    settlement,
+    entriesById,
+  );
+  const adjustmentsMinor = settlementAdjustmentsMinor(settlement, entriesById);
 
   const orderVendorIds = Array.from(
     new Set(detailEntries.map((entry) => entry.order_vendor_id)),
@@ -318,7 +336,7 @@ export default async function SettlementDetailPage({
                 totals.netMinor === null
                   ? "Unavailable"
                   : formatEgp(totals.netMinor),
-              hint: "Amount due to the shop",
+              hint: "What the shop keeps from the COD cash",
               emphasis: "positive",
             },
             {
@@ -360,12 +378,42 @@ export default async function SettlementDetailPage({
                   ? formatDate(row.paid_at)
                   : "Payment date not recorded"}
               </p>
+              <dl className="mt-3 space-y-1 text-xs">
+                <div className="flex justify-between gap-3">
+                  <dt className="text-ink-mute">Amount received</dt>
+                  <dd className="font-medium tabular-nums text-ink">
+                    {row.paid_amount_minor === null
+                      ? "Not recorded"
+                      : formatEgp(row.paid_amount_minor)}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-ink-mute">Transfer method</dt>
+                  <dd className="font-medium text-ink">
+                    {row.transfer_method
+                      ? TRANSFER_METHOD_LABELS[row.transfer_method]
+                      : "Not recorded"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-ink-mute">Transfer reference</dt>
+                  <dd className="font-medium text-ink">
+                    {row.transfer_reference ?? "Not recorded"}
+                  </dd>
+                </div>
+                {row.proof_note ? (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-ink-mute">Proof note</dt>
+                    <dd className="font-medium text-ink">{row.proof_note}</dd>
+                  </div>
+                ) : null}
+              </dl>
             </>
           ) : (
             <p className="mt-1.5 text-ink-soft">
               {effectiveStatus === "voided"
                 ? "This batch was voided before payment."
-                : "Not paid yet. Confirm the external payout before recording it."}
+                : "Not paid yet. Record the commission Gifto received from the shop below."}
             </p>
           )}
         </div>
@@ -400,17 +448,55 @@ export default async function SettlementDetailPage({
 
       {effectiveStatus === "open" ? (
         <section className="mt-6 rounded-2xl border border-success/25 bg-success-soft p-5">
-          <h2 className="font-display text-2xl text-ink">Record payout</h2>
+          <h2 className="font-display text-2xl text-ink">
+            Record commission received
+          </h2>
           <p className="mt-1 text-sm leading-relaxed text-ink-soft">
-            Transfer or hand over{" "}
+            Under D-08 the shop holds the COD cash and remits Gifto&apos;s
+            commission to Gifto every Sunday for the prior week&apos;s
+            delivered orders. Record the transfer Gifto received here — the
+            amount must match the net commission due{" "}
             <strong className="text-ink">
-              {totals.netMinor === null
-                ? "an unavailable amount"
-                : formatEgp(totals.netMinor)}
-            </strong>{" "}
-            to the shop. Marking this paid records the external payout; it does
-            not move money.
+              {totals.complete
+                ? formatEgp(totals.commissionMinor)
+                : "once the commission statement is complete"}
+            </strong>
+            . Marking this paid records the receipt; it does not move money.
           </p>
+          {totals.complete ? (
+            <dl className="mt-3 space-y-1 rounded-xl border border-line bg-paper-soft px-4 py-3 text-sm">
+              <div className="flex justify-between gap-3">
+                <dt className="text-ink-mute">Delivered gross</dt>
+                <dd className="font-medium tabular-nums text-ink">
+                  {totals.grossMinor === null
+                    ? "Unavailable"
+                    : formatEgp(totals.grossMinor)}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-ink-mute">Commission earned</dt>
+                <dd className="font-medium tabular-nums text-ink">
+                  {earnedCommissionMinor === null
+                    ? "Unavailable"
+                    : formatEgp(earnedCommissionMinor)}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-ink-mute">Refund adjustments</dt>
+                <dd className="font-medium tabular-nums text-ink">
+                  {adjustmentsMinor === null
+                    ? "Unavailable"
+                    : formatEgp(adjustmentsMinor)}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3 border-t border-line pt-1">
+                <dt className="font-medium text-ink">Net commission due</dt>
+                <dd className="font-semibold tabular-nums text-ink">
+                  {formatEgp(totals.commissionMinor)}
+                </dd>
+              </div>
+            </dl>
+          ) : null}
           {totals.complete ? (
             <div className="mt-3">
               {payoutAtRisk ? (
@@ -439,7 +525,10 @@ export default async function SettlementDetailPage({
                 </AdminNotice>
               )}
               <div className="mt-3">
-                <SettlementPaidButton settlementId={row.id} />
+                <SettlementPaidForm
+                  settlementId={row.id}
+                  commissionDueMinor={totals.commissionMinor}
+                />
               </div>
             </div>
           ) : (

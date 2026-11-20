@@ -190,7 +190,9 @@ begin
     raise exception 'TEST 4 FAILED: settlement did not use net commission';
   end if;
 
-  perform public.mark_settlement_paid((select id from refund_test_ids where name = 'settlement'));
+  perform public.mark_settlement_paid(
+    (select id from refund_test_ids where name = 'settlement'),
+    600, 'bank_transfer', 'REF-TEST4-001', 'Weekly commission remittance');
   raise notice 'TEST 4 PASSED: settlement uses net commission and can be paid';
 end $$;
 

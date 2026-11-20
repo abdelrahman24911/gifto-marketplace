@@ -58,15 +58,15 @@ resolved. There is no undo.
   commission to Gifto. "Mark paid" attests that the commission **was received
   by Gifto** and requires a **bank transfer reference**.
 - **What "mark paid" records:** the settlement total is **Gifto's commission
-  only**, not the vendor's net. The settlement detail page shows the
-  delivered gross, the commission, and the shop net — check all three (see
-  the four-eyes step below).
+  only**, not the vendor's net. Marking paid attests that Gifto received
+  exactly that net commission, and records the proof on the settlement: the
+  amount received, the transfer method, and the vendor's **bank transfer
+  reference** (plus an optional proof note). A wrong amount or a missing
+  reference cannot be paid. The vendor sees the same numbers in
+  `/vendor/finance` — gross, commission earned, refund adjustments, net
+  commission due, and the recorded receipt — to the piaster. A paid
+  settlement's record is never edited afterwards.
 - **Known gaps the runbook works around (not fixed here):**
-  - The system does not yet store the bank transfer reference — record it in
-    the runbook log (step 3f) until P1-05 adds the field.
-  - The settlement detail page still says "Transfer … to the shop". That
-    wording predates D-08; the decided direction is the vendor remits
-    Gifto's commission to Gifto. Correcting the page wording is P1-05 work.
   - A customer cannot yet cancel their own open refund case in the product
     (N-03) even though D-09 allows it — until then, cancellations go through
     support and are recorded in the log.
@@ -76,10 +76,10 @@ resolved. There is no undo.
 ## Pre-payout checklist — do this before every "Mark settlement paid"
 
 Work from the settlement detail page (`/admin/settlements/[id]`). Do not
-mark paid until **every** box is ticked. The "Record payout" section shows
-a return-window check — the earliest delivered date, whether the 7-day
-window is still open, and any open refund cases on the batch — treat a
-warning there as a stop, not a suggestion.
+mark paid until **every** box is ticked. The "Record commission received"
+section shows a return-window check — the earliest delivered date, whether
+the 7-day window is still open, and any open refund cases on the batch —
+treat a warning there as a stop, not a suggestion.
 
 1. **Settlement is open.** Status must be `open` — not `paid`, not `voided`.
    A voided batch is dead; open a new one instead of reusing it.
@@ -96,12 +96,15 @@ warning there as a stop, not a suggestion.
    one, resolve it first (procedure below) or exclude that entry and settle
    it in a later batch.
 4. **Four-eyes.** Show the settlement detail page to a second person before
-   marking paid: delivered gross, commission, and shop net, plus the bank
-   transfer reference for the vendor's remittance. Two people agree the
-   numbers and the reference before anyone clicks "Mark settlement paid".
-5. **Record the reference.** The system does not store the bank transfer
-   reference yet. Write it in the runbook log (table below) with the date,
-   amount, and who verified it — the log is the proof until P1-05 ships.
+   marking paid: delivered gross, commission earned, refund adjustments, net
+   commission due, and the bank transfer reference for the vendor's
+   remittance. Two people agree the numbers and the reference before anyone
+   clicks "Record commission received".
+5. **Enter the proof in the form.** In "Record commission received", check
+   the pre-filled amount against the net commission due, choose the transfer
+   method, and enter the vendor's bank transfer reference. The system stores
+   the proof on the settlement and shows it to the vendor; the runbook log
+   below is now only for refund cases, not for payout proof.
 
 If any check fails: **do not mark paid.** Either wait (window / open case)
 or exclude the affected entries — void the batch with a reason, then open a

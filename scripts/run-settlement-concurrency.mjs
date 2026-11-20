@@ -84,7 +84,7 @@ console.log("== step 1: fresh disposable database ==");
     const mig = await psql(["-f", join(ROOT, "supabase/migrations", file)]);
     if (mig.code !== 0) fail(`migration ${file}`, mig.err);
   }
-  console.log("PASS: migrations 1-30 applied on disposable database");
+  console.log("PASS: migrations applied on disposable database");
 }
 
 // 2. Setup + sequential cases.
@@ -106,7 +106,9 @@ const callSql = [
   "set role authenticated;",
   `set request.jwt.claim.sub = '${ADMIN_ID}';`,
   `set request.jwt.claims = '{"sub":"${ADMIN_ID}"}';`,
-  `select public.mark_settlement_paid('${settlementId}');`,
+  // Vendor A's settlement total is 800 (1 x 10000 at 8%). The payout
+  // proof (P1-05) must match the derived D-08 amount exactly.
+  `select public.mark_settlement_paid('${settlementId}', 800, 'bank_transfer', 'CONC-A-800', 'Weekly commission remittance');`,
 ].join(" ");
 const [a, b] = await Promise.all([
   run("psql", ["-v", "ON_ERROR_STOP=1", "-d", DB, "-c", callSql]),
@@ -128,13 +130,14 @@ console.log("PASS: exactly one session succeeded; the other raised 'This settlem
 console.log("== step 4: final state ==");
 const state = await psql(["-tAc",
   `select status::text || '|' || (paid_at is not null) || '|' || (paid_by = '${ADMIN_ID}'::uuid) ` +
+  `|| '|' || (paid_amount_minor = 800) || '|' || (transfer_reference = 'CONC-A-800') ` +
   `from public.settlements where id = '${settlementId}';`]);
 const entry = await psql(["-tAc",
   `select count(*) from public.commission_entries ce join public.settlement_lines l ` +
   `on l.commission_entry_id = ce.id where l.settlement_id = '${settlementId}' and ce.status = 'earned';`]);
-if (state.out.trim() !== "paid|true|true") fail("final state", `settlements row: ${state.out.trim()} (expected paid|true|true)`);
+if (state.out.trim() !== "paid|true|true|true|true") fail("final state", `settlements row: ${state.out.trim()} (expected paid|true|true|true|true)`);
 if (entry.out.trim() !== "1") fail("final state", `earned entries on settlement lines: ${entry.out.trim()} (expected 1)`);
-console.log("PASS: settlement paid once, paid_at/paid_by stamped, commission entry still earned");
+console.log("PASS: settlement paid once, paid_at/paid_by stamped, payout proof recorded, commission entry still earned");
 
 // 5. Commissions suite afterwards (no regression).
 console.log("== step 5: rls_commissions_test.sql (no regression) ==");

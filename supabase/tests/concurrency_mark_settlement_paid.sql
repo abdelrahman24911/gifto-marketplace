@@ -201,7 +201,8 @@ declare v_status text;
 begin
   begin
     perform public.mark_settlement_paid(
-      current_setting('gifto_test.conc_settlement_b')::uuid);
+      current_setting('gifto_test.conc_settlement_b')::uuid,
+      1126, 'bank_transfer', 'CONC-B-001');
     raise exception 'MISMATCH FAILED: payout was accepted for a mismatched line';
   exception when check_violation then
     raise notice 'MISMATCH PASSED: mismatched line rejected (23514)';
@@ -230,6 +231,10 @@ begin
     from public.settlement_lines l
    where l.settlement_id = current_setting('gifto_test.conc_settlement_c')::uuid
      and l.commission_entry_id = ce.id;
+  -- P1-05: the stored total must match the lines, so zero it as well.
+  update public.settlements
+     set total_minor = 0
+   where id = current_setting('gifto_test.conc_settlement_c')::uuid;
 end $$;
 
 set role authenticated;
@@ -239,7 +244,8 @@ do $$
 declare v_status text; v_paid_at timestamptz; v_paid_by uuid;
 begin
   perform public.mark_settlement_paid(
-    current_setting('gifto_test.conc_settlement_c')::uuid);
+    current_setting('gifto_test.conc_settlement_c')::uuid,
+    0, 'bank_transfer', 'CONC-C-000');
   select status::text, paid_at, paid_by into v_status, v_paid_at, v_paid_by
     from public.settlements
    where id = current_setting('gifto_test.conc_settlement_c')::uuid;

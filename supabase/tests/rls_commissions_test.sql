@@ -67,7 +67,7 @@ begin
      or has_table_privilege('anon', 'public.settlements', 'select')
      or has_table_privilege('anon', 'public.settlement_lines', 'select')
      or has_function_privilege('anon', 'public.create_settlement(uuid,text)', 'execute')
-     or has_function_privilege('anon', 'public.mark_settlement_paid(uuid)', 'execute')
+     or has_function_privilege('anon', 'public.mark_settlement_paid(uuid,int,text,text,text)', 'execute')
      or has_function_privilege('anon', 'public.void_settlement(uuid,text)', 'execute') then
     raise exception 'TEST 1 FAILED: anon holds privileges on the commission group';
   end if;
@@ -354,6 +354,10 @@ declare
   v_paid_at    timestamptz;
   v_created_by uuid;
   v_paid_by    uuid;
+  v_paid_amount int;
+  v_method     text;
+  v_reference  text;
+  v_proof      text;
 begin
   -- shop A has only a reversed entry -> nothing to settle
   begin
@@ -380,18 +384,27 @@ begin
   end if;
 
   begin
-    perform public.mark_settlement_paid(v_sid);
+    perform public.mark_settlement_paid(
+      v_sid, 1125, 'bank_transfer', 'COMM-TEST8-001', 'Weekly remittance');
   exception when others then
     raise exception 'TEST 8 FAILED: admin could not mark paid: %', sqlerrm;
   end;
 
-  select paid_at, paid_by into v_paid_at, v_paid_by
+  select paid_at, paid_by, paid_amount_minor, transfer_method,
+         transfer_reference, proof_note
+    into v_paid_at, v_paid_by, v_paid_amount, v_method, v_reference, v_proof
     from public.settlements where id = v_sid;
   if v_paid_at is null then
     raise exception 'TEST 8 FAILED: paid_at not stamped';
   end if;
   if v_paid_by is distinct from 'c3110000-0000-0000-0000-000000000001' then
     raise exception 'TEST 8 FAILED: paid_by was not stamped';
+  end if;
+  if v_paid_amount <> 1125
+     or v_method <> 'bank_transfer'
+     or v_reference <> 'COMM-TEST8-001'
+     or v_proof <> 'Weekly remittance' then
+    raise exception 'TEST 8 FAILED: payout proof was not recorded';
   end if;
   raise notice 'TEST 8 PASSED: admin settled a shop''s earned commission, with audit actors';
 end $$;
@@ -408,7 +421,9 @@ begin
     raise exception 'TEST 9 FAILED: shop B cannot read its own settlement';
   end if;
   begin
-    perform public.mark_settlement_paid(current_setting('gifto_test.comm_settlement_id')::uuid);
+    perform public.mark_settlement_paid(
+      current_setting('gifto_test.comm_settlement_id')::uuid,
+      1125, 'bank_transfer', 'COMM-TEST9-001');
     raise exception 'TEST 9 FAILED: a vendor marked a settlement paid';
   exception when insufficient_privilege then
     null;
@@ -667,7 +682,8 @@ begin
   end if;
 
   begin
-    perform public.mark_settlement_paid(v_sid);
+    perform public.mark_settlement_paid(
+      v_sid, 1125, 'bank_transfer', 'COMM-TEST14-001');
     raise exception 'TEST 14 FAILED: a voided settlement was marked paid';
   exception when check_violation then
     null;
@@ -791,7 +807,8 @@ do $$
 begin
   begin
     perform public.mark_settlement_paid(
-      current_setting('gifto_test.comm_empty_settlement_id')::uuid
+      current_setting('gifto_test.comm_empty_settlement_id')::uuid,
+      0, 'bank_transfer', 'COMM-TEST16-001'
     );
     raise exception 'TEST 16 FAILED: anon marked a settlement paid';
   exception when insufficient_privilege then
@@ -806,7 +823,8 @@ do $$
 begin
   begin
     perform public.mark_settlement_paid(
-      current_setting('gifto_test.comm_empty_settlement_id')::uuid
+      current_setting('gifto_test.comm_empty_settlement_id')::uuid,
+      0, 'bank_transfer', 'COMM-TEST16-001'
     );
     raise exception 'TEST 16 FAILED: a non-admin marked a settlement paid';
   exception when insufficient_privilege then
@@ -820,7 +838,8 @@ do $$
 begin
   begin
     perform public.mark_settlement_paid(
-      current_setting('gifto_test.comm_empty_settlement_id')::uuid
+      current_setting('gifto_test.comm_empty_settlement_id')::uuid,
+      0, 'bank_transfer', 'COMM-TEST16-001'
     );
     raise exception 'TEST 16 FAILED: an empty settlement was marked paid';
   exception when check_violation then
@@ -888,7 +907,8 @@ do $$
 begin
   begin
     perform public.mark_settlement_paid(
-      current_setting('gifto_test.comm_settlement5_id')::uuid
+      current_setting('gifto_test.comm_settlement5_id')::uuid,
+      1, 'bank_transfer', 'COMM-TEST17-001'
     );
     raise exception 'TEST 17 FAILED: mismatched settlement snapshot was paid';
   exception when check_violation then
@@ -944,24 +964,32 @@ begin
     from public.settlement_lines l
    where l.settlement_id = current_setting('gifto_test.comm_settlement6_id')::uuid
      and l.commission_entry_id = ce.id;
+  -- P1-05: the stored total must match the lines, so zero it as well.
+  update public.settlements
+     set total_minor = 0
+   where id = current_setting('gifto_test.comm_settlement6_id')::uuid;
 end $$;
 
 set role authenticated;
 set request.jwt.claim.sub = 'c3110000-0000-0000-0000-000000000001';
 set request.jwt.claims = '{"sub":"c3110000-0000-0000-0000-000000000001"}';
 do $$
-declare v_paid_at timestamptz; v_paid_by uuid;
+declare v_paid_at timestamptz; v_paid_by uuid; v_paid_amount int; v_reference text;
 begin
   perform public.mark_settlement_paid(
-    current_setting('gifto_test.comm_settlement6_id')::uuid
+    current_setting('gifto_test.comm_settlement6_id')::uuid,
+    0, 'bank_transfer', 'COMM-TEST17-000'
   );
-  select paid_at, paid_by
-    into v_paid_at, v_paid_by
+  select paid_at, paid_by, paid_amount_minor, transfer_reference
+    into v_paid_at, v_paid_by, v_paid_amount, v_reference
     from public.settlements
    where id = current_setting('gifto_test.comm_settlement6_id')::uuid;
   if v_paid_at is null
      or v_paid_by is distinct from 'c3110000-0000-0000-0000-000000000001' then
     raise exception 'TEST 17 FAILED: zero-value payout audit fields were not stamped';
+  end if;
+  if v_paid_amount <> 0 or v_reference <> 'COMM-TEST17-000' then
+    raise exception 'TEST 17 FAILED: zero-value payout proof was not recorded';
   end if;
   raise notice 'TEST 17 PASSED: mismatch rejects and independent zero-value payout succeeds';
 end $$;
@@ -986,6 +1014,191 @@ begin
   exception when foreign_key_violation then
     raise notice 'TEST 18 PASSED: missing commission references are blocked by the FK';
   end;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 19 (P1-05): payout proof — a wrong amount, no reference, a bad
+-- method or a tampered stored total cannot be paid; the exact net
+-- commission with a reference pays, is visible to the vendor, and the
+-- paid record cannot be edited afterwards.
+-- ---------------------------------------------------------------------------
+
+-- One fresh delivered order for shop A (1 x 10000 at 8% -> 800).
+set role authenticated;
+set request.jwt.claim.sub = 'c1110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c1110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_oid uuid;
+begin
+  v_oid := public.place_order(
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria'
+  );
+  perform set_config('gifto_test.comm_order19_id', v_oid::text, false);
+end $$;
+
+set request.jwt.claim.sub = 'c2110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c2110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_ov uuid;
+begin
+  select id into v_ov
+    from public.order_vendors
+   where order_id = current_setting('gifto_test.comm_order19_id')::uuid
+     and vendor_id = '41100000-0000-0000-0000-000000000001';
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
+  perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
+end $$;
+
+set request.jwt.claim.sub = 'c3110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c3110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_sid uuid;
+begin
+  v_sid := public.create_settlement('41100000-0000-0000-0000-000000000001');
+  perform set_config('gifto_test.comm_settlement19_id', v_sid::text, false);
+end $$;
+
+do $$
+declare
+  v_sid       uuid := current_setting('gifto_test.comm_settlement19_id')::uuid;
+  v_total     int;
+begin
+  select total_minor into v_total from public.settlements where id = v_sid;
+  if v_total <> 800 then
+    raise exception 'TEST 19 FAILED: settlement total % (expected 800)', v_total;
+  end if;
+
+  -- (a) A wrong amount is impossible.
+  begin
+    perform public.mark_settlement_paid(
+      v_sid, 801, 'bank_transfer', 'COMM-TEST19-001');
+    raise exception 'TEST 19 FAILED: a wrong amount was paid';
+  exception when check_violation then
+    null;
+  end;
+
+  -- (b) No transfer reference is impossible.
+  begin
+    perform public.mark_settlement_paid(v_sid, 800, 'bank_transfer', null);
+    raise exception 'TEST 19 FAILED: a payment without a reference was accepted';
+  exception when check_violation then
+    null;
+  end;
+
+  -- (c) A bad transfer method is impossible.
+  begin
+    perform public.mark_settlement_paid(
+      v_sid, 800, 'wire', 'COMM-TEST19-001');
+    raise exception 'TEST 19 FAILED: a bad transfer method was accepted';
+  exception when check_violation then
+    null;
+  end;
+end $$;
+
+-- (d) A tampered stored total cannot be paid, even with the right amount.
+reset role;
+do $$
+begin
+  update public.settlements
+     set total_minor = 801
+   where id = current_setting('gifto_test.comm_settlement19_id')::uuid;
+end $$;
+
+set role authenticated;
+set request.jwt.claim.sub = 'c3110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c3110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_sid uuid := current_setting('gifto_test.comm_settlement19_id')::uuid;
+begin
+  begin
+    perform public.mark_settlement_paid(
+      v_sid, 800, 'bank_transfer', 'COMM-TEST19-001');
+    raise exception 'TEST 19 FAILED: a tampered stored total was paid';
+  exception when check_violation then
+    null;
+  end;
+end $$;
+
+reset role;
+do $$
+begin
+  update public.settlements
+     set total_minor = 800
+   where id = current_setting('gifto_test.comm_settlement19_id')::uuid;
+end $$;
+
+set role authenticated;
+set request.jwt.claim.sub = 'c3110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c3110000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_sid       uuid := current_setting('gifto_test.comm_settlement19_id')::uuid;
+  v_status    text;
+  v_amount    int;
+  v_method    text;
+  v_reference text;
+  v_proof     text;
+begin
+  -- (e) The exact net commission with a reference pays, and the proof is stored.
+  perform public.mark_settlement_paid(
+    v_sid, 800, 'bank_transfer', 'COMM-TEST19-001', 'Weekly remittance');
+  select status::text, paid_amount_minor, transfer_method,
+         transfer_reference, proof_note
+    into v_status, v_amount, v_method, v_reference, v_proof
+    from public.settlements where id = v_sid;
+  if v_status <> 'paid'
+     or v_amount <> 800
+     or v_method <> 'bank_transfer'
+     or v_reference <> 'COMM-TEST19-001'
+     or v_proof <> 'Weekly remittance' then
+    raise exception 'TEST 19 FAILED: payout proof was not recorded';
+  end if;
+end $$;
+
+-- (f) The vendor sees the same numbers admin recorded, to the piaster.
+set request.jwt.claim.sub = 'c2110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c2110000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_sid       uuid := current_setting('gifto_test.comm_settlement19_id')::uuid;
+  v_amount    int;
+  v_method    text;
+  v_reference text;
+begin
+  select paid_amount_minor, transfer_method, transfer_reference
+    into v_amount, v_method, v_reference
+    from public.settlements where id = v_sid;
+  if v_amount <> 800
+     or v_method <> 'bank_transfer'
+     or v_reference <> 'COMM-TEST19-001' then
+    raise exception 'TEST 19 FAILED: the vendor cannot see the payout proof';
+  end if;
+
+  -- (g) The paid record cannot be edited directly.
+  begin
+    update public.settlements set paid_amount_minor = 1 where id = v_sid;
+    raise exception 'TEST 19 FAILED: a paid settlement was edited directly';
+  exception when insufficient_privilege then
+    null;
+  end;
+end $$;
+
+-- (h) Paying again is impossible.
+set request.jwt.claim.sub = 'c3110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c3110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_sid uuid := current_setting('gifto_test.comm_settlement19_id')::uuid;
+begin
+  begin
+    perform public.mark_settlement_paid(
+      v_sid, 800, 'bank_transfer', 'COMM-TEST19-001');
+    raise exception 'TEST 19 FAILED: a paid settlement was paid again';
+  exception when check_violation then
+    null;
+  end;
+  raise notice 'TEST 19 PASSED: payout proof is required, exact and visible to the vendor';
 end $$;
 
 rollback;

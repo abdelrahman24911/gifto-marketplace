@@ -24,6 +24,8 @@
  * P1-02: guest token expiry, recovery tokens, claim_guest_order.
  * P1-03: price-change consent RPCs (place_order_with_price_check).
  * P1-04: D-09 return window, return path, receipt, restock, escalation.
+ * P1-05: payout proof on settlements (paid_amount_minor, transfer_method,
+ *         transfer_reference, proof_note); mark_settlement_paid takes proof.
  *
  * Regenerate from the live database once the Gifto project exists:
  *   supabase gen types typescript --project-id <ref> > src/lib/supabase/database.types.ts
@@ -1024,6 +1026,11 @@ export type Database = {
           voided_by: string | null;
           voided_at: string | null;
           void_reason: string | null;
+          // P1-05 payout proof (D-08): set exactly when paid, never edited.
+          paid_amount_minor: number | null;
+          transfer_method: string | null;
+          transfer_reference: string | null;
+          proof_note: string | null;
         };
         Insert: {
           id?: string;
@@ -1040,6 +1047,10 @@ export type Database = {
           voided_by?: string | null;
           voided_at?: string | null;
           void_reason?: string | null;
+          paid_amount_minor?: number | null;
+          transfer_method?: string | null;
+          transfer_reference?: string | null;
+          proof_note?: string | null;
         };
         Update: {
           id?: string;
@@ -1056,6 +1067,10 @@ export type Database = {
           voided_by?: string | null;
           voided_at?: string | null;
           void_reason?: string | null;
+          paid_amount_minor?: number | null;
+          transfer_method?: string | null;
+          transfer_reference?: string | null;
+          proof_note?: string | null;
         };
         Relationships: [
           {
@@ -1724,7 +1739,13 @@ export type Database = {
         Returns: string;
       };
       mark_settlement_paid: {
-        Args: { p_settlement_id: string };
+        Args: {
+          p_settlement_id: string;
+          p_paid_amount_minor: number;
+          p_transfer_method: string;
+          p_transfer_reference: string;
+          p_proof_note?: string | null;
+        };
         Returns: undefined;
       };
       void_settlement: {
