@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildSettlementLineLookup,
+  clawbackRemainingMinor,
   commissionEntriesById,
   getEntryFinanceState,
   isTransferMethod,
@@ -452,5 +453,22 @@ describe("P1-05 payout proof helpers", () => {
     expect(settlementNetDueMinor(1000, 200)).toBe(800);
     expect(settlementNetDueMinor(400, 400)).toBe(0);
     expect(settlementNetDueMinor(800, 0)).toBe(800);
+  });
+
+  it("R-02: what a vendor still owes on an outstanding clawback", () => {
+    // A clawback is stored negative; the remainder is its magnitude
+    // less any partial applications already netted against settlements.
+    expect(clawbackRemainingMinor({ amount_minor: -500 }, [])).toBe(500);
+    expect(
+      clawbackRemainingMinor({ amount_minor: -500 }, [
+        { amount_minor: 400 },
+      ]),
+    ).toBe(100);
+    expect(
+      clawbackRemainingMinor({ amount_minor: -500 }, [
+        { amount_minor: 300 },
+        { amount_minor: 200 },
+      ]),
+    ).toBe(0);
   });
 });

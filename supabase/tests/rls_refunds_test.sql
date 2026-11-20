@@ -3100,6 +3100,158 @@ begin
   raise notice 'TEST 17 PASSED: D-09 inspection condition, courier payer and restock bans enforced';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST 18 (R-02, D-08): a clawback-only vendor gets the direct-repayment
+-- error, not the generic "nothing to settle" — and no empty batch.
+-- ---------------------------------------------------------------------------
+-- Vendor G: settle 1000 and pay, then a paid return claws back 500, so
+-- the vendor's only balance is the outstanding clawback. Vendor H has
+-- no orders at all and keeps the generic error.
+reset role;
+insert into public.vendors (id, name, slug, status, commission_rate)
+values (
+  '42200000-0000-0000-0000-000000000009',
+  'Clawback Only Shop', 'clawback-only-shop', 'active', 0.1000
+),
+(
+  '42200000-0000-0000-0000-000000000010',
+  'Nothing Shop', 'nothing-shop', 'active', 0.1000
+);
+
+insert into public.orders (
+  id, user_id, status, subtotal_minor, total_minor, recipient_name,
+  contact_phone, address_line, city, governorate
+) values (
+  '62200000-0000-0000-0000-000000000051',
+  '12200000-0000-0000-0000-000000000001',
+  'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+  '12 Road 9, Maadi', 'Maadi', 'Cairo'
+);
+
+insert into public.order_vendors (
+  id, order_id, vendor_id, status, subtotal_minor, commission_rate, delivered_at
+) values (
+  '72200000-0000-0000-0000-000000000051',
+  '62200000-0000-0000-0000-000000000051',
+  '42200000-0000-0000-0000-000000000009',
+  'delivered', 10000, 0.1000, now()
+);
+
+insert into public.commission_entries (
+  id, order_vendor_id, vendor_id, rate, base_minor, amount_minor, earned_at
+) values (
+  '82200000-0000-0000-0000-000000000051',
+  '72200000-0000-0000-0000-000000000051',
+  '42200000-0000-0000-0000-000000000009',
+  0.1000, 10000, 1000, now()
+);
+
+set role authenticated;
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+insert into refund_test_ids
+select 'clawback_only_settlement', public.create_settlement(
+  '42200000-0000-0000-0000-000000000009', 'Clawback-only batch');
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000001"}';
+insert into refund_test_ids
+select 'clawback_only_case', public.open_refund_case(
+  '72200000-0000-0000-0000-000000000051', 'Paid-return issue', 5000);
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+do $$
+declare
+  v_sid uuid := (select id from refund_test_ids where name = 'clawback_only_settlement');
+  v_claw uuid;
+  v_blocked boolean := false;
+begin
+  perform public.mark_settlement_paid(
+    v_sid, 1000, 'bank_transfer', 'R02-TEST18-001');
+
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'clawback_only_case'),
+    true, 5000, 'Refund approved');
+
+  select id into v_claw from public.commission_clawbacks
+   where refund_case_id = (select id from refund_test_ids where name = 'clawback_only_case');
+  if v_claw is null then
+    raise exception 'TEST 18 FAILED: clawback-only clawback was not recorded';
+  end if;
+  if not exists (
+    select 1 from public.commission_clawbacks
+     where id = v_claw and status = 'outstanding' and amount_minor = -500
+  ) then
+    raise exception 'TEST 18 FAILED: clawback-only clawback is not outstanding at -500';
+  end if;
+  perform set_config('gifto_test.clawback_only_id', v_claw::text, false);
+  raise notice 'TEST 18 SETUP PASSED: vendor owes a 500 clawback and has no new commission';
+
+  -- The clawback-only attempt names the amount owed and the
+  -- direct-repayment fallback, and creates no settlement row.
+  begin
+    perform public.create_settlement(
+      '42200000-0000-0000-0000-000000000009', 'Clawback-only attempt');
+  exception when check_violation then
+    if sqlerrm like '%direct repayment%'
+       and sqlerrm like '%EGP 5.00%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 18 FAILED: wrong error for a clawback-only vendor: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 18 FAILED: a clawback-only vendor got a settlement (or the generic error)';
+  end if;
+  if (select count(*) from public.settlements
+       where vendor_id = '42200000-0000-0000-0000-000000000009') <> 1 then
+    raise exception 'TEST 18 FAILED: the clawback-only attempt created a settlement row';
+  end if;
+  raise notice 'TEST 18a PASSED: clawback-only vendor gets the direct-repayment error, no empty batch';
+
+  -- A vendor with nothing at all still gets the generic message.
+  v_blocked := false;
+  begin
+    perform public.create_settlement(
+      '42200000-0000-0000-0000-000000000010', 'Nothing attempt');
+  exception when check_violation then
+    if sqlerrm = 'There is nothing to settle for this shop.' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 18 FAILED: wrong error for a vendor with nothing: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 18 FAILED: a vendor with nothing got a settlement (or a different error)';
+  end if;
+  if exists (select 1 from public.settlements
+              where vendor_id = '42200000-0000-0000-0000-000000000010') then
+    raise exception 'TEST 18 FAILED: the nothing-at-all attempt created a settlement row';
+  end if;
+  raise notice 'TEST 18b PASSED: a vendor with nothing keeps the generic error';
+
+  -- Once the clawback is repaid directly, the same vendor is back to
+  -- the generic error — the branch is driven by outstanding status.
+  perform public.record_clawback_direct_repayment(v_claw, 'BANK-REPAY-G1');
+
+  v_blocked := false;
+  begin
+    perform public.create_settlement(
+      '42200000-0000-0000-0000-000000000009', 'After repayment attempt');
+  exception when check_violation then
+    if sqlerrm = 'There is nothing to settle for this shop.' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 18 FAILED: wrong error after direct repayment: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 18 FAILED: a repaid vendor got a settlement (or a different error)';
+  end if;
+  raise notice 'TEST 18 PASSED: clawback-only vendors are routed to direct repayment, never an empty batch';
+end $$;
+
 reset role;
 
 rollback;

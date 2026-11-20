@@ -30,8 +30,65 @@ export type SettlementPaidState =
 
 export type VoidSettlementState = SettlementPaidState;
 
+export type DirectRepaymentState = SettlementPaidState;
+
 function attemptFrom(prev: { attempt?: number } | null): number {
   return (prev?.attempt ?? 0) + 1;
+}
+
+/**
+ * R-02 (D-08, N-01): record that a vendor repaid an outstanding
+ * paid-return clawback directly — the D-08 fallback for when there is no
+ * next settlement to carry it into (for example a clawback-only vendor
+ * with no new commission). Nothing here moves money: the repayment
+ * happened outside the dashboard, and the reference is the proof. The
+ * RPC is the authority — it refuses a non-admin caller, a bad reference,
+ * and a clawback that is already resolved.
+ */
+export async function recordDirectRepayment(
+  prev: DirectRepaymentState,
+  formData: FormData,
+): Promise<DirectRepaymentState> {
+  const attempt = attemptFrom(prev);
+  const clawbackId = String(formData.get("clawback_id") ?? "").trim();
+  const reference = String(formData.get("reference") ?? "").trim();
+
+  if (!clawbackId) return { error: "Missing clawback id.", attempt };
+  if (reference.length < 3 || reference.length > 200) {
+    return {
+      error: "Enter the direct repayment reference (3–200 characters).",
+      attempt,
+    };
+  }
+
+  const { supabase, user } = await requirePlatformAdmin();
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { error: quotaError, attempt };
+
+  const { error } = await supabase.rpc("record_clawback_direct_repayment", {
+    p_clawback_id: clawbackId,
+    p_reference: reference,
+  });
+
+  if (error) {
+    return {
+      error:
+        error.code === "23514" || error.code === "22023"
+          ? error.message
+          : "The direct repayment could not be recorded. Refresh the page and try again.",
+      attempt,
+    };
+  }
+
+  revalidatePath("/admin/settlements");
+  revalidatePath("/vendor/finance");
+
+  return {
+    success:
+      "Direct repayment recorded. The clawback is resolved and will not be netted against a future settlement.",
+    attempt,
+  };
 }
 
 export async function createSettlement(

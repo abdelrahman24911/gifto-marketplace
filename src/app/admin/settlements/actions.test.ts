@@ -116,7 +116,11 @@ vi.mock("next/navigation", () => ({
   redirect: vi.fn(),
 }));
 
-import { markSettlementPaid } from "./actions";
+import {
+  createSettlement,
+  markSettlementPaid,
+  recordDirectRepayment,
+} from "./actions";
 
 // The mock settlement's derived net commission is 800 minor (EGP 8.00),
 // so a valid payout proof pays exactly that amount with a reference.
@@ -386,5 +390,111 @@ describe("markSettlementPaid verification guard", () => {
         "This settlement is fully offset by clawbacks, so no transfer took place and no proof is recorded.",
     });
     expect(state.rpc).not.toHaveBeenCalled();
+  });
+});
+
+describe("recordDirectRepayment (R-02, D-08)", () => {
+  function repaymentFormData(
+    overrides: { clawbackId?: string; reference?: string } = {},
+  ): FormData {
+    const formData = new FormData();
+    formData.set("clawback_id", overrides.clawbackId ?? "clawback-1");
+    formData.set("reference", overrides.reference ?? "BANK-REPAY-1");
+    return formData;
+  }
+
+  it("validates the clawback id and the reference before any RPC call", async () => {
+    await expect(
+      recordDirectRepayment(null, new FormData()),
+    ).resolves.toMatchObject({ error: "Missing clawback id." });
+    expect(state.rpc).not.toHaveBeenCalled();
+
+    await expect(
+      recordDirectRepayment(
+        null,
+        repaymentFormData({ reference: "x" }),
+      ),
+    ).resolves.toMatchObject({
+      error: "Enter the direct repayment reference (3–200 characters).",
+    });
+    expect(state.rpc).not.toHaveBeenCalled();
+  });
+
+  it("refuses the mutation when the P1-12 quota is exceeded, before any RPC call", async () => {
+    state.quotaError =
+      "Too many changes. Please wait an hour and try again.";
+
+    const result = await recordDirectRepayment(
+      null,
+      repaymentFormData(),
+    );
+
+    expect(result).toEqual({
+      error: "Too many changes. Please wait an hour and try again.",
+      attempt: 1,
+    });
+    expect(state.rpc).not.toHaveBeenCalled();
+  });
+
+  it("surfaces the RPC's refusal verbatim and reports success with the reference", async () => {
+    state.rpc.mockResolvedValueOnce({
+      error: {
+        code: "23514",
+        message: "This clawback is already resolved.",
+      },
+    });
+
+    await expect(
+      recordDirectRepayment(null, repaymentFormData()),
+    ).resolves.toMatchObject({
+      error: "This clawback is already resolved.",
+    });
+
+    await expect(
+      recordDirectRepayment(null, repaymentFormData()),
+    ).resolves.toMatchObject({
+      success:
+        "Direct repayment recorded. The clawback is resolved and will not be netted against a future settlement.",
+    });
+    expect(state.rpc).toHaveBeenCalledWith(
+      "record_clawback_direct_repayment",
+      {
+        p_clawback_id: "clawback-1",
+        p_reference: "BANK-REPAY-1",
+      },
+    );
+  });
+
+  it("hides an unexpected RPC failure behind the generic message", async () => {
+    state.rpc.mockResolvedValueOnce({
+      error: { code: "500", message: "boom" },
+    });
+
+    await expect(
+      recordDirectRepayment(null, repaymentFormData()),
+    ).resolves.toMatchObject({
+      error:
+        "The direct repayment could not be recorded. Refresh the page and try again.",
+    });
+  });
+});
+
+describe("createSettlement (R-02)", () => {
+  it("surfaces the clawback-only error verbatim so the admin sees the next step", async () => {
+    state.rpc.mockResolvedValueOnce({
+      error: {
+        code: "23514",
+        message:
+          "This shop has no new commission to settle, but still owes EGP 5.00 in paid-return clawbacks. Record a direct repayment instead — a clawback cannot be netted against a settlement with no commission in it.",
+      },
+    });
+
+    const formData = new FormData();
+    formData.set("vendor_id", "vendor-1");
+
+    await expect(createSettlement(null, formData)).resolves.toMatchObject({
+      error:
+        "This shop has no new commission to settle, but still owes EGP 5.00 in paid-return clawbacks. Record a direct repayment instead — a clawback cannot be netted against a settlement with no commission in it.",
+    });
   });
 });

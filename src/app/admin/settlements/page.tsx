@@ -8,6 +8,7 @@ import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
 import { fetchAllRows } from "@/lib/fetch-all";
 import {
   buildSettlementLineLookup,
+  clawbackRemainingMinor,
   commissionEntriesById,
   settlementTotalsResult,
   totalsForEntries,
@@ -29,6 +30,7 @@ import {
   AdminStatStrip,
 } from "../ui";
 import { CreateSettlementForm } from "./settlement-create-form";
+import { ClawbackRepaymentForm } from "./clawback-repayment-form";
 
 import type {
   CommissionEntryRecord,
@@ -45,6 +47,24 @@ type VendorQueryRow = {
   id: string;
   name: string;
   slug: string;
+};
+
+type OutstandingClawbackRow = {
+  id: string;
+  refund_case_id: string;
+  vendor_id: string;
+  amount_minor: number;
+  status: string;
+  created_at: string;
+  vendor: { name: string; slug: string } | null;
+  clawback_applications: { amount_minor: number }[];
+};
+
+type ClawbackCaseRow = {
+  id: string;
+  order_vendor: {
+    order: { public_reference: string | null } | null;
+  } | null;
 };
 
 type ActorRow = {
@@ -97,40 +117,55 @@ export default async function AdminSettlementsPage({
   const requestedPaidPage = parsePage(params.paidPage);
   const requestedVoidedPage = parsePage(params.voidedPage);
 
-  const [settlementsResult, entriesResult, vendorsResult] = await Promise.all([
-    fetchAllRows<SettlementQueryRow>((from, to) =>
-      supabase
-        .from("settlements")
-        .select(
-          "id, vendor_id, status, total_minor, clawback_minor, note, created_at, paid_at, created_by, paid_by, voided_at, voided_by, void_reason, paid_amount_minor, transfer_method, transfer_reference, proof_note, vendor:vendors(name, slug), settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
-        )
-        .order("created_at", { ascending: false })
-        .order("id", { ascending: false })
-        .range(from, to)
-        .returns<SettlementQueryRow[]>(),
-    ),
-    fetchAllRows<CommissionEntryRecord>((from, to) =>
-      supabase
-        .from("commission_entries")
-        .select(
-          "id, vendor_id, status, rate, base_minor, amount_minor, earned_at, reversed_at",
-        )
-        .order("earned_at", { ascending: false })
-        .order("id", { ascending: false })
-        .range(from, to)
-        .returns<CommissionEntryRecord[]>(),
-    ),
-    fetchAllRows<VendorQueryRow>((from, to) =>
-      supabase
-        .from("vendors")
-        .select("id, name, slug")
-        .eq("status", "active")
-        .order("name", { ascending: true })
-        .order("id", { ascending: true })
-        .range(from, to)
-        .returns<VendorQueryRow[]>(),
-    ),
-  ]);
+  const [settlementsResult, entriesResult, vendorsResult, clawbacksResult] =
+    await Promise.all([
+      fetchAllRows<SettlementQueryRow>((from, to) =>
+        supabase
+          .from("settlements")
+          .select(
+            "id, vendor_id, status, total_minor, clawback_minor, note, created_at, paid_at, created_by, paid_by, voided_at, voided_by, void_reason, paid_amount_minor, transfer_method, transfer_reference, proof_note, vendor:vendors(name, slug), settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
+          )
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, to)
+          .returns<SettlementQueryRow[]>(),
+      ),
+      fetchAllRows<CommissionEntryRecord>((from, to) =>
+        supabase
+          .from("commission_entries")
+          .select(
+            "id, vendor_id, status, rate, base_minor, amount_minor, earned_at, reversed_at",
+          )
+          .order("earned_at", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, to)
+          .returns<CommissionEntryRecord[]>(),
+      ),
+      fetchAllRows<VendorQueryRow>((from, to) =>
+        supabase
+          .from("vendors")
+          .select("id, name, slug")
+          .eq("status", "active")
+          .order("name", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to)
+          .returns<VendorQueryRow[]>(),
+      ),
+      // R-02 (D-08, N-01): outstanding paid-return clawbacks — the
+      // direct-repayment fallback needs a caller on this page.
+      fetchAllRows<OutstandingClawbackRow>((from, to) =>
+        supabase
+          .from("commission_clawbacks")
+          .select(
+            "id, refund_case_id, vendor_id, amount_minor, status, created_at, vendor:vendors(name, slug), clawback_applications(amount_minor)",
+          )
+          .eq("status", "outstanding")
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to)
+          .returns<OutstandingClawbackRow[]>(),
+      ),
+    ]);
 
   const settlements = settlementsResult.rows;
   const settlementsById = new Map(
@@ -184,6 +219,42 @@ export default async function AdminSettlementsPage({
   const openSettlements = records.filter(
     (record) => record.status === "open" && !record.voided_at,
   );
+
+  // R-02 (D-08, N-01): outstanding paid-return clawbacks, with what each
+  // vendor still owes after any partial applications. A clawback that was
+  // fully applied is consumed, so an outstanding one always has a
+  // positive remainder; the filter guards a stale row either way.
+  const outstandingClawbacks = clawbacksResult.rows
+    .map((clawback) => ({
+      ...clawback,
+      clawback_applications: clawback.clawback_applications ?? [],
+      remainingMinor: clawbackRemainingMinor(
+        clawback,
+        clawback.clawback_applications ?? [],
+      ),
+    }))
+    .filter((clawback) => clawback.remainingMinor > 0);
+
+  const clawbackCaseIds = Array.from(
+    new Set(
+      outstandingClawbacks.map((clawback) => clawback.refund_case_id),
+    ),
+  );
+  const { data: clawbackCaseData } = clawbackCaseIds.length
+    ? await supabase
+        .from("refund_cases")
+        .select(
+          "id, order_vendor:order_vendors(order:orders(public_reference))",
+        )
+        .in("id", clawbackCaseIds)
+    : { data: [] };
+  const clawbackCases = new Map(
+    ((clawbackCaseData ?? []) as unknown as ClawbackCaseRow[]).map(
+      (refundCase) => [refundCase.id, refundCase],
+    ),
+  );
+  const clawbacksFailed =
+    clawbacksResult.failed || clawbacksResult.truncated;
   const paidSettlements = records.filter((record) => record.status === "paid");
   const voidedSettlements = records.filter(
     (record) => record.status === "voided" || record.voided_at,
@@ -376,6 +447,57 @@ export default async function AdminSettlementsPage({
           )}
         </div>
       </section>
+
+      {clawbacksFailed || outstandingClawbacks.length > 0 ? (
+        <section className="mt-8 rounded-2xl border border-line bg-paper-soft p-5">
+          <AdminSectionHeading
+            title={`Outstanding paid-return clawbacks (${outstandingClawbacks.length})`}
+            description="Commission Gifto already paid out that a shop owes back after a paid return (D-08). A clawback is netted against the shop's next settlement automatically; when a shop has no new commission to settle, record the direct repayment here instead — the shop repays Gifto directly and the reference is the proof."
+          />
+          {clawbacksFailed ? (
+            <div className="mt-4">
+              <AdminNotice tone="warning" role="alert">
+                Outstanding clawbacks could not be loaded in full. Refresh
+                the page to try again.
+              </AdminNotice>
+            </div>
+          ) : null}
+          {outstandingClawbacks.length === 0 ? null : (
+            <ul className="mt-4 flex flex-col gap-4">
+              {outstandingClawbacks.map((clawback) => {
+                const refundCase = clawbackCases.get(
+                  clawback.refund_case_id,
+                );
+                const orderReference =
+                  refundCase?.order_vendor?.order?.public_reference;
+                return (
+                  <li
+                    key={clawback.id}
+                    className="rounded-2xl border border-line-strong bg-paper p-5"
+                  >
+                    <div>
+                      <p className="text-lg font-medium text-ink">
+                        {clawback.vendor?.name ?? "Unknown shop"} —{" "}
+                        {formatEgp(clawback.remainingMinor)} owed
+                      </p>
+                      <p className="mt-1 text-xs text-ink-mute">
+                        Opened {formatDate(clawback.created_at)}
+                        {orderReference
+                          ? ` · Refund case for order ${orderReference}`
+                          : ""}
+                      </p>
+                    </div>
+                    <ClawbackRepaymentForm
+                      clawbackId={clawback.id}
+                      remainingMinor={clawback.remainingMinor}
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      ) : null}
 
       {!settlementsFailed ? (
         <section className="mt-8">

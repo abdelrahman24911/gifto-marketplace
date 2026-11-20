@@ -154,6 +154,26 @@ export function settlementNetDueMinor(
   return linesTotalMinor - clawbackMinor;
 }
 
+/**
+ * R-02 (D-08, N-01): what a vendor still owes on one outstanding
+ * paid-return clawback — its full amount less any partial applications
+ * already netted against earlier settlements. A clawback that was fully
+ * applied is consumed, never outstanding, so an outstanding clawback
+ * always has a positive remainder.
+ */
+export function clawbackRemainingMinor(
+  clawback: Pick<CommissionClawbackRecord, "amount_minor">,
+  applications: readonly Pick<ClawbackApplicationRecord, "amount_minor">[],
+): number {
+  return (
+    Math.abs(clawback.amount_minor) -
+    applications.reduce(
+      (applied, application) => applied + application.amount_minor,
+      0,
+    )
+  );
+}
+
 export const FINANCE_ENTRY_STATE_LABELS: Record<FinanceEntryState, string> = {
   unsettled: "Unsettled",
   open: "In open batch",
