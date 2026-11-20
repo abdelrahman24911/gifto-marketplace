@@ -108,7 +108,8 @@ export function safeCheckoutError(message: unknown): string {
     SAFE_DB_ERROR.test(trimmed) ||
     /is no longer available\.$/.test(trimmed) ||
     /is not accepting orders right now\.$/.test(trimmed) ||
-    /does not deliver to this address\.$/.test(trimmed)
+    /does not deliver to this address\.$/.test(trimmed) ||
+    /^The prices you saw could not be verified/.test(trimmed)
   ) {
     return trimmed;
   }

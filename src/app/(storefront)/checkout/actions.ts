@@ -21,6 +21,12 @@ import {
   coverageFromJson,
   deliveryCoverageAllows,
 } from "@/lib/vendor-settings";
+import {
+  buildPriceDiff,
+  parseExpectedPrices,
+  type ExpectedPrice,
+  type PriceDiff,
+} from "@/lib/price-consent";
 
 import type { Json } from "@/lib/supabase/database.types";
 
@@ -40,6 +46,7 @@ export type CheckoutValues = {
 export type CheckoutState =
   | { error: string; values: CheckoutValues; attempt: number }
   | { orderId: string; isGuest: boolean; attempt: number }
+  | { priceChanged: PriceDiff; values: CheckoutValues; attempt: number }
   | null;
 
 function readValues(formData: FormData): CheckoutValues {
@@ -149,6 +156,58 @@ async function consumeQuota(): Promise<QuotaResult> {
 }
 
 /**
+ * Builds the price-changed state after the database refuses an order: the
+ * live prices are re-read so the UI can show the old-vs-new diff and ask
+ * the customer to confirm the new prices before resubmitting.
+ */
+async function priceChangedState(
+  items: unknown,
+  expectedPrices: ExpectedPrice[],
+  values: CheckoutValues,
+  attempt: number,
+): Promise<CheckoutState> {
+  const fallback: CheckoutState = {
+    error:
+      "A price changed since you saw it. Refresh the cart and try again.",
+    values,
+    attempt,
+  };
+
+  try {
+    const quantities = new Map<string, number>();
+    if (Array.isArray(items)) {
+      for (const item of items) {
+        if (!item || typeof item !== "object") continue;
+        const record = item as { product_id?: unknown; quantity?: unknown };
+        if (
+          typeof record.product_id === "string" &&
+          typeof record.quantity === "number"
+        ) {
+          quantities.set(record.product_id, record.quantity);
+        }
+      }
+    }
+
+    const service = createServiceClient();
+    const { data, error } = await service
+      .from("products")
+      .select("id, name, price_minor")
+      .in("id", requestedProductIds(items));
+
+    if (error || !data) return fallback;
+    const diff = buildPriceDiff(
+      expectedPrices,
+      quantities,
+      data as { id: string; name: string; price_minor: number }[],
+    );
+    if (!diff) return fallback;
+    return { priceChanged: diff, values, attempt };
+  } catch {
+    return fallback;
+  }
+}
+
+/**
  * Places an order from the browser cart.
  *
  * Authentication is optional. Signed-in customers keep the existing account
@@ -189,6 +248,66 @@ export async function placeOrder(
 
   if (!Array.isArray(items) || items.length === 0) {
     return { error: "Your cart is empty.", values, attempt };
+  }
+
+  // P1-03: the prices the customer saw travel with the order. They are
+  // validated strictly — a malformed payload is a stale session, not an
+  // order the database should price blindly. A price confirmation (sent by
+  // the "confirm new prices" button after a PRICE_CHANGED refusal) carries
+  // the live prices from the diff instead of the cart prices.
+  let cartPrices: ExpectedPrice[] | null = null;
+  try {
+    cartPrices = parseExpectedPrices(
+      JSON.parse(String(formData.get("expected_prices") ?? "null")),
+    );
+  } catch {
+    cartPrices = null;
+  }
+  const cartTotalRaw = String(formData.get("expected_total") ?? "").trim();
+  const cartTotalMinor = /^\d+$/.test(cartTotalRaw)
+    ? Number(cartTotalRaw)
+    : null;
+  if (cartPrices === null || cartTotalMinor === null) {
+    return {
+      error: "Your checkout session expired. Please refresh and try again.",
+      values,
+      attempt,
+    };
+  }
+
+  let expectedPrices = cartPrices;
+  let expectedTotalMinor = cartTotalMinor;
+  const confirmationRaw = String(formData.get("price_confirmation") ?? "");
+  if (confirmationRaw) {
+    let confirmation: {
+      prices: ExpectedPrice[];
+      total: number;
+    } | null = null;
+    try {
+      const parsed: unknown = JSON.parse(confirmationRaw);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const record = parsed as Record<string, unknown>;
+        const prices = parseExpectedPrices(record.prices);
+        const total =
+          typeof record.total === "number" &&
+          Number.isSafeInteger(record.total) &&
+          record.total >= 0
+            ? record.total
+            : null;
+        if (prices && total !== null) confirmation = { prices, total };
+      }
+    } catch {
+      confirmation = null;
+    }
+    if (!confirmation) {
+      return {
+        error: "Your checkout session expired. Please refresh and try again.",
+        values,
+        attempt,
+      };
+    }
+    expectedPrices = confirmation.prices;
+    expectedTotalMinor = confirmation.total;
   }
 
   if (values.contactEmail && !isValidEmail(values.contactEmail)) {
@@ -241,7 +360,7 @@ export async function placeOrder(
 
   if (user) {
     const { data, error } = await supabase.rpc(
-      "place_order_with_idempotency",
+      "place_order_with_price_check",
       {
         p_items: items as Json,
         p_recipient_name: values.recipientName,
@@ -252,10 +371,17 @@ export async function placeOrder(
         p_governorate: values.governorate,
         p_notes: values.notes || null,
         p_idempotency_key: idempotencyKey,
+        p_expected_prices: expectedPrices as unknown as Json,
+        p_expected_total_minor: expectedTotalMinor,
       },
     );
 
     if (error) {
+      // P1-03: a live price differs from the cart — show the diff and ask
+      // the customer to confirm the new prices instead of charging silently.
+      if (error.message?.startsWith("PRICE_CHANGED")) {
+        return priceChangedState(items, expectedPrices, values, attempt);
+      }
       return { error: safeCheckoutError(error.message), values, attempt };
     }
     if (!data) {
@@ -283,7 +409,7 @@ export async function placeOrder(
   // browser; it is used for this narrow, validated RPC only.
   try {
     const service = createServiceClient();
-    const { data, error } = await service.rpc("place_guest_order", {
+    const { data, error } = await service.rpc("place_guest_order_with_price_check", {
       p_items: items as Json,
       p_recipient_name: values.recipientName,
       p_contact_phone: values.contactPhone,
@@ -294,9 +420,16 @@ export async function placeOrder(
       p_notes: values.notes || null,
       p_idempotency_key: idempotencyKey,
       p_guest_token_hash: sha256Hex(guestToken),
+      p_expected_prices: expectedPrices as unknown as Json,
+      p_expected_total_minor: expectedTotalMinor,
     });
 
     if (error) {
+      // P1-03: a live price differs from the cart — show the diff and ask
+      // the customer to confirm the new prices instead of charging silently.
+      if (error.message?.startsWith("PRICE_CHANGED")) {
+        return priceChangedState(items, expectedPrices, values, attempt);
+      }
       return { error: safeCheckoutError(error.message), values, attempt };
     }
     if (!data) {

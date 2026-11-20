@@ -1497,6 +1497,39 @@ export type Database = {
         };
         Returns: string;
       };
+      place_order_with_price_check: {
+        Args: {
+          p_items: Json;
+          p_recipient_name: string;
+          p_contact_phone: string;
+          p_contact_email: string | null;
+          p_address_line: string;
+          p_city: string;
+          p_governorate: string;
+          p_notes: string | null;
+          p_idempotency_key: string;
+          p_expected_prices: Json;
+          p_expected_total_minor: number;
+        };
+        Returns: string;
+      };
+      place_guest_order_with_price_check: {
+        Args: {
+          p_items: Json;
+          p_recipient_name: string;
+          p_contact_phone: string;
+          p_contact_email: string | null;
+          p_address_line: string;
+          p_city: string;
+          p_governorate: string;
+          p_notes: string | null;
+          p_idempotency_key: string;
+          p_guest_token_hash: string;
+          p_expected_prices: Json;
+          p_expected_total_minor: number;
+        };
+        Returns: string;
+      };
       get_guest_order: {
         Args: { p_order_id: string; p_token_hash: string };
         Returns: Json | null;

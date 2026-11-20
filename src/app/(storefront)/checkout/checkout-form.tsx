@@ -115,6 +115,23 @@ export function CheckoutForm({
         />
         <input
           type="hidden"
+          name="expected_prices"
+          value={JSON.stringify(
+            checkoutItems.map((item) => ({
+              product_id: item.productId,
+              unit_price_minor: item.priceMinor,
+            })),
+          )}
+          readOnly
+        />
+        <input
+          type="hidden"
+          name="expected_total"
+          value={String(checkoutSubtotalMinor)}
+          readOnly
+        />
+        <input
+          type="hidden"
           name="idempotency_key"
           value={attempt.idempotencyKey}
           suppressHydrationWarning
@@ -152,6 +169,60 @@ export function CheckoutForm({
           >
             {state.error}
           </p>
+        ) : null}
+
+        {state && "priceChanged" in state ? (
+          <div
+            role="alert"
+            className="rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900"
+          >
+            <p className="font-medium">
+              Some prices changed since you added these to your cart.
+            </p>
+            <ul className="mt-2 flex flex-col gap-1">
+              {state.priceChanged.lines
+                .filter((line) => line.expectedMinor !== line.liveMinor)
+                .map((line) => (
+                  <li
+                    key={line.productId}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <span>
+                      {line.name} × {line.quantity}
+                    </span>
+                    <span className="whitespace-nowrap">
+                      <s>{formatEgp(line.expectedMinor)}</s> →{" "}
+                      <strong>{formatEgp(line.liveMinor)}</strong> each
+                    </span>
+                  </li>
+                ))}
+            </ul>
+            <p className="mt-2">
+              New total:{" "}
+              <strong>
+                {formatEgp(state.priceChanged.liveTotalMinor)}
+              </strong>{" "}
+              (was {formatEgp(state.priceChanged.expectedTotalMinor)}).
+            </p>
+            <button
+              type="submit"
+              name="price_confirmation"
+              value={JSON.stringify({
+                prices: state.priceChanged.lines.map((line) => ({
+                  product_id: line.productId,
+                  unit_price_minor: line.liveMinor,
+                })),
+                total: state.priceChanged.liveTotalMinor,
+              })}
+              disabled={pending}
+              className="mt-3 rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Confirm new prices and place order
+            </button>
+            <p className="mt-2 text-xs">
+              Nothing was ordered yet — this order was not placed.
+            </p>
+          </div>
         ) : null}
 
         <label className={labelClass}>
@@ -373,7 +444,9 @@ export function CheckoutForm({
         <p className="mt-4 text-xs text-zinc-500">
           Prices and stock are confirmed by Gifto when you place the order. If
           an item sold out in the meantime, the order is not placed and you can
-          adjust your cart.
+          adjust your cart. If a price changed since you saw it, the order is
+          not placed either — you will see the new price and can confirm it
+          before ordering.
           {isBuyNow
             ? " Your existing cart is not part of this order and stays unchanged."
             : null}

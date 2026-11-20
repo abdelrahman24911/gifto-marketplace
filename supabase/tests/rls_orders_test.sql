@@ -928,6 +928,139 @@ begin
   raise notice 'TEST 16 PASSED: failed-delivery restock logged exactly one movement';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST 17: price-change consent on the signed-in path (P1-03)
+-- ---------------------------------------------------------------------------
+-- Restore known stock/prices first: earlier tests bought against these rows.
+reset role;
+update public.products set stock = 5, price_minor = 10000
+ where id = '51100000-0000-0000-0000-000000000001';
+
+set role authenticated;
+set request.jwt.claim.sub = '11100000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"11100000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_oid uuid;
+  v_orders_before int;
+  v_orders_after int;
+  v_blocked boolean := false;
+  v_total int;
+begin
+  -- (a) Unchanged prices place normally.
+  v_oid := public.place_order_with_price_check(
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Sara Buyer', '01001112233', 'buyer@orders.gifto.test',
+    '12 Main Street', 'Alexandria', 'Alexandria', null,
+    gen_random_uuid(),
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":10000}]'::jsonb,
+    10000);
+  if v_oid is null then
+    raise exception 'TEST 17 FAILED: unchanged prices did not place';
+  end if;
+  select total_minor into v_total from public.orders where id = v_oid;
+  if v_total <> 10000 then
+    raise exception 'TEST 17 FAILED: placed total is % not 10000', v_total;
+  end if;
+  raise notice 'TEST 17a PASSED: unchanged prices place normally';
+end $$;
+
+-- The vendor changes the price between cart and submit (as superuser;
+-- authenticated holds no UPDATE on products).
+reset role;
+update public.products set price_minor = 12000
+ where id = '51100000-0000-0000-0000-000000000001';
+
+set role authenticated;
+set request.jwt.claim.sub = '11100000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"11100000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_oid uuid;
+  v_orders_before int;
+  v_orders_after int;
+  v_blocked boolean := false;
+  v_total int;
+begin
+  -- (b) A price changed between cart and submit blocks the order.
+  select count(*) into v_orders_before from public.orders;
+  begin
+    perform public.place_order_with_price_check(
+      '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+      'Sara Buyer', '01001112233', 'buyer@orders.gifto.test',
+      '12 Main Street', 'Alexandria', 'Alexandria', null,
+      gen_random_uuid(),
+      '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":10000}]'::jsonb,
+      10000);
+  exception when check_violation then
+    if sqlerrm like 'PRICE_CHANGED:%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 17 FAILED: wrong error for a price change: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 17 FAILED: changed price did not block the order';
+  end if;
+  select count(*) into v_orders_after from public.orders;
+  if v_orders_after <> v_orders_before then
+    raise exception 'TEST 17 FAILED: blocked order still created a row';
+  end if;
+  if (select stock from public.products where id = '51100000-0000-0000-0000-000000000001') <> 4 then
+    raise exception 'TEST 17 FAILED: blocked order changed stock';
+  end if;
+  raise notice 'TEST 17b PASSED: changed price blocks with PRICE_CHANGED, nothing created';
+
+  -- (c) Re-confirming with the new expected prices places at the new price.
+  v_oid := public.place_order_with_price_check(
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Sara Buyer', '01001112233', 'buyer@orders.gifto.test',
+    '12 Main Street', 'Alexandria', 'Alexandria', null,
+    gen_random_uuid(),
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":12000}]'::jsonb,
+    12000);
+  if v_oid is null then
+    raise exception 'TEST 17 FAILED: re-confirm did not place';
+  end if;
+  select total_minor into v_total from public.orders where id = v_oid;
+  if v_total <> 12000 then
+    raise exception 'TEST 17 FAILED: re-confirmed total is % not 12000', v_total;
+  end if;
+  raise notice 'TEST 17c PASSED: re-confirm places at the new price';
+
+  -- (d) A wrong expected total blocks even when unit prices match.
+  v_blocked := false;
+  begin
+    perform public.place_order_with_price_check(
+      '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+      'Sara Buyer', '01001112233', 'buyer@orders.gifto.test',
+      '12 Main Street', 'Alexandria', 'Alexandria', null,
+      gen_random_uuid(),
+      '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":12000}]'::jsonb,
+      10000);
+  exception when check_violation then
+    if sqlerrm like 'PRICE_CHANGED:%' then
+      v_blocked := true;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 17 FAILED: wrong expected total did not block';
+  end if;
+  raise notice 'TEST 17d PASSED: wrong expected total blocks with PRICE_CHANGED';
+
+  -- (e) The legacy wrapper keeps its old behaviour (no check) — checkout no
+  -- longer uses it, but its signature is stable for existing callers.
+  v_oid := public.place_order_with_idempotency(
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Sara Buyer', '01001112233', 'buyer@orders.gifto.test',
+    '12 Main Street', 'Alexandria', 'Alexandria', null,
+    gen_random_uuid());
+  if v_oid is null then
+    raise exception 'TEST 17 FAILED: legacy wrapper stopped placing';
+  end if;
+  raise notice 'TEST 17 PASSED: signed-in price consent blocks, re-confirms, and totals are checked';
+end $$;
+
 reset role;
 
 rollback;

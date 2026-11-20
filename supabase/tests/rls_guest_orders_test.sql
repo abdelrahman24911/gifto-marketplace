@@ -1227,6 +1227,95 @@ begin
   raise notice 'TEST 22 PASSED: claim attaches the order and clears the guest token';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST 23: price-change consent on the guest path (P1-03)
+-- ---------------------------------------------------------------------------
+reset role;
+update public.products set stock = 5, price_minor = 30000
+ where id = '51100000-0000-0000-0000-000000000101';
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_hash text := encode(digest('guest-token-price', 'sha256'), 'hex');
+  v_oid uuid;
+  v_total int;
+begin
+  -- Unchanged prices place normally for a guest.
+  v_oid := public.place_guest_order_with_price_check(
+    '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
+    'Price Guest', '01001112233', null,
+    '12 Main Street', 'Alexandria', 'Alexandria', null,
+    gen_random_uuid(), v_hash,
+    '[{"product_id":"51100000-0000-0000-0000-000000000101","unit_price_minor":30000}]'::jsonb,
+    30000);
+  if v_oid is null then
+    raise exception 'TEST 23 FAILED: unchanged guest prices did not place';
+  end if;
+  select (public.get_guest_order(v_oid, v_hash) ->> 'total_minor')::int
+    into v_total;
+  if v_total <> 30000 then
+    raise exception 'TEST 23 FAILED: guest placed total is % not 30000', v_total;
+  end if;
+  raise notice 'TEST 23a PASSED: unchanged guest prices place normally';
+end $$;
+
+-- The vendor changes the price between cart and submit.
+reset role;
+update public.products set price_minor = 32000
+ where id = '51100000-0000-0000-0000-000000000101';
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_hash text := encode(digest('guest-token-price-2', 'sha256'), 'hex');
+  v_oid uuid;
+  v_blocked boolean := false;
+  v_total int;
+begin
+  -- A changed price blocks the guest order with PRICE_CHANGED.
+  begin
+    perform public.place_guest_order_with_price_check(
+      '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
+      'Price Guest', '01001112233', null,
+      '12 Main Street', 'Alexandria', 'Alexandria', null,
+      gen_random_uuid(), v_hash,
+      '[{"product_id":"51100000-0000-0000-0000-000000000101","unit_price_minor":30000}]'::jsonb,
+      30000);
+  exception when check_violation then
+    if sqlerrm like 'PRICE_CHANGED:%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 23 FAILED: wrong error for a guest price change: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 23 FAILED: changed guest price did not block';
+  end if;
+
+  -- Re-confirming with the new price places at the new price.
+  v_oid := public.place_guest_order_with_price_check(
+    '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
+    'Price Guest', '01001112233', null,
+    '12 Main Street', 'Alexandria', 'Alexandria', null,
+    gen_random_uuid(), v_hash,
+    '[{"product_id":"51100000-0000-0000-0000-000000000101","unit_price_minor":32000}]'::jsonb,
+    32000);
+  if v_oid is null then
+    raise exception 'TEST 23 FAILED: guest re-confirm did not place';
+  end if;
+  select (public.get_guest_order(v_oid, v_hash) ->> 'total_minor')::int
+    into v_total;
+  if v_total <> 32000 then
+    raise exception 'TEST 23 FAILED: guest re-confirmed total is % not 32000', v_total;
+  end if;
+  raise notice 'TEST 23 PASSED: guest price consent blocks and re-confirms at the new price';
+end $$;
+
 reset role;
 
 rollback;
