@@ -1,3 +1,9 @@
+import {
+  businessDateFromKey,
+  businessDateKey,
+  startOfBusinessDayOffset,
+} from "@/lib/business-time";
+
 import type {
   CommissionStatus,
   OrderStatus,
@@ -80,6 +86,24 @@ export type AdminShopPerformance = {
   deliveredLineCount: number;
 };
 
+export type AdminProductLineRecord = {
+  id: string;
+  order_vendor_id: string;
+  product_id: string | null;
+  product_name: string;
+  quantity: number;
+  line_total_minor: number;
+  delivered_at: string;
+};
+
+export type AdminProductPerformance = {
+  key: string;
+  name: string;
+  units: number;
+  revenueMinor: number;
+  orderCount: number;
+};
+
 const DAY_MS = 86_400_000;
 const MONTHS = [
   "Jan",
@@ -109,23 +133,24 @@ export function parseAdminAnalyticsRange(
   return isAdminAnalyticsRange(value) ? value : fallback;
 }
 
-function startOfUtcDay(date: Date): Date {
-  return new Date(
-    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
-  );
+function dateFromKey(key: string): Date {
+  const parts = businessDateFromKey(key);
+  if (!parts) return new Date(Number.NaN);
+  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
 }
 
-function startOfUtcWeek(date: Date): Date {
-  const day = startOfUtcDay(date);
-  const daysSinceMonday = (day.getUTCDay() + 6) % 7;
-  return new Date(day.getTime() - daysSinceMonday * DAY_MS);
+function keyFromDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
 }
 
-function bucketStart(
-  date: Date,
+function bucketStartKey(
+  key: string,
   granularity: AdminAnalyticsGranularity,
-): Date {
-  return granularity === "week" ? startOfUtcWeek(date) : startOfUtcDay(date);
+): string {
+  if (granularity === "day") return key;
+  const date = dateFromKey(key);
+  const daysSinceMonday = (date.getUTCDay() + 6) % 7;
+  return keyFromDate(new Date(date.getTime() - daysSinceMonday * DAY_MS));
 }
 
 function granularityFor(
@@ -144,14 +169,14 @@ function bucketKey(
   date: Date,
   granularity: AdminAnalyticsGranularity,
 ): string {
-  return bucketStart(date, granularity).toISOString().slice(0, 10);
+  return bucketStartKey(businessDateKey(date), granularity);
 }
 
 function bucketLabel(
   key: string,
   granularity: AdminAnalyticsGranularity,
 ): string {
-  const date = new Date(`${key}T00:00:00.000Z`);
+  const date = dateFromKey(key);
   const month = MONTHS[date.getUTCMonth()];
   if (granularity === "week") return `Week of ${date.getUTCDate()} ${month}`;
   return `${date.getUTCDate()} ${month}`;
@@ -161,23 +186,25 @@ export function adminAnalyticsWindowStart(
   range: AdminAnalyticsRange,
   now: Date = new Date(),
 ): Date {
-  return startOfUtcDay(
-    new Date(now.getTime() - (RANGE_DAYS[range] - 1) * DAY_MS),
-  );
+  return startOfBusinessDayOffset(now, RANGE_DAYS[range] - 1);
 }
 
 function generateBuckets(
   start: Date,
   end: Date,
   granularity: AdminAnalyticsGranularity,
-): Date[] {
-  const buckets: Date[] = [];
-  let cursor = bucketStart(start, granularity);
-  const endKey = bucketStart(end, granularity).getTime();
+): string[] {
+  const buckets: string[] = [];
+  let cursor = dateFromKey(
+    bucketStartKey(businessDateKey(start), granularity),
+  );
+  const endTime = dateFromKey(
+    bucketStartKey(businessDateKey(end), granularity),
+  ).getTime();
 
   for (let guard = 0; guard < 256; guard += 1) {
-    buckets.push(new Date(cursor));
-    if (cursor.getTime() >= endKey) break;
+    buckets.push(keyFromDate(cursor));
+    if (cursor.getTime() >= endTime) break;
     cursor = new Date(
       cursor.getTime() +
         (granularity === "week" ? 7 * DAY_MS : DAY_MS),
@@ -204,18 +231,15 @@ function uniqueById<T extends { id: string }>(rows: readonly T[]): T[] {
 }
 
 function seriesFromCounts(
-  buckets: Date[],
+  buckets: readonly string[],
   counts: ReadonlyMap<string, number>,
   granularity: AdminAnalyticsGranularity,
 ): AdminSeriesPoint[] {
-  return buckets.map((bucket) => {
-    const key = bucket.toISOString().slice(0, 10);
-    return {
-      key,
-      label: bucketLabel(key, granularity),
-      value: counts.get(key) ?? 0,
-    };
-  });
+  return buckets.map((key) => ({
+    key,
+    label: bucketLabel(key, granularity),
+    value: counts.get(key) ?? 0,
+  }));
 }
 
 export function computeAdminMarketplaceMetrics(
@@ -360,6 +384,65 @@ export function computeAdminShopPerformance(
       b.deliveredMinor - a.deliveredMinor ||
       a.name.localeCompare(b.name),
   );
+}
+
+export function computeAdminProductPerformance(
+  lines: readonly AdminProductLineRecord[],
+  range: AdminAnalyticsRange,
+  now: Date = new Date(),
+): AdminProductPerformance[] {
+  const windowStart = adminAnalyticsWindowStart(range, now);
+  const products = new Map<
+    string,
+    {
+      name: string;
+      units: number;
+      revenueMinor: number;
+      orders: Set<string>;
+    }
+  >();
+
+  for (const line of uniqueById(lines)) {
+    const deliveredAt = parseDate(line.delivered_at);
+    if (
+      !deliveredAt ||
+      deliveredAt.getTime() < windowStart.getTime() ||
+      deliveredAt.getTime() > now.getTime()
+    ) {
+      continue;
+    }
+
+    const name = line.product_name?.trim() || "Unknown item";
+    const key = line.product_id ?? `name:${name.toLowerCase()}`;
+    const current = products.get(key) ?? {
+      name,
+      units: 0,
+      revenueMinor: 0,
+      orders: new Set<string>(),
+    };
+
+    current.units += Number.isFinite(line.quantity) ? line.quantity : 0;
+    current.revenueMinor += Number.isFinite(line.line_total_minor)
+      ? line.line_total_minor
+      : 0;
+    current.orders.add(line.order_vendor_id);
+    products.set(key, current);
+  }
+
+  return Array.from(products.entries())
+    .map(([key, product]) => ({
+      key,
+      name: product.name,
+      units: product.units,
+      revenueMinor: product.revenueMinor,
+      orderCount: product.orders.size,
+    }))
+    .sort(
+      (a, b) =>
+        b.revenueMinor - a.revenueMinor ||
+        b.units - a.units ||
+        a.name.localeCompare(b.name),
+    );
 }
 
 export function sumAdminSeries(points: readonly AdminSeriesPoint[]): number {

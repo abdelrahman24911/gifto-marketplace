@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
+import { Pagination } from "@/components/pagination";
 import { Breadcrumb, EmptyState } from "@/components/ui/section";
 import { requirePlatformAdmin } from "@/lib/auth";
+import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
 import { fetchAllRows } from "@/lib/fetch-all";
 import {
   buildSettlementLineLookup,
@@ -11,6 +14,12 @@ import {
   totalsForFinanceState,
 } from "@/lib/finance";
 import { formatEgp } from "@/lib/money";
+import {
+  DEFAULT_PAGE_SIZE,
+  clampPage,
+  pageWindow,
+  parsePage,
+} from "@/lib/pagination";
 
 import {
   AdminActionLink,
@@ -51,6 +60,7 @@ function formatDate(value: string) {
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: BUSINESS_TIME_ZONE,
   });
 }
 
@@ -63,14 +73,31 @@ function actorLabel(
   return actor?.full_name || actor?.email || "Removed administrator";
 }
 
-export default async function AdminSettlementsPage() {
-  const { supabase } = await requirePlatformAdmin();
+function settlementsHref({
+  paidPage = 1,
+  voidedPage = 1,
+}: {
+  paidPage?: number;
+  voidedPage?: number;
+}) {
+  const params = new URLSearchParams();
+  if (paidPage > 1) params.set("paidPage", String(paidPage));
+  if (voidedPage > 1) params.set("voidedPage", String(voidedPage));
+  const search = params.toString();
+  return search ? `/admin/settlements?${search}` : "/admin/settlements";
+}
 
-  const [
-    settlementsResult,
-    entriesResult,
-    { data: vendorData, error: vendorsError },
-  ] = await Promise.all([
+export default async function AdminSettlementsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ paidPage?: string; voidedPage?: string }>;
+}) {
+  const params = await searchParams;
+  const { supabase } = await requirePlatformAdmin();
+  const requestedPaidPage = parsePage(params.paidPage);
+  const requestedVoidedPage = parsePage(params.voidedPage);
+
+  const [settlementsResult, entriesResult, vendorsResult] = await Promise.all([
     fetchAllRows<SettlementQueryRow>((from, to) =>
       supabase
         .from("settlements")
@@ -93,11 +120,16 @@ export default async function AdminSettlementsPage() {
         .range(from, to)
         .returns<CommissionEntryRecord[]>(),
     ),
-    supabase
-      .from("vendors")
-      .select("id, name, slug")
-      .eq("status", "active")
-      .order("name", { ascending: true }),
+    fetchAllRows<VendorQueryRow>((from, to) =>
+      supabase
+        .from("vendors")
+        .select("id, name, slug")
+        .eq("status", "active")
+        .order("name", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to)
+        .returns<VendorQueryRow[]>(),
+    ),
   ]);
 
   const settlements = settlementsResult.rows;
@@ -105,7 +137,7 @@ export default async function AdminSettlementsPage() {
     settlements.map((settlement) => [settlement.id, settlement]),
   );
   const entries = entriesResult.rows;
-  const vendors = (vendorData ?? []) as VendorQueryRow[];
+  const vendors = vendorsResult.rows;
 
   const records: SettlementRecord[] = settlements.map((settlement) => ({
     id: settlement.id,
@@ -152,6 +184,19 @@ export default async function AdminSettlementsPage() {
     (record) => record.status === "voided" || record.voided_at,
   );
 
+  const paidPage = clampPage(requestedPaidPage, paidSettlements.length);
+  const voidedPage = clampPage(requestedVoidedPage, voidedSettlements.length);
+  const paidWindow = pageWindow(paidPage);
+  const voidedWindow = pageWindow(voidedPage);
+  const visiblePaid = paidSettlements.slice(
+    paidWindow.from,
+    paidWindow.to + 1,
+  );
+  const visibleVoided = voidedSettlements.slice(
+    voidedWindow.from,
+    voidedWindow.to + 1,
+  );
+
   const actorIds = Array.from(
     new Set(
       records
@@ -174,14 +219,30 @@ export default async function AdminSettlementsPage() {
     ((actorData ?? []) as ActorRow[]).map((actor) => [actor.id, actor]),
   );
 
-  const loadError =
-    settlementsResult.failed || entriesResult.failed || vendorsError;
+  const settlementsFailed = settlementsResult.failed;
+  const entriesFailed = entriesResult.failed;
+  const vendorsFailed = vendorsResult.failed;
+  const financeStateAvailable =
+    !settlementsResult.failed &&
+    !settlementsResult.truncated &&
+    !entriesResult.failed &&
+    !entriesResult.truncated;
+  const vendorsIncomplete = vendorsResult.failed || vendorsResult.truncated;
   const totalsIncomplete =
     settlementsResult.truncated || entriesResult.truncated;
   const entryRead = {
     failed: entriesResult.failed,
     truncated: entriesResult.truncated,
   };
+
+  if (
+    !settlementsFailed &&
+    (requestedPaidPage !== paidPage || requestedVoidedPage !== voidedPage)
+  ) {
+    redirect(
+      settlementsHref({ paidPage, voidedPage }),
+    );
+  }
 
   return (
     <div className="w-full">
@@ -205,10 +266,22 @@ export default async function AdminSettlementsPage() {
         />
       </div>
 
-      {loadError ? (
+      {settlementsFailed || entriesFailed ? (
         <div className="mt-4">
           <AdminNotice tone="danger" role="alert">
-            Settlement data could not be loaded. Refresh the page to try again.
+            {settlementsFailed
+              ? "Settlement and commission state could not be loaded. Refresh the page to try again."
+              : "Commission entries could not be loaded, so settlement balances are unavailable. Refresh the page to try again."}
+          </AdminNotice>
+        </div>
+      ) : null}
+
+      {!settlementsFailed && !entriesFailed && vendorsFailed ? (
+        <div className="mt-4">
+          <AdminNotice tone="warning" role="alert">
+            The shop list could not be loaded. Existing settlements remain
+            visible, but opening a new one is unavailable until the shop list
+            loads.
           </AdminNotice>
         </div>
       ) : null}
@@ -216,9 +289,18 @@ export default async function AdminSettlementsPage() {
       {totalsIncomplete ? (
         <div className="mt-4">
           <AdminNotice tone="warning" role="status">
-            This shop network has more settlement history than can be summed in
-            one page. The balances below are incomplete; use individual shop
+            This shop network has more settlement history than can be summed
+            reliably. The balances below are incomplete; use individual shop
             finance pages for exact statements.
+          </AdminNotice>
+        </div>
+      ) : null}
+
+      {vendorsResult.truncated ? (
+        <div className="mt-4">
+          <AdminNotice tone="warning" role="status">
+            The active shop list is larger than the current read, so the
+            settlement form may omit shops.
           </AdminNotice>
         </div>
       ) : null}
@@ -228,26 +310,45 @@ export default async function AdminSettlementsPage() {
           items={[
             {
               label: "Unsettled commission",
-              value: formatEgp(unsettled.commissionMinor),
-              hint: `${unsettled.count} suborders · ${formatEgp(unsettled.netMinor)} shop net`,
-              emphasis: unsettled.count > 0 ? "warning" : "default",
+              value: financeStateAvailable
+                ? formatEgp(unsettled.commissionMinor)
+                : "—",
+              hint: financeStateAvailable
+                ? `${unsettled.count} suborders · ${formatEgp(unsettled.netMinor)} shop net`
+                : "Unavailable until the ledger reads in full",
+              emphasis:
+                financeStateAvailable && unsettled.count > 0
+                  ? "warning"
+                  : "default",
             },
             {
               label: "In open batches",
-              value: formatEgp(inOpenBatches.commissionMinor),
-              hint: `${inOpenBatches.count} suborders · awaiting payout`,
+              value: financeStateAvailable
+                ? formatEgp(inOpenBatches.commissionMinor)
+                : "—",
+              hint: financeStateAvailable
+                ? `${inOpenBatches.count} suborders · awaiting payout`
+                : "Unavailable until the ledger reads in full",
               emphasis: "accent",
             },
             {
               label: "Paid to date",
-              value: formatEgp(paid.commissionMinor),
-              hint: `${paid.count} suborders · ${formatEgp(paid.netMinor)} shop net`,
+              value: financeStateAvailable
+                ? formatEgp(paid.commissionMinor)
+                : "—",
+              hint: financeStateAvailable
+                ? `${paid.count} suborders · ${formatEgp(paid.netMinor)} shop net`
+                : "Unavailable until the ledger reads in full",
               emphasis: "positive",
             },
             {
               label: "Earned lifetime",
-              value: formatEgp(earnedLifetime.commissionMinor),
-              hint: `${reversed.count} reversed · ${formatEgp(reversed.commissionMinor)} excluded`,
+              value: financeStateAvailable
+                ? formatEgp(earnedLifetime.commissionMinor)
+                : "—",
+              hint: financeStateAvailable
+                ? `${reversed.count} reversed · ${formatEgp(reversed.commissionMinor)} excluded`
+                : "Unavailable until the ledger reads in full",
             },
           ]}
         />
@@ -259,11 +360,20 @@ export default async function AdminSettlementsPage() {
           description="Available commission is snapshotted into a new batch. A shop can have only one open settlement at a time."
         />
         <div className="mt-4">
-          <CreateSettlementForm vendors={activeVendors} />
+          {financeStateAvailable && !vendorsIncomplete ? (
+            <CreateSettlementForm vendors={activeVendors} />
+          ) : (
+            <AdminNotice tone="warning" role="status">
+              {!financeStateAvailable
+                ? "Opening a settlement is unavailable until commission and settlement history can be read in full."
+                : "Opening a settlement is unavailable until the active shop list loads completely."}
+            </AdminNotice>
+          )}
         </div>
       </section>
 
-      <section className="mt-8">
+      {!settlementsFailed ? (
+        <section className="mt-8">
         <AdminSectionHeading
           title={`Open settlements (${openSettlements.length})`}
           description="Batches waiting for an external payout"
@@ -363,9 +473,11 @@ export default async function AdminSettlementsPage() {
             })}
           </ul>
         )}
-      </section>
+        </section>
+      ) : null}
 
-      <section className="mt-8">
+      {!settlementsFailed ? (
+        <section className="mt-8">
         <AdminSectionHeading
           title={`Payment history (${paidSettlements.length})`}
           description="Batches already paid out"
@@ -378,7 +490,7 @@ export default async function AdminSettlementsPage() {
           </div>
         ) : (
           <ul className="mt-4 overflow-hidden rounded-2xl border border-line bg-paper-soft">
-            {paidSettlements.map((settlement) => {
+            {visiblePaid.map((settlement) => {
               const row = settlementsById.get(settlement.id);
               const totalsResult = settlementTotalsResult(
                 settlement,
@@ -430,16 +542,26 @@ export default async function AdminSettlementsPage() {
             })}
           </ul>
         )}
-      </section>
+        <Pagination
+          page={paidPage}
+          total={paidSettlements.length}
+          pageSize={DEFAULT_PAGE_SIZE}
+          label="Paid settlement pages"
+          buildHref={(page) =>
+            settlementsHref({ paidPage: page, voidedPage })
+          }
+        />
+        </section>
+      ) : null}
 
-      {voidedSettlements.length > 0 ? (
+      {!settlementsFailed && voidedSettlements.length > 0 ? (
         <section className="mt-8">
           <AdminSectionHeading
             title={`Voided settlements (${voidedSettlements.length})`}
             description="Voiding releases entries for a new batch; the original batch and lines stay in the audit trail."
           />
           <ul className="mt-4 overflow-hidden rounded-2xl border border-line bg-paper-soft">
-            {voidedSettlements.map((settlement) => {
+            {visibleVoided.map((settlement) => {
               const row = settlementsById.get(settlement.id);
               const totalsResult = settlementTotalsResult(
                 settlement,
@@ -491,6 +613,15 @@ export default async function AdminSettlementsPage() {
               );
             })}
           </ul>
+          <Pagination
+            page={voidedPage}
+            total={voidedSettlements.length}
+            pageSize={DEFAULT_PAGE_SIZE}
+            label="Voided settlement pages"
+            buildHref={(page) =>
+              settlementsHref({ paidPage, voidedPage: page })
+            }
+          />
         </section>
       ) : null}
     </div>

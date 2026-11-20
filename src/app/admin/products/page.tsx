@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Pagination } from "@/components/pagination";
 import { Breadcrumb, EmptyState } from "@/components/ui/section";
 import { requirePlatformAdmin } from "@/lib/auth";
+import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { formatEgp } from "@/lib/money";
 import {
@@ -424,6 +425,7 @@ export default async function AdminProductsPage({
                       day: "numeric",
                       month: "short",
                       year: "numeric",
+                      timeZone: BUSINESS_TIME_ZONE,
                     })}
                   </div>
                 </li>

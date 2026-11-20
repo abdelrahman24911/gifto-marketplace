@@ -182,7 +182,9 @@ export default async function VendorOverviewPage({
           "id, status, subtotal_minor, created_at, delivered_at, order_items(product_id, product_name, quantity, line_total_minor)",
         )
         .eq("vendor_id", access.vendorId)
-        .gte("created_at", analyticsStart.toISOString())
+        .or(
+          `created_at.gte.${analyticsStart.toISOString()},delivered_at.gte.${analyticsStart.toISOString()}`,
+        )
         .order("created_at", { ascending: true })
         .order("id", { ascending: true })
         .range(from, to)

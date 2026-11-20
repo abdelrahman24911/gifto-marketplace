@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { Breadcrumb } from "@/components/ui/section";
 import { requirePlatformAdmin } from "@/lib/auth";
+import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
 import {
   commissionEntriesById,
   settlementEffectiveStatus,
@@ -72,6 +73,7 @@ function formatDate(value: string) {
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: BUSINESS_TIME_ZONE,
   });
 }
 

@@ -128,17 +128,41 @@ describe("computeVendorAnalytics", () => {
     expect(result.averageOrderValueMinor).toBe(7_500);
   });
 
-  it("always reconciles gross sales with recognised, open, cancelled and returned value", () => {
+  it("always reconciles placed gross sales with each placed outcome", () => {
     for (const range of ["7d", "30d", "90d", "all"] as AnalyticsRange[]) {
       const result = computeVendorAnalytics(ALL, range, NOW);
       expect(
-        result.revenueMinor +
+        result.placedDeliveredMinor +
           result.openMinor +
           result.cancelledMinor +
           result.returnedMinor,
         range,
       ).toBe(result.grossSalesMinor);
     }
+  });
+
+  it("recognises late deliveries in the window where they completed", () => {
+    const result = computeVendorAnalytics(
+      [
+        suborder({
+          id: "placed-before-window",
+          status: "delivered",
+          subtotal_minor: 8_000,
+          created_at: "2026-09-20T09:00:00.000Z",
+          delivered_at: "2026-11-05T09:00:00.000Z",
+        }),
+      ],
+      "7d",
+      NOW,
+    );
+
+    expect(result.totalOrders).toBe(0);
+    expect(result.grossSalesMinor).toBe(0);
+    expect(result.placedDeliveredMinor).toBe(0);
+    expect(result.revenueMinor).toBe(8_000);
+    expect(result.completedOrders).toBe(1);
+    expect(result.averageOrderValueMinor).toBe(8_000);
+    expect(sumSeries(result.revenueSeries)).toBe(8_000);
   });
 
   it("groups revenue by delivery date and orders by placement date", () => {

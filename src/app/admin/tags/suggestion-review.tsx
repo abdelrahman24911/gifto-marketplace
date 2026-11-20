@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 
+import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
 import { TAG_DESCRIPTION_MAX } from "@/lib/tagging";
 
 import { reviewTagSuggestion, type TagReviewState } from "./actions";
@@ -35,6 +36,7 @@ export function SuggestionReview({
               day: "numeric",
               month: "short",
               year: "numeric",
+              timeZone: BUSINESS_TIME_ZONE,
             })}
           </p>
         </div>

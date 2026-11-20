@@ -11,6 +11,7 @@ import {
   AdminStatStrip,
 } from "../ui";
 import { CategoryForm } from "./category-form";
+import { CategoryRowActions } from "./category-row-actions";
 
 export const metadata = { title: "Categories — Admin — Gifto" };
 
@@ -286,6 +287,13 @@ function CategoryGroup({
                   </Link>
                 ) : null}
               </div>
+              <CategoryRowActions
+                category={category}
+                productCount={productCounts.get(category.id) ?? 0}
+                productCountLabel={countLabel(
+                  productCounts.get(category.id) ?? 0,
+                )}
+              />
             </div>
             <div className="text-left sm:text-right">
               <p className="font-display text-2xl tabular-nums text-ink">

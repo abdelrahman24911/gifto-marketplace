@@ -315,3 +315,155 @@ export async function createCategory(
 
   return { success: `Category “${name}” created.` };
 }
+
+export type CategoryMutationState = {
+  categoryId?: string;
+  error?: string;
+  success?: string;
+} | null;
+
+function readCategoryId(formData: FormData): string | null {
+  const categoryId = String(formData.get("category_id") ?? "").trim();
+  return categoryId ? categoryId : null;
+}
+
+/**
+ * Updates the editable parts of a category. The slug is deliberately left
+ * untouched: renaming a category must not silently break public category URLs,
+ * bookmarks, or search results.
+ */
+export async function updateCategory(
+  _prev: CategoryMutationState,
+  formData: FormData,
+): Promise<CategoryMutationState> {
+  const categoryId = readCategoryId(formData);
+  const name = String(formData.get("name") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  const positionInput = String(formData.get("position") ?? "").trim();
+  const position = Number(positionInput);
+  const isActive = formData.get("is_active") === "on";
+
+  if (!categoryId) return { error: "Missing category id." };
+  if (name.length < 2 || name.length > 80) {
+    return {
+      categoryId,
+      error: "Category name must be between 2 and 80 characters.",
+    };
+  }
+  if (description.length > 200) {
+    return {
+      categoryId,
+      error: "Description must be 200 characters or fewer.",
+    };
+  }
+  if (
+    !positionInput ||
+    !Number.isInteger(position) ||
+    position < 0 ||
+    position > 10_000
+  ) {
+    return {
+      categoryId,
+      error: "Position must be a whole number between 0 and 10,000.",
+    };
+  }
+
+  const { supabase } = await requirePlatformAdmin();
+
+  const { data: updated, error } = await supabase
+    .from("categories")
+    .update({
+      name,
+      description: description || null,
+      position,
+      is_active: isActive,
+    })
+    .eq("id", categoryId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    return {
+      categoryId,
+      error:
+        error.code === "23505"
+          ? "Another category already uses this name."
+          : error.message,
+    };
+  }
+  if (!updated) {
+    return { categoryId, error: "This category no longer exists." };
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/categories");
+  revalidatePath("/categories");
+  revalidatePath("/");
+  revalidatePublicCatalog();
+
+  return {
+    categoryId,
+    success: `“${name}” updated. Its public URL stayed the same.`,
+  };
+}
+
+/**
+ * Deletes a category after an explicit confirmation. Products keep existing and
+ * become uncategorised (`category_id` is `on delete set null`); occasion links
+ * to this category are removed by the database cascade.
+ */
+export async function deleteCategory(
+  _prev: CategoryMutationState,
+  formData: FormData,
+): Promise<CategoryMutationState> {
+  const categoryId = readCategoryId(formData);
+  const confirmation = String(formData.get("confirm") ?? "");
+
+  if (!categoryId) return { error: "Missing category id." };
+  if (confirmation !== "yes") {
+    return {
+      categoryId,
+      error: "Tick the confirmation box before deleting this category.",
+    };
+  }
+
+  const { supabase } = await requirePlatformAdmin();
+
+  const { data: existing, error: readError } = await supabase
+    .from("categories")
+    .select("name, slug")
+    .eq("id", categoryId)
+    .maybeSingle();
+
+  if (readError) {
+    return { categoryId, error: "Could not load this category. Try again." };
+  }
+  if (!existing) {
+    return { categoryId, error: "This category no longer exists." };
+  }
+
+  const { data: deleted, error } = await supabase
+    .from("categories")
+    .delete()
+    .eq("id", categoryId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    return { categoryId, error: error.message };
+  }
+  if (!deleted) {
+    return { categoryId, error: "This category no longer exists." };
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/categories");
+  revalidatePath("/categories");
+  revalidatePath(`/categories/${existing.slug}`);
+  revalidatePath("/");
+  revalidatePublicCatalog();
+
+  return {
+    success: `Category “${existing.name}” deleted. Its products are now uncategorised.`,
+  };
+}

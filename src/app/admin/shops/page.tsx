@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { Breadcrumb, EmptyState } from "@/components/ui/section";
 import { requirePlatformAdmin } from "@/lib/auth";
+import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
 import { fetchAllRows } from "@/lib/fetch-all";
 
 import {
@@ -69,6 +70,7 @@ function formatJoined(value: string) {
     day: "numeric",
     month: "short",
     year: "numeric",
+    timeZone: BUSINESS_TIME_ZONE,
   });
 }
 
@@ -148,15 +150,18 @@ export default async function AdminShopsPage({
           items={[
             {
               label: "Active shops",
-              value: counts.find((item) => item.status === "active")?.count ?? 0,
-              hint: "Selling on the storefront",
+              value: result.failed
+                ? "—"
+                : (counts.find((item) => item.status === "active")?.count ?? 0),
+              hint: result.failed ? "Read failed" : "Selling on the storefront",
               emphasis: "positive",
             },
             {
               label: "Pending review",
-              value:
-                counts.find((item) => item.status === "pending")?.count ?? 0,
-              hint: "Waiting for activation",
+              value: result.failed
+                ? "—"
+                : (counts.find((item) => item.status === "pending")?.count ?? 0),
+              hint: result.failed ? "Read failed" : "Waiting for activation",
               emphasis:
                 (counts.find((item) => item.status === "pending")?.count ?? 0) >
                 0
@@ -165,25 +170,31 @@ export default async function AdminShopsPage({
             },
             {
               label: "Suspended",
-              value:
-                counts.find((item) => item.status === "suspended")?.count ?? 0,
-              hint: "Access paused",
+              value: result.failed
+                ? "—"
+                : (counts.find((item) => item.status === "suspended")?.count ??
+                  0),
+              hint: result.failed ? "Read failed" : "Access paused",
             },
             {
               label: "Total shops",
-              value: vendors.length,
-              hint: result.truncated ? "Read is incomplete" : "Across Gifto",
+              value: result.failed ? "—" : vendors.length,
+              hint: result.failed
+                ? "Read failed"
+                : result.truncated
+                  ? "Read is incomplete"
+                  : "Across Gifto",
               emphasis: "accent",
             },
           ]}
         />
       </div>
 
-      {result.failed || result.truncated ? (
+      {result.truncated && !result.failed ? (
         <div className="mt-4">
-          <AdminNotice tone="warning" role="alert">
-            The shop list could not be read in full. Counts and search results
-            may be incomplete. Refresh the page to try again.
+          <AdminNotice tone="warning" role="status">
+            The shop list is larger than the current read. Counts and search
+            results may be incomplete.
           </AdminNotice>
         </div>
       ) : null}
@@ -198,7 +209,7 @@ export default async function AdminShopsPage({
               >
                 All
                 <span className="ml-1.5 text-xs opacity-65">
-                  {vendors.length}
+                  {result.failed ? "—" : vendors.length}
                 </span>
               </AdminFilterPill>
               {STATUS_ORDER.map((status) => {
@@ -211,7 +222,9 @@ export default async function AdminShopsPage({
                     active={statusFilter === status}
                   >
                     {VENDOR_STATUS_LABELS[status]}
-                    <span className="ml-1.5 text-xs opacity-65">{count}</span>
+                    <span className="ml-1.5 text-xs opacity-65">
+                      {result.failed ? "—" : count}
+                    </span>
                   </AdminFilterPill>
                 );
               })}
@@ -254,12 +267,21 @@ export default async function AdminShopsPage({
           </div>
 
           <p className="mt-4 text-xs text-ink-mute">
-            {filtersActive
-              ? `${visible.length} of ${vendors.length} shops`
-              : `${vendors.length} ${vendors.length === 1 ? "shop" : "shops"}`}
+            {result.failed
+              ? "Shop list unavailable"
+              : filtersActive
+                ? `${visible.length} of ${vendors.length} shops`
+                : `${vendors.length} ${vendors.length === 1 ? "shop" : "shops"}`}
           </p>
 
-          {visible.length === 0 ? (
+          {result.failed ? (
+            <div className="mt-4">
+              <AdminNotice tone="danger" role="alert">
+                Shops could not be loaded. Refresh the page to try again before
+                onboarding or changing a shop.
+              </AdminNotice>
+            </div>
+          ) : visible.length === 0 ? (
             <div className="mt-4">
               <EmptyState
                 title={filtersActive ? "No shops match" : "No shops yet"}
@@ -364,7 +386,14 @@ export default async function AdminShopsPage({
               opens.
             </p>
             <div className="mt-5">
-              <VendorForm />
+              {result.failed ? (
+                <AdminNotice tone="warning" role="status">
+                  Onboarding is unavailable until the shop list loads, so a
+                  duplicate shop cannot be created by mistake.
+                </AdminNotice>
+              ) : (
+                <VendorForm />
+              )}
             </div>
           </div>
         </aside>
