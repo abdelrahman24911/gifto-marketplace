@@ -22,6 +22,7 @@ import {
   Eyebrow,
 } from "@/components/ui/section";
 import { loadProductsByShop } from "@/lib/catalog";
+import { breadcrumbJsonLd } from "@/lib/breadcrumb-json-ld";
 import { governorateDisplayName } from "@/lib/governorates";
 import { Link } from "@/i18n/navigation";
 import { localePrefixFor } from "@/lib/locale-path";
@@ -426,6 +427,18 @@ export default async function ProductPage({ params }: Props) {
     shopSlug: shop.slug,
     productSlug: product.slug,
   });
+  // The visible breadcrumb path, with the current page's canonical URL as
+  // its last item (P1-16, L-16). The category level exists only when the
+  // product has one.
+  const breadcrumbData = breadcrumbJsonLd([
+    { name: tc("home"), path: "/" },
+    { name: tc("shops"), path: "/shops" },
+    { name: shop.name, path: `/shops/${shop.slug}` },
+    ...(category
+      ? [{ name: category.name, path: `/categories/${category.slug}` }]
+      : []),
+    { name: product.name, path: `/shops/${shop.slug}/${product.slug}` },
+  ]);
 
   const detailsTabs = [
     ...(product.description?.trim()
@@ -460,6 +473,11 @@ export default async function ProductPage({ params }: Props) {
         nonce={nonce}
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
+      />
+      <script
+        nonce={nonce}
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbData) }}
       />
       <Container className="py-8 sm:py-10 lg:py-12">
         <Breadcrumb

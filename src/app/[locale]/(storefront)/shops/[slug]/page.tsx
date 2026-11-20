@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { getLocale, getTranslations } from "next-intl/server";
 
 import { Link, redirect } from "@/i18n/navigation";
+import { breadcrumbJsonLd } from "@/lib/breadcrumb-json-ld";
 import { governorateDisplayName } from "@/lib/governorates";
 import { localePrefixFor } from "@/lib/locale-path";
+import { serializeJsonLd } from "@/lib/product-json-ld";
 import type { AppLocale } from "@/i18n/routing";
 
 import { Pagination } from "@/components/pagination";
@@ -121,8 +124,23 @@ export default async function ShopPage({ params, searchParams }: Props) {
     locale,
   );
 
+  // P1-11: the CSP nonce the proxy generated for this request; the
+  // BreadcrumbList JSON-LD block below must carry it or the enforced
+  // script-src blocks it.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+  const breadcrumbData = breadcrumbJsonLd([
+    { name: tc("home"), path: "/" },
+    { name: tc("shops"), path: "/shops" },
+    { name: shop.name, path: `/shops/${shop.slug}` },
+  ]);
+
   return (
     <div className="pb-8">
+      <script
+        nonce={nonce}
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbData) }}
+      />
       <section className="border-b border-line bg-paper-soft/60">
         <Container className="py-12 sm:py-14">
           <Breadcrumb

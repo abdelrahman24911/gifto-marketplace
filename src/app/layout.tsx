@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Fraunces, Geist, Geist_Mono, IBM_Plex_Sans_Arabic } from "next/font/google";
+import { headers } from "next/headers";
 import type { ReactNode } from "react";
 
 import { getLocale } from "next-intl/server";
@@ -8,6 +9,8 @@ import { NavigationGuardProvider } from "@/components/navigation-guard";
 import { LOCALE_DIRECTIONS, type AppLocale } from "@/i18n/routing";
 import { isIndexingEnabled } from "@/lib/indexing";
 import { SOCIAL_IMAGE } from "@/lib/metadata";
+import { organizationJsonLd } from "@/lib/organization-json-ld";
+import { serializeJsonLd } from "@/lib/product-json-ld";
 import { getSiteUrl } from "@/lib/site-url";
 
 import "./globals.css";
@@ -87,6 +90,10 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   } catch {
     locale = "en";
   }
+  // P1-11: the CSP nonce the proxy generated for this request; the
+  // Organization JSON-LD block below must carry it or the enforced
+  // script-src blocks it. Rendered once here, for the whole site (P1-16).
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
 
   return (
     <html
@@ -96,6 +103,13 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} ${plexSansArabic.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-paper text-ink">
+        <script
+          nonce={nonce}
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: serializeJsonLd(organizationJsonLd()),
+          }}
+        />
         <NavigationGuardProvider>{children}</NavigationGuardProvider>
       </body>
     </html>
