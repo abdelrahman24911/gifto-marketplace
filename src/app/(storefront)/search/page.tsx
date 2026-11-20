@@ -1,12 +1,20 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
+import { Pagination } from "@/components/pagination";
 import { ProductCard } from "@/components/product-card";
 import { SearchForm } from "@/components/search-form";
 import { Container, EmptyState, Eyebrow } from "@/components/ui/section";
 import { getCategories, searchProducts } from "@/lib/catalog";
 import { pageMetadata } from "@/lib/metadata";
 import { parseEgpToMinor } from "@/lib/money";
+import {
+  clampPage,
+  DEFAULT_PAGE_SIZE,
+  parsePage,
+  totalPages,
+} from "@/lib/pagination";
 
 export const metadata: Metadata = pageMetadata({
   title: "Search gifts",
@@ -21,6 +29,7 @@ type SearchPageProps = {
     category?: string;
     min?: string;
     max?: string;
+    page?: string;
   }>;
 };
 
@@ -36,14 +45,40 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const categorySlug = params.category?.trim() || undefined;
   const minMinor = parseEgpToMinor(params.min ?? "");
   const maxMinor = parseEgpToMinor(params.max ?? "");
+  const requestedPage = parsePage(params.page);
 
   const [categories, result] = await Promise.all([
     getCategories(),
-    searchProducts({ q, categorySlug, minMinor, maxMinor }),
+    searchProducts({
+      q,
+      categorySlug,
+      minMinor,
+      maxMinor,
+      page: requestedPage,
+      pageSize: DEFAULT_PAGE_SIZE,
+    }),
   ]);
 
   const products = result.ok ? result.products : [];
+  const total = result.ok ? result.total : 0;
+  const page = clampPage(requestedPage, total, DEFAULT_PAGE_SIZE);
   const activeCategory = categories.find((c) => c.slug === categorySlug);
+
+  // A page past the end lands on the last page instead of an empty
+  // result that claims nothing matched.
+  if (
+    result.ok &&
+    total > 0 &&
+    requestedPage > totalPages(total, DEFAULT_PAGE_SIZE)
+  ) {
+    const next = new URLSearchParams();
+    if (q) next.set("q", q);
+    if (categorySlug) next.set("category", categorySlug);
+    if (params.min) next.set("min", params.min);
+    if (params.max) next.set("max", params.max);
+    next.set("page", String(page));
+    redirect(`/search?${next.toString()}`);
+  }
 
   const buildHref = (overrides: Record<string, string | undefined>) => {
     const next = new URLSearchParams();
@@ -60,6 +95,10 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     const query = next.toString();
     return query ? `/search?${query}` : "/search";
   };
+
+  // Filter links reset to page 1; the Pagination control sets the page.
+  const buildPageHref = (nextPage: number) =>
+    buildHref({ page: nextPage <= 1 ? undefined : String(nextPage) });
 
   const hasFilters = Boolean(q || categorySlug || minMinor !== null || maxMinor !== null);
   const activeBand = PRICE_FILTERS.find(
@@ -158,8 +197,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           ) : (
             <>
               <p className="mb-6 break-words text-sm text-ink-mute">
-                {products.length}{" "}
-                {products.length === 1 ? "gift" : "gifts"}
+                {total} {total === 1 ? "gift" : "gifts"}
                 {activeCategory ? ` in ${activeCategory.name}` : ""}
                 {q ? ` for “${q}”` : ""}
                 {activeBand ? ` · ${activeBand.label}` : ""}
@@ -179,6 +217,13 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                   />
                 ))}
               </div>
+              <Pagination
+                page={page}
+                total={total}
+                pageSize={DEFAULT_PAGE_SIZE}
+                buildHref={buildPageHref}
+                label="Search pagination"
+              />
             </>
           )}
         </div>

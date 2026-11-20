@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
+import { Pagination } from "@/components/pagination";
 import { ProductRail } from "@/components/product-rail";
 import { requireUser } from "@/lib/auth";
 import {
@@ -15,11 +17,25 @@ import {
   ORDER_STATUS_STYLES,
   isOrderStatus,
 } from "@/lib/orders";
+import {
+  clampPage,
+  DEFAULT_PAGE_SIZE,
+  pageWindow,
+  parsePage,
+  totalPages,
+} from "@/lib/pagination";
 
 export const metadata = { title: "Your orders — Gifto" };
 
-export default async function AccountOrdersPage() {
+type Props = {
+  searchParams: Promise<{ page?: string }>;
+};
+
+export default async function AccountOrdersPage({ searchParams }: Props) {
   const { supabase, user } = await requireUser();
+  const { page: pageParam } = await searchParams;
+  const requestedPage = parsePage(pageParam);
+  const window = pageWindow(requestedPage, DEFAULT_PAGE_SIZE);
 
   const [ordersResponse, recommendations] = await Promise.all([
     scopeOrdersToUser(
@@ -27,12 +43,25 @@ export default async function AccountOrdersPage() {
         .from("orders")
         .select(
           "id, status, total_minor, created_at, order_vendors(id, status, vendor_id)",
+          { count: "exact" },
         ),
       user.id,
-    ).order("created_at", { ascending: false }),
+    )
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(window.from, window.to),
     loadNewArrivals(4),
   ]);
-  const { data, error } = ordersResponse;
+  const { data, error, count } = ordersResponse;
+
+  // The exact count replaces the silent 1,000-row PostgREST cap: the page
+  // shows the real total and paginates against it.
+  const total = typeof count === "number" ? count : 0;
+  const page = clampPage(requestedPage, total, DEFAULT_PAGE_SIZE);
+
+  if (!error && total > 0 && requestedPage > totalPages(total, DEFAULT_PAGE_SIZE)) {
+    redirect(`/account/orders?page=${page}`);
+  }
 
   const ordersResult = resolveAccountOrders(data, error);
   const orders = ordersResult.kind === "loaded" ? ordersResult.orders : [];
@@ -78,7 +107,11 @@ export default async function AccountOrdersPage() {
           ) : null}
         </div>
       ) : (
-        <ul className="mt-6 flex flex-col gap-3">
+        <>
+          <p className="mt-6 text-sm text-zinc-500">
+            {total} {total === 1 ? "order" : "orders"}
+          </p>
+          <ul className="mt-3 flex flex-col gap-3">
           {orders.map((order) => {
             return (
               <li
@@ -128,7 +161,19 @@ export default async function AccountOrdersPage() {
               </li>
             );
           })}
-        </ul>
+          </ul>
+          <Pagination
+            page={page}
+            total={total}
+            pageSize={DEFAULT_PAGE_SIZE}
+            buildHref={(nextPage) =>
+              nextPage <= 1
+                ? "/account/orders"
+                : `/account/orders?page=${nextPage}`
+            }
+            label="Orders pagination"
+          />
+        </>
       )}
     </div>
   );

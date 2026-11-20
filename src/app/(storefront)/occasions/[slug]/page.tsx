@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound, permanentRedirect } from "next/navigation";
+import { notFound, permanentRedirect, redirect } from "next/navigation";
 
 import {
   ArrowRightIcon,
@@ -9,6 +9,7 @@ import {
 } from "@/components/icons";
 import { OccasionFallbackArt } from "@/components/occasion-artwork";
 import { OccasionEmpty } from "@/components/occasion-empty";
+import { Pagination } from "@/components/pagination";
 import { ProductCard } from "@/components/product-card";
 import { ProductImage } from "@/components/product-image";
 import { ProductRail } from "@/components/product-rail";
@@ -26,9 +27,18 @@ import {
 } from "@/lib/catalog";
 import { pageMetadata } from "@/lib/metadata";
 import { occasionDisplayName } from "@/lib/occasion-display";
+import {
+  clampPage,
+  DEFAULT_PAGE_SIZE,
+  parsePage,
+  totalPages,
+} from "@/lib/pagination";
 import { OCCASION_IMAGES_BUCKET } from "@/lib/supabase/database.types";
 
-type Props = { params: Promise<{ slug: string }> };
+type Props = {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ page?: string }>;
+};
 
 const primaryLinkClass =
   "inline-flex min-h-11 items-center justify-center rounded-full bg-berry px-5 text-sm font-semibold text-paper transition-colors hover:bg-berry-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry";
@@ -94,8 +104,10 @@ function OccasionDetailMedia({ occasion }: { occasion: CatalogOccasion }) {
   );
 }
 
-export default async function OccasionPage({ params }: Props) {
+export default async function OccasionPage({ params, searchParams }: Props) {
   const { slug } = await params;
+  const { page: pageParam } = await searchParams;
+  const requestedPage = parsePage(pageParam);
   const occasionResult = await loadOccasion(slug);
 
   if (!occasionResult.ok) {
@@ -128,13 +140,28 @@ export default async function OccasionPage({ params }: Props) {
   const occasion = lookup.occasion;
   const occasionName = occasionDisplayName(occasion.slug, occasion.name);
   const [productsResult, occasions, recommendations] = await Promise.all([
-    loadProductsByOccasion(occasion.id),
+    loadProductsByOccasion(occasion.id, {
+      page: requestedPage,
+      pageSize: DEFAULT_PAGE_SIZE,
+    }),
     getOccasions(),
     loadNewArrivals(4),
   ]);
 
   const products = productsResult.ok ? productsResult.data.items : [];
   const total = productsResult.ok ? productsResult.data.total : 0;
+  const page = clampPage(requestedPage, total, DEFAULT_PAGE_SIZE);
+
+  // A page past the end lands on the last page instead of an empty list
+  // that claims the occasion has no gifts.
+  if (productsResult.ok && total > 0 && requestedPage > totalPages(total, DEFAULT_PAGE_SIZE)) {
+    redirect(`/occasions/${occasion.slug}?page=${page}`);
+  }
+
+  const buildPageHref = (nextPage: number) =>
+    nextPage <= 1
+      ? `/occasions/${occasion.slug}`
+      : `/occasions/${occasion.slug}?page=${nextPage}`;
   const otherOccasions = occasions.filter(
     (other) => other.slug !== occasion.slug,
   );
@@ -257,20 +284,29 @@ export default async function OccasionPage({ params }: Props) {
               ) : null}
             </>
           ) : (
-            <div className="grid grid-cols-2 gap-4 sm:gap-5 lg:grid-cols-4">
-              {products.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  href={`/shops/${product.vendorSlug}/${product.slug}`}
-                  name={product.name}
-                  priceMinor={product.priceMinor}
-                  stock={product.stock}
-                  imagePath={product.imagePath}
-                  imageAlt={product.imageAlt}
-                  vendorName={product.vendorName}
-                />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-2 gap-4 sm:gap-5 lg:grid-cols-4">
+                {products.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    href={`/shops/${product.vendorSlug}/${product.slug}`}
+                    name={product.name}
+                    priceMinor={product.priceMinor}
+                    stock={product.stock}
+                    imagePath={product.imagePath}
+                    imageAlt={product.imageAlt}
+                    vendorName={product.vendorName}
+                  />
+                ))}
+              </div>
+              <Pagination
+                page={page}
+                total={total}
+                pageSize={DEFAULT_PAGE_SIZE}
+                buildHref={buildPageHref}
+                label="Occasion pagination"
+              />
+            </>
           )}
         </section>
 

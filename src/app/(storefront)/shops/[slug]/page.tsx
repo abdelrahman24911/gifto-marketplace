@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
+import { Pagination } from "@/components/pagination";
 import { ProductCard } from "@/components/product-card";
 import { ShopCover } from "@/components/shop-cover";
 import { ShopLogo } from "@/components/shop-logo";
@@ -13,9 +14,18 @@ import {
 } from "@/components/ui/section";
 import { loadProductsByShop, loadShop } from "@/lib/catalog";
 import { pageMetadata } from "@/lib/metadata";
+import {
+  clampPage,
+  DEFAULT_PAGE_SIZE,
+  parsePage,
+  totalPages,
+} from "@/lib/pagination";
 import { formatPrepTime, formatWorkingHours } from "@/lib/vendor-settings";
 
-type Props = { params: Promise<{ slug: string }> };
+type Props = {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ page?: string }>;
+};
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
@@ -42,8 +52,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   });
 }
 
-export default async function ShopPage({ params }: Props) {
+export default async function ShopPage({ params, searchParams }: Props) {
   const { slug } = await params;
+  const { page: pageParam } = await searchParams;
+  const requestedPage = parsePage(pageParam);
   const shopResult = await loadShop(slug);
 
   if (!shopResult.ok) {
@@ -63,8 +75,22 @@ export default async function ShopPage({ params }: Props) {
   const shop = shopResult.data;
   if (!shop) notFound();
 
-  const productsResult = await loadProductsByShop(shop.id);
-  const products = productsResult.ok ? productsResult.data : [];
+  const productsResult = await loadProductsByShop(shop.id, {
+    page: requestedPage,
+    pageSize: DEFAULT_PAGE_SIZE,
+  });
+  const products = productsResult.ok ? productsResult.data.items : [];
+  const total = productsResult.ok ? productsResult.data.total : 0;
+  const page = clampPage(requestedPage, total, DEFAULT_PAGE_SIZE);
+
+  // A page past the end (e.g. after products were removed) lands on the
+  // last page instead of an empty list that claims the shop is empty.
+  if (productsResult.ok && total > 0 && requestedPage > totalPages(total, DEFAULT_PAGE_SIZE)) {
+    redirect(`/shops/${shop.slug}?page=${page}`);
+  }
+
+  const buildPageHref = (nextPage: number) =>
+    nextPage <= 1 ? `/shops/${shop.slug}` : `/shops/${shop.slug}?page=${nextPage}`;
   const location = [shop.city, shop.governorate].filter(Boolean).join(", ");
   const workingHours = formatWorkingHours(shop.workingHours);
   const prepTime = formatPrepTime(
@@ -159,8 +185,7 @@ export default async function ShopPage({ params }: Props) {
             </h2>
             {productsResult.ok ? (
               <p className="text-sm text-ink-mute">
-                {products.length}{" "}
-                {products.length === 1 ? "gift" : "gifts"}
+                {total} {total === 1 ? "gift" : "gifts"}
               </p>
             ) : null}
           </div>
@@ -185,20 +210,29 @@ export default async function ShopPage({ params }: Props) {
               to keep looking.
             </EmptyState>
           ) : (
-            <div className="grid grid-cols-2 gap-4 sm:gap-5 lg:grid-cols-4">
-              {products.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  href={`/shops/${shop.slug}/${product.slug}`}
-                  name={product.name}
-                  priceMinor={product.priceMinor}
-                  stock={product.stock}
-                  imagePath={product.imagePath}
-                  imageAlt={product.imageAlt}
-                  categoryName={product.categoryName}
-                />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-2 gap-4 sm:gap-5 lg:grid-cols-4">
+                {products.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    href={`/shops/${shop.slug}/${product.slug}`}
+                    name={product.name}
+                    priceMinor={product.priceMinor}
+                    stock={product.stock}
+                    imagePath={product.imagePath}
+                    imageAlt={product.imageAlt}
+                    categoryName={product.categoryName}
+                  />
+                ))}
+              </div>
+              <Pagination
+                page={page}
+                total={total}
+                pageSize={DEFAULT_PAGE_SIZE}
+                buildHref={buildPageHref}
+                label="Shop pagination"
+              />
+            </>
           )}
         </section>
 

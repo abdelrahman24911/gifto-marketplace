@@ -363,9 +363,9 @@ export default async function ProductPage({ params }: Props) {
 
   const { shop, product, images, category } = data;
 
-  const relatedResult = await loadProductsByShop(shop.id, 12);
+  const relatedResult = await loadProductsByShop(shop.id, { pageSize: 12 });
   const related = relatedResult.ok
-    ? relatedResult.data
+    ? relatedResult.data.items
         .filter((item) => item.id !== product.id)
         .slice(0, 4)
     : [];

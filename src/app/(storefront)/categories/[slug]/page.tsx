@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
+import { Pagination } from "@/components/pagination";
 import { ProductCard } from "@/components/product-card";
 import {
   Breadcrumb,
@@ -15,8 +16,17 @@ import {
   loadProductsByCategory,
 } from "@/lib/catalog";
 import { pageMetadata } from "@/lib/metadata";
+import {
+  clampPage,
+  DEFAULT_PAGE_SIZE,
+  parsePage,
+  totalPages,
+} from "@/lib/pagination";
 
-type Props = { params: Promise<{ slug: string }> };
+type Props = {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ page?: string }>;
+};
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
@@ -38,8 +48,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   });
 }
 
-export default async function CategoryPage({ params }: Props) {
+export default async function CategoryPage({
+  params,
+  searchParams,
+}: Props) {
   const { slug } = await params;
+  const { page: pageParam } = await searchParams;
+  const requestedPage = parsePage(pageParam);
   const categoryResult = await loadCategory(slug);
 
   if (!categoryResult.ok) {
@@ -60,11 +75,27 @@ export default async function CategoryPage({ params }: Props) {
   if (!category) notFound();
 
   const [productsResult, categories] = await Promise.all([
-    loadProductsByCategory(category.id),
+    loadProductsByCategory(category.id, {
+      page: requestedPage,
+      pageSize: DEFAULT_PAGE_SIZE,
+    }),
     getCategories(),
   ]);
 
-  const products = productsResult.ok ? productsResult.data : [];
+  const products = productsResult.ok ? productsResult.data.items : [];
+  const total = productsResult.ok ? productsResult.data.total : 0;
+  const page = clampPage(requestedPage, total, DEFAULT_PAGE_SIZE);
+
+  // A page past the end (e.g. after products were removed) lands on the
+  // last page instead of an empty list that claims the category is empty.
+  if (productsResult.ok && total > 0 && requestedPage > totalPages(total, DEFAULT_PAGE_SIZE)) {
+    redirect(`/categories/${category.slug}?page=${page}`);
+  }
+
+  const buildPageHref = (nextPage: number) =>
+    nextPage <= 1
+      ? `/categories/${category.slug}`
+      : `/categories/${category.slug}?page=${nextPage}`;
   const otherCategories = categories.filter((c) => c.slug !== category.slug);
 
   return (
@@ -101,8 +132,7 @@ export default async function CategoryPage({ params }: Props) {
             </h2>
             {productsResult.ok ? (
               <p className="text-sm text-ink-mute">
-                {products.length}{" "}
-                {products.length === 1 ? "gift" : "gifts"}
+                {total} {total === 1 ? "gift" : "gifts"}
               </p>
             ) : null}
           </div>
@@ -127,20 +157,29 @@ export default async function CategoryPage({ params }: Props) {
               to keep looking.
             </EmptyState>
           ) : (
-            <div className="grid grid-cols-2 gap-4 sm:gap-5 lg:grid-cols-4">
-              {products.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  href={`/shops/${product.vendorSlug}/${product.slug}`}
-                  name={product.name}
-                  priceMinor={product.priceMinor}
-                  stock={product.stock}
-                  imagePath={product.imagePath}
-                  imageAlt={product.imageAlt}
-                  vendorName={product.vendorName}
-                />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-2 gap-4 sm:gap-5 lg:grid-cols-4">
+                {products.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    href={`/shops/${product.vendorSlug}/${product.slug}`}
+                    name={product.name}
+                    priceMinor={product.priceMinor}
+                    stock={product.stock}
+                    imagePath={product.imagePath}
+                    imageAlt={product.imageAlt}
+                    vendorName={product.vendorName}
+                  />
+                ))}
+              </div>
+              <Pagination
+                page={page}
+                total={total}
+                pageSize={DEFAULT_PAGE_SIZE}
+                buildHref={buildPageHref}
+                label="Category pagination"
+              />
+            </>
           )}
         </section>
 

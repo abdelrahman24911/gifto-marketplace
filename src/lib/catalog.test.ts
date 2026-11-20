@@ -123,6 +123,7 @@ import {
   loadOccasions,
   loadProductsByCategory,
   loadProductsByOccasion,
+  loadProductsByShop,
   loadShopPreviews,
   searchProducts,
 } from "./catalog";
@@ -145,8 +146,15 @@ describe("public catalog queries", () => {
     expect(query.limit).toBe(3);
   });
 
-  it("keeps category filtering and limits on the inner-joined product query", async () => {
-    await loadProductsByCategory("category-1", 7);
+  it("pages category products with an exact total and a stable order", async () => {
+    db.results.products = { data: [], error: null, count: 40 };
+
+    const result = await loadProductsByCategory("category-1", {
+      page: 2,
+      pageSize: 7,
+    });
+
+    expect(result).toEqual({ ok: true, data: { items: [], total: 40 } });
 
     const query = db.queries[0];
     expect(query.select).toContain("vendor:public_vendors!inner(");
@@ -154,7 +162,26 @@ describe("public catalog queries", () => {
       "eq:category_id=category-1",
       "eq:status=active",
     ]);
-    expect(query.limit).toBe(7);
+    expect(query.orders).toEqual(["created_at:desc", "id:desc"]);
+    expect(query.range).toEqual([7, 13]);
+    expect(query.countRequested).toBe(true);
+  });
+
+  it("pages shop products with an exact total instead of the old 60 cap", async () => {
+    db.results.products = { data: [], error: null, count: 61 };
+
+    const result = await loadProductsByShop("vendor-1", { page: 3 });
+
+    expect(result).toEqual({ ok: true, data: { items: [], total: 61 } });
+
+    const query = db.queries[0];
+    expect(query.filters).toEqual([
+      "eq:vendor_id=vendor-1",
+      "eq:status=active",
+    ]);
+    expect(query.orders).toEqual(["created_at:desc", "id:desc"]);
+    expect(query.range).toEqual([50, 74]);
+    expect(query.countRequested).toBe(true);
   });
 
   it("builds three image previews per category and shop from public products", async () => {
@@ -224,15 +251,18 @@ describe("public catalog queries", () => {
     expect(query.limit).toBe(500);
   });
 
-  it("keeps search filters and limits on the inner-joined product query", async () => {
+  it("keeps search filters and pages on the inner-joined product query", async () => {
+    db.results.products = { data: [], error: null, count: 0 };
+
     const result = await searchProducts({
       q: "vase",
       minMinor: 10_000,
       maxMinor: 50_000,
-      limit: 12,
+      page: 2,
+      pageSize: 12,
     });
 
-    expect(result).toEqual({ ok: true, products: [] });
+    expect(result).toEqual({ ok: true, products: [], total: 0 });
 
     const query = db.queries[0];
     expect(query.select).toContain("vendor:public_vendors!inner(");
@@ -242,7 +272,9 @@ describe("public catalog queries", () => {
       "gte:price_minor=10000",
       "lte:price_minor=50000",
     ]);
-    expect(query.limit).toBe(12);
+    expect(query.orders).toEqual(["created_at:desc", "id:desc"]);
+    expect(query.range).toEqual([12, 23]);
+    expect(query.countRequested).toBe(true);
   });
 });
 
@@ -330,7 +362,7 @@ describe("public occasion queries", () => {
     expect(db.rpcCalls).toEqual([
       {
         name: "get_occasion_products",
-        args: { p_occasion_id: "occasion-1", p_limit: 60, p_offset: 0 },
+        args: { p_occasion_id: "occasion-1", p_limit: 25, p_offset: 0 },
       },
     ]);
     expect(db.queries).toEqual([]);
@@ -372,7 +404,7 @@ describe("public occasion queries", () => {
       error: null,
     };
 
-    const result = await loadProductsByOccasion("occasion-1", 12);
+    const result = await loadProductsByOccasion("occasion-1", { pageSize: 12 });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;

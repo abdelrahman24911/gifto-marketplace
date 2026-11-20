@@ -5,6 +5,11 @@ import {
   cachedCatalogRead,
   type CatalogRead,
 } from "@/lib/catalog-cache";
+import {
+  DEFAULT_PAGE_SIZE,
+  pageWindow,
+  type PageWindow,
+} from "@/lib/pagination";
 import { createPublicClient } from "@/lib/supabase/public";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/database.types";
@@ -80,6 +85,36 @@ export type CatalogOccasionProducts = {
   items: CatalogProduct[];
   total: number;
 };
+
+/**
+ * One page of a product list: the items on this page plus the exact total
+ * across all pages. Lists never rely on a silent row cap — the total is what
+ * the UI paginates against (H-13).
+ */
+export type CatalogProductPage = {
+  items: CatalogProduct[];
+  total: number;
+};
+
+/** Page request for a product list; pageSize is clamped to 1..100. */
+export type CatalogPageOptions = {
+  page?: number;
+  pageSize?: number;
+};
+
+function normalizePageOptions(
+  options: CatalogPageOptions = {},
+): { window: PageWindow; pageSize: number } {
+  const pageSize = Math.max(
+    1,
+    Math.min(
+      Math.floor(options.pageSize ?? DEFAULT_PAGE_SIZE) || DEFAULT_PAGE_SIZE,
+      100,
+    ),
+  );
+  const window = pageWindow(options.page ?? 1, pageSize);
+  return { window, pageSize: window.pageSize };
+}
 
 export type CatalogShop = {
   id: string;
@@ -263,21 +298,27 @@ export const loadProductsByCategory = cachedCatalogRead(
   "products-by-category",
   async (
     categoryId: string,
-    limit: number = 60,
-  ): Promise<CatalogRead<Load<CatalogProduct[]>>> => {
+    options: CatalogPageOptions = {},
+  ): Promise<CatalogRead<Load<CatalogProductPage>>> => {
+    const { window } = normalizePageOptions(options);
     const supabase = createPublicClient();
-    const { data, error } = await supabase
+    const { data, error, count } = await supabase
       .from("products")
-      .select(PRODUCT_SELECT)
+      .select(PRODUCT_SELECT, { count: "exact" })
       .eq("category_id", categoryId)
       .eq("status", "active")
       .order("created_at", { ascending: false })
-      .limit(limit)
+      .order("id", { ascending: false })
+      .range(window.from, window.to)
       .returns<ProductRow[]>();
 
-    if (error) return FAILED_LOAD;
+    // The id tiebreak keeps page 2+ stable when created_at values tie.
+    if (error || typeof count !== "number") return FAILED_LOAD;
     return {
-      value: { ok: true, data: toCatalogProducts(data ?? []) },
+      value: {
+        ok: true,
+        data: { items: toCatalogProducts(data ?? []), total: count },
+      },
       cacheable: true,
     };
   },
@@ -381,15 +422,16 @@ export const loadProductsByOccasion = cachedCatalogRead(
   "products-by-occasion",
   async (
     occasionId: string,
-    limit: number = 60,
+    options: CatalogPageOptions = {},
   ): Promise<CatalogRead<Load<CatalogOccasionProducts>>> => {
+    const { window, pageSize } = normalizePageOptions(options);
     const supabase = createPublicClient();
     const { data: ranking, error } = await supabase.rpc(
       "get_occasion_products",
       {
         p_occasion_id: occasionId,
-        p_limit: limit,
-        p_offset: 0,
+        p_limit: pageSize,
+        p_offset: window.from,
       },
     );
 
@@ -561,21 +603,27 @@ export const loadProductsByShop = cachedCatalogRead(
   "products-by-shop",
   async (
     vendorId: string,
-    limit: number = 60,
-  ): Promise<CatalogRead<Load<CatalogProduct[]>>> => {
+    options: CatalogPageOptions = {},
+  ): Promise<CatalogRead<Load<CatalogProductPage>>> => {
+    const { window } = normalizePageOptions(options);
     const supabase = createPublicClient();
-    const { data, error } = await supabase
+    const { data, error, count } = await supabase
       .from("products")
-      .select(PRODUCT_SELECT)
+      .select(PRODUCT_SELECT, { count: "exact" })
       .eq("vendor_id", vendorId)
       .eq("status", "active")
       .order("created_at", { ascending: false })
-      .limit(limit)
+      .order("id", { ascending: false })
+      .range(window.from, window.to)
       .returns<ProductRow[]>();
 
-    if (error) return FAILED_LOAD;
+    // The id tiebreak keeps page 2+ stable when created_at values tie.
+    if (error || typeof count !== "number") return FAILED_LOAD;
     return {
-      value: { ok: true, data: toCatalogProducts(data ?? []) },
+      value: {
+        ok: true,
+        data: { items: toCatalogProducts(data ?? []), total: count },
+      },
       cacheable: true,
     };
   },
@@ -783,22 +831,25 @@ export type SearchParams = {
   categorySlug?: string;
   minMinor?: number | null;
   maxMinor?: number | null;
-  limit?: number;
+  page?: number;
+  pageSize?: number;
 };
 
 export type SearchResult =
-  | { ok: true; products: CatalogProduct[] }
+  | { ok: true; products: CatalogProduct[]; total: number }
   | { ok: false };
 
-/** Text + category + price search over active products. */
+/** Text + category + price search over active products, one page at a time. */
 export async function searchProducts({
   q,
   categorySlug,
   minMinor = null,
   maxMinor = null,
-  limit = 60,
+  page = 1,
+  pageSize = DEFAULT_PAGE_SIZE,
 }: SearchParams): Promise<SearchResult> {
   const supabase = await createClient();
+  const { window } = normalizePageOptions({ page, pageSize });
 
   let categoryId: string | null = null;
   if (categorySlug) {
@@ -808,16 +859,17 @@ export async function searchProducts({
       .eq("slug", categorySlug)
       .eq("is_active", true)
       .maybeSingle();
-    if (!category) return { ok: true, products: [] };
+    if (!category) return { ok: true, products: [], total: 0 };
     categoryId = category.id;
   }
 
   let query = supabase
     .from("products")
-    .select(PRODUCT_SELECT)
+    .select(PRODUCT_SELECT, { count: "exact" })
     .eq("status", "active")
     .order("created_at", { ascending: false })
-    .limit(limit);
+    .order("id", { ascending: false })
+    .range(window.from, window.to);
 
   const term = q?.trim();
   if (term) query = query.ilike("name", `%${term}%`);
@@ -825,8 +877,12 @@ export async function searchProducts({
   if (typeof minMinor === "number") query = query.gte("price_minor", minMinor);
   if (typeof maxMinor === "number") query = query.lte("price_minor", maxMinor);
 
-  const { data, error } = await query.returns<ProductRow[]>();
-  if (error) return { ok: false };
+  const { data, error, count } = await query.returns<ProductRow[]>();
+  if (error || typeof count !== "number") return { ok: false };
 
-  return { ok: true, products: toCatalogProducts(data ?? []) };
+  return {
+    ok: true,
+    products: toCatalogProducts(data ?? []),
+    total: count,
+  };
 }
