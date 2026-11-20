@@ -12,6 +12,11 @@ const FIXTURE_PNG = Buffer.from(
 
 export const E2E_ADMIN_EMAIL = "e2e-admin@gifto.test";
 export const E2E_ADMIN_PASSWORD = "GiftoLocalE2E!2026";
+export const E2E_VENDOR_EMAIL = "e2e-vendor@gifto.test";
+export const E2E_VENDOR_PASSWORD = "GiftoLocalE2E!2026";
+export const E2E_VENDOR_ID = "d1111111-1111-4111-8111-111111111111";
+export const E2E_VENDOR_SLUG = "e2e-mobile-shop";
+export const E2E_VENDOR_NAME = "E2E Mobile Shop";
 export const FIXTURE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 export const FIXTURE_SLUG = "e2e-navigation-guard";
 export const FIXTURE_NAME = "E2E Navigation Guard";
@@ -258,6 +263,15 @@ export async function cleanupE2EData(): Promise<void> {
   await removePickerFixture(supabase);
   await removeTaggingFixture(supabase);
 
+  const { error: vendorError } = await supabase
+    .from("vendors")
+    .delete()
+    .eq("slug", E2E_VENDOR_SLUG);
+
+  if (vendorError) {
+    throw new Error(`Could not delete the E2E vendor: ${vendorError.message}`);
+  }
+
   const { data: users, error: usersError } =
     await supabase.auth.admin.listUsers({ page: 1, perPage: 1_000 });
 
@@ -266,10 +280,11 @@ export async function cleanupE2EData(): Promise<void> {
   }
 
   for (const user of users.users) {
-    if (user.email?.toLowerCase() !== E2E_ADMIN_EMAIL) continue;
+    const email = user.email?.toLowerCase();
+    if (email !== E2E_ADMIN_EMAIL && email !== E2E_VENDOR_EMAIL) continue;
     const { error: userError } = await supabase.auth.admin.deleteUser(user.id);
     if (userError) {
-      throw new Error(`Could not delete the E2E admin: ${userError.message}`);
+      throw new Error(`Could not delete the E2E user: ${userError.message}`);
     }
   }
 }
@@ -298,6 +313,48 @@ export async function seedAdmin(): Promise<string> {
   if (profileError || !profile?.is_platform_admin) {
     throw new Error(
       `The E2E admin was not promoted: ${profileError?.message ?? "flag is false"}`,
+    );
+  }
+
+  return data.user.id;
+}
+
+export async function seedVendor(): Promise<string> {
+  const supabase = getAdminClient();
+  const { data, error } = await supabase.auth.admin.createUser({
+    email: E2E_VENDOR_EMAIL,
+    password: E2E_VENDOR_PASSWORD,
+    email_confirm: true,
+    user_metadata: { full_name: "E2E Vendor" },
+  });
+
+  if (error || !data.user) {
+    throw new Error(`Could not create the E2E vendor: ${error?.message}`);
+  }
+
+  const { error: vendorError } = await supabase.from("vendors").insert({
+    id: E2E_VENDOR_ID,
+    name: E2E_VENDOR_NAME,
+    slug: E2E_VENDOR_SLUG,
+    status: "active",
+    is_accepting_orders: true,
+  });
+
+  if (vendorError) {
+    throw new Error(`Could not create the E2E vendor shop: ${vendorError.message}`);
+  }
+
+  const { error: memberError } = await supabase
+    .from("vendor_members")
+    .insert({
+      vendor_id: E2E_VENDOR_ID,
+      profile_id: data.user.id,
+      role: "owner",
+    });
+
+  if (memberError) {
+    throw new Error(
+      `Could not make the E2E vendor a shop owner: ${memberError.message}`,
     );
   }
 
