@@ -1,7 +1,7 @@
 # Gifto CI (P0-02, H-17, M-19).
 #
 # Two jobs, both required to pass:
-#   app — lint, typecheck, Vitest, build (Node, no database needed)
+#   app — lint, typecheck, i18n key guard, Vitest, build (Node, no database needed)
 #   rls — all RLS suites on a disposable supabase/postgres container
 #         (never a hosted project), via scripts/run-rls-suites.sh
 #
@@ -31,6 +31,11 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      # R-06: the i18n key guard is the only protection against silent
+      # missing-key fallbacks (next-intl keys are not type-checked), so it
+      # runs in CI, not just locally. It checks every t()/t.rich() call in
+      # src/ against messages/en.json.
+      - run: npm run check:i18n
       - run: npm run test
       - run: npm run build
         env:

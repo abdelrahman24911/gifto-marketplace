@@ -17,6 +17,7 @@
     "test:e2e:live": "playwright test --project=chromium-desktop --project=chromium-mobile",
     "test:e2e:report": "playwright show-report",
     "typecheck": "tsc --noEmit",
+    "check:i18n": "node scripts/check-i18n-keys.mjs",
     "seed:demo": "node scripts/seed-demo.mjs",
     "demo:passwords": "node scripts/demo-passwords.mjs",
     "cleanup:demo": "node scripts/cleanup-demo.mjs",
