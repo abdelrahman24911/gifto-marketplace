@@ -1846,6 +1846,67 @@ export type Database = {
           },
         ];
       };
+      product_reviews: {
+        Row: {
+          id: string;
+          product_id: string;
+          user_id: string;
+          rating: number;
+          body: string | null;
+          author_name: string | null;
+          status: string;
+          created_at: string;
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          product_id: string;
+          user_id: string;
+          rating: number;
+          body?: string | null;
+          author_name?: string | null;
+          status?: string;
+          created_at?: string;
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          product_id?: string;
+          user_id?: string;
+          rating?: number;
+          body?: string | null;
+          author_name?: string | null;
+          status?: string;
+          created_at?: string;
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "product_reviews_product_id_fkey";
+            columns: ["product_id"];
+            isOneToOne: false;
+            referencedRelation: "products";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "product_reviews_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "product_reviews_reviewed_by_fkey";
+            columns: ["reviewed_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       public_vendors: {
@@ -2209,6 +2270,26 @@ export type Database = {
           p_rejection_reason?: string | null;
         };
         Returns: string | null;
+      };
+      is_verified_buyer: {
+        Args: { p_product_id: string };
+        Returns: boolean;
+      };
+      product_review_summary: {
+        Args: { p_product_id: string };
+        Returns: { review_count: number; average_rating: number | null }[];
+      };
+      submit_product_review: {
+        Args: {
+          p_product_id: string;
+          p_rating: number;
+          p_body?: string | null;
+        };
+        Returns: string;
+      };
+      moderate_product_review: {
+        Args: { p_review_id: string; p_approved: boolean };
+        Returns: undefined;
       };
     };
     Enums: {

@@ -16,6 +16,7 @@ import { toWishlistItem } from "@/lib/wishlist";
 import { ProductDetails } from "@/components/product-details";
 import { ProductGallery } from "@/components/product-gallery";
 import { ProductPurchasePanel } from "@/components/product-purchase-panel";
+import { ProductReviews } from "./product-reviews";
 import { ShopLogo } from "@/components/shop-logo";
 import {
   Breadcrumb,
@@ -598,6 +599,12 @@ export default async function ProductPage({ params }: Props) {
         <div className="mt-10 lg:mt-14">
           <ProductDetails tabs={detailsTabs} ariaLabel={t("informationLabel")} />
         </div>
+
+        <ProductReviews
+          productId={product.id}
+          shopSlug={shop.slug}
+          productSlug={product.slug}
+        />
 
         {related.length > 0 ? (
           <section

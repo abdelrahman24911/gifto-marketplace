@@ -46,6 +46,7 @@ export type AuthQuotaScope =
   | "orderClaim"
   | "orderCancel"
   | "refundCase"
+  | "review"
   | "adminMutation"
   | "vendorMutation";
 
@@ -114,6 +115,14 @@ const AUTH_QUOTAS: Record<AuthQuotaScope, ScopeConfig> = {
     account: { limit: 5, windowSeconds: 60 * 60 },
     waitLabel: "an hour",
     actionLabel: "refund requests",
+  },
+  // UX Batch 2 (reviews): a real customer reviews at most a few gifts
+  // per hour; the RPC's one-review-per-product rule is the real guard.
+  review: {
+    ip: { limit: 20, windowSeconds: 60 * 60 },
+    account: { limit: 5, windowSeconds: 60 * 60 },
+    waitLabel: "an hour",
+    actionLabel: "review submissions",
   },
   adminMutation: {
     ip: { limit: 300, windowSeconds: 60 * 60 },
