@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 
+import { checkAuthQuota } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 
 export type ResetPasswordState =
@@ -33,6 +34,24 @@ export async function resetPassword(
   }
 
   const supabase = await createClient();
+
+  // P1-12: fail-closed quota on the password change itself, keyed by IP
+  // plus the recovery-session account where one exists. The recovery
+  // session is single-use and short-lived; the limit stops it being
+  // hammered while it is valid.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const quota = await checkAuthQuota("passwordReset", {
+    accountKey: user?.id,
+  });
+  if (quota.limited) {
+    return {
+      error: quota.message ?? "Please wait and try again.",
+      attempt,
+    };
+  }
+
   const { error } = await supabase.auth.updateUser({ password });
 
   if (error) {

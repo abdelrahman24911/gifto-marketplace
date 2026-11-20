@@ -2,14 +2,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   authRejected: false,
+  quotaError: null as string | null,
   supabase: null as unknown,
 }));
 
 vi.mock("@/lib/auth", () => ({
   requirePlatformAdmin: async () => {
     if (state.authRejected) throw new Error("REDIRECT:/login");
-    return { supabase: state.supabase };
+    return { supabase: state.supabase, user: { id: "admin-1" } };
   },
+}));
+
+// P1-12: the quota limiter is covered by src/lib/rate-limit.test.ts and
+// supabase/tests/rate_limits_test.sql; these tests exercise the action
+// logic with the quota allowed.
+vi.mock("@/lib/rate-limit", () => ({
+  checkMutationQuota: vi.fn(async () => state.quotaError),
 }));
 
 vi.mock("next/cache", () => ({
@@ -358,6 +366,7 @@ const baseFields = {
 beforeEach(() => {
   vi.clearAllMocks();
   state.authRejected = false;
+  state.quotaError = null;
   state.supabase = makeClient();
 });
 

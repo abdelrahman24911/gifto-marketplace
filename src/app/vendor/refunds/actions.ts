@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requireVendorRole } from "@/lib/vendor";
+import { checkMutationQuota } from "@/lib/rate-limit";
 
 export type VendorRefundState =
   | { error: string; attempt: number }
@@ -39,7 +40,10 @@ export async function acknowledgeRefundCase(
     return { error: "That refund case could not be found.", attempt };
   }
 
-  const { supabase } = await requireVendorRole(vendorId);
+  const { supabase, user } = await requireVendorRole(vendorId);
+
+  const quotaError = await checkMutationQuota("vendor", user.id);
+  if (quotaError) return { error: quotaError, attempt };
   const { error } = await supabase.rpc("acknowledge_refund_case", {
     p_case_id: caseId,
   });
@@ -71,7 +75,10 @@ export async function confirmRefundReceipt(
     return { error: "Keep the note to 1000 characters or fewer.", attempt };
   }
 
-  const { supabase } = await requireVendorRole(vendorId);
+  const { supabase, user } = await requireVendorRole(vendorId);
+
+  const quotaError = await checkMutationQuota("vendor", user.id);
+  if (quotaError) return { error: quotaError, attempt };
   const { error } = await supabase.rpc("confirm_refund_receipt", {
     p_case_id: caseId,
     p_note: note || null,

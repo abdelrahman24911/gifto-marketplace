@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requirePlatformAdmin } from "@/lib/auth";
+import { checkMutationQuota } from "@/lib/rate-limit";
 import { fetchAllRows } from "@/lib/fetch-all";
 import {
   commissionEntriesById,
@@ -45,7 +46,10 @@ export async function createSettlement(
     return { error: "A settlement note must be 500 characters or fewer.", attempt };
   }
 
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { error: quotaError, attempt };
 
   const { data: settlementId, error } = await supabase.rpc(
     "create_settlement",
@@ -81,7 +85,10 @@ export async function markSettlementPaid(
 
   if (!settlementId) return { error: "Missing settlement id.", attempt };
 
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { error: quotaError, attempt };
 
   const { data: settlementData, error: settlementError } = await supabase
     .from("settlements")
@@ -231,7 +238,10 @@ export async function voidSettlement(
     return { error: "A void reason must be 500 characters or fewer.", attempt };
   }
 
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { error: quotaError, attempt };
 
   const { error } = await supabase.rpc("void_settlement", {
     p_settlement_id: settlementId,

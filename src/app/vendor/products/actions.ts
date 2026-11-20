@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { revalidatePublicCatalog } from "@/lib/catalog-cache";
 import { parseEgpToMinor } from "@/lib/money";
 import { requireVendorRole } from "@/lib/vendor";
+import { checkMutationQuota } from "@/lib/rate-limit";
 
 import { PRODUCT_IMAGES_BUCKET } from "@/lib/supabase/database.types";
 import type { ProductStatus } from "@/lib/supabase/database.types";
@@ -96,10 +97,13 @@ export async function saveProduct(
     );
   }
 
-  const { supabase, access, canManage } = await requireVendorRole(
+  const { supabase, access, canManage, user } = await requireVendorRole(
     formData.get("vendor") as string | null,
     { verifyWithAuthServer: true },
   );
+
+  const quotaError = await checkMutationQuota("vendor", user.id);
+  if (quotaError) return invalid(values, quotaError, attempt);
 
   if (!canManage) {
     return invalid(
@@ -217,10 +221,13 @@ export async function deleteProduct(
 
   if (!productId) return { error: "Missing product id.", attempt };
 
-  const { supabase, access } = await requireVendorRole(
+  const { supabase, access, user } = await requireVendorRole(
     formData.get("vendor") as string | null,
     { verifyWithAuthServer: true },
   );
+
+  const quotaError = await checkMutationQuota("vendor", user.id);
+  if (quotaError) return { error: quotaError, attempt };
 
   // Collect image paths first so the Storage objects can be cleaned up after
   // the rows cascade away. Best-effort: a failed object removal leaves an

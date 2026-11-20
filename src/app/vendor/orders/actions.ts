@@ -10,6 +10,7 @@ import {
 import { isOrderStatusReasonCode } from "@/lib/order-status-reasons";
 import { notifyOrderStatusChanged } from "@/lib/mail";
 import { requireVendorRole } from "@/lib/vendor";
+import { checkMutationQuota } from "@/lib/rate-limit";
 
 export type SuborderState =
   | { error: string; attempt: number }
@@ -86,10 +87,13 @@ export async function setSuborderStatus(
     return { error: "The note must be 1000 characters or fewer.", attempt };
   }
 
-  const { supabase, canManage } = await requireVendorRole(
+  const { supabase, canManage, user } = await requireVendorRole(
     formData.get("vendor") as string | null,
     { verifyWithAuthServer: true },
   );
+
+  const quotaError = await checkMutationQuota("vendor", user.id);
+  if (quotaError) return { error: quotaError, attempt };
 
   if (!canManage) {
     return {

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requirePlatformAdmin } from "@/lib/auth";
+import { checkMutationQuota } from "@/lib/rate-limit";
 import { isOrderStatusReasonCode } from "@/lib/order-status-reasons";
 import { notifyOrderStatusChanged } from "@/lib/mail";
 import {
@@ -81,7 +82,10 @@ export async function setAdminSuborderStatus(
     return { error: "The note must be 1000 characters or fewer.", attempt };
   }
 
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { error: quotaError, attempt };
 
   const { data, error } = await supabase.rpc("set_order_vendor_status", {
     p_order_vendor_id: suborderId,

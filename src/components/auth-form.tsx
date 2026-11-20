@@ -6,6 +6,8 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getAuthCallbackUrl, getSafeAuthPath } from "@/lib/auth-redirect";
 
+import { checkLoginQuota, checkSignupQuota } from "@/app/[locale]/(auth)/quota-actions";
+
 type Mode = "login" | "signup";
 
 const inputClass =
@@ -34,6 +36,28 @@ export function AuthForm({ mode, initialError }: { mode: Mode; initialError?: st
     const email = String(form.get("email") ?? "").trim();
     const password = String(form.get("password") ?? "");
     const fullName = String(form.get("full_name") ?? "").trim();
+
+    // Empty submissions never reach Supabase Auth, so they never burn
+    // quota. The gate below (P1-12) runs before the Auth call: when it
+    // refuses, the sign-in/sign-up attempt is not made at all.
+    if (!email.includes("@") || password.length === 0) {
+      setError("Enter a valid email address and password.");
+      setBusy(false);
+      return;
+    }
+
+    // P1-12: app-flow quota gate (IP + per-email for login, IP-only for
+    // signup), fail-closed. A refusal shows the retry message and the
+    // Supabase Auth call is skipped.
+    const gate =
+      mode === "login"
+        ? await checkLoginQuota(email)
+        : await checkSignupQuota();
+    if (gate.limited) {
+      setError(gate.message ?? "Please wait and try again.");
+      setBusy(false);
+      return;
+    }
 
     // The proxy appends ?next=<path> for protected routes; only allow same-site
     // absolute paths so the parameter cannot be used as an open redirect.

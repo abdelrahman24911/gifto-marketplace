@@ -27,8 +27,13 @@
 | Migration 29 `00000000000029_delivery_coverage.sql` applied on hosted Supabase | Not applied (local-only per README) | UNVERIFIED (hosted); OBSERVED (local): file present in `supabase/migrations/` | As migration 28. | 2026-11-20 |
 | Migration 30 `00000000000030_refunds.sql` applied on hosted Supabase | Not applied (local-only per README) | UNVERIFIED (hosted); OBSERVED (local): file present in `supabase/migrations/` | As migration 28. | 2026-11-20 |
 | SMTP / notifications (P1-01, CR-02) | Live SMTP provider sending order, status, refund, support and password-reset email | OPEN — BLOCKED on an owner SMTP account (P1-01, 2026-11-20) | Mail module built: `src/lib/mail.ts` (nodemailer, env-configured, plain-text-first templates, EGP via `formatEgp`); sends hooked after the DB write in checkout (`placeOrder`), vendor/admin status actions, refund open/resolve actions, and support-status updates; password-reset route added (`/forgot-password`, `/auth/reset-password`, Supabase `generateLink` + same module). Verified locally only: 13 Vitest cases pass, including a real SMTP send to an in-process local sink (`src/lib/mail.test.ts`). **No provider has been chosen by the owner and no SMTP account exists, so no email actually leaves the app**: `getMailConfig()` returns null without `SMTP_HOST`/`MAIL_FROM` and every send is skipped with an ops-visible `[gifto-mail]` log entry. To go live: owner chooses an SMTP provider, creates the account, and sets `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` in Vercel (names only in `.env.example`; never commit values). No SMS/WhatsApp in this prompt. Support-page disclaimers now state email is sent only when configured. | 2026-11-20 |
-| Migrations present locally | 32 files, 00000000000001–00000000000032 | OBSERVED (local): 32 files | `ls supabase/migrations/ \| wc -l` → 32 (recounted 2026-11-20, P0-08; 31 added by P0-04, 32 by P0-05) | 2026-11-20 |
-| RLS suites present locally | 14 suites | OBSERVED (local): 14 `*_test.sql` files + `storage_stub.sql` | `ls supabase/tests/*_test.sql \| wc -l` → 14 (recounted 2026-11-20, P0-08; `concurrency_parent_status_test.sql` added by P0-04) | 2026-11-20 |
+| Supabase Auth rate limits (P1-12, step 1) | Known values from the dashboard | UNVERIFIED | No Supabase dashboard access in this session (no hosted access; task forbids it). The app-level limits in `src/lib/rate-limit.ts` do not depend on these values, but a caller who talks to Supabase Auth directly is governed by them, so they must be read from the dashboard before launch. | 2026-11-20 |
+| Supabase Auth JWT expiry (P1-12, step 1) | Known value from the dashboard | UNVERIFIED | As above — no dashboard access in this session. | 2026-11-20 |
+| Supabase Auth password policy (P1-12, step 1) | Known policy from the dashboard | UNVERIFIED | As above — no dashboard access in this session. The app enforces a 6-character minimum in the reset flow only; signup/login rely on Supabase's policy. | 2026-11-20 |
+| CAPTCHA for signup (P1-12, step 4) | Owner decision + provider, if any | OPEN — no provider added, no owner decision recorded | P1-12 evaluated CAPTCHA and deliberately added no provider unilaterally. Owner to decide whether signup gets a CAPTCHA (e.g. Supabase built-in CAPTCHA or a third-party provider) before launch; until then signup is limited by the app-level IP quota (5/hr) only. | 2026-11-20 |
+| Migration 39 `00000000000039_auth_rate_limits.sql` applied on hosted Supabase | Not applied (local-only) | UNVERIFIED (hosted); OBSERVED (local): file present in `supabase/migrations/` | No hosted access; `supabase migration list` not run. Local RLS test `supabase/tests/rate_limits_test.sql` passes on disposable Postgres (P1-12). | 2026-11-20 |
+| Migrations present locally | 39 files, 00000000000001–00000000000039 | OBSERVED (local): 39 files | `ls supabase/migrations/ \| wc -l` → 39 (recounted 2026-11-20, P1-12; 38 added by P1-09, 39 by P1-12) | 2026-11-20 |
+| RLS suites present locally | 15 suites | OBSERVED (local): 15 `*_test.sql` files + `storage_stub.sql` | `ls supabase/tests/*_test.sql \| wc -l` → 15 (recounted 2026-11-20, P1-12; `rate_limits_test.sql` added by P1-12) | 2026-11-20 |
 | Vercel production commit | Equals branch HEAD `34f30a6` if deployed from this branch | UNVERIFIED | No Vercel access in this session; `vercel ls` / dashboard not consulted. Do not assume production serves this HEAD. | 2026-11-20 |
 | Production `is_demo` count | 0 | UNVERIFIED | No hosted database access; no read-only count query run. Nothing was deleted. | 2026-11-20 |
 | Backups (Supabase) | On, with a known retention window | UNVERIFIED | No Supabase dashboard access in this session. | 2026-11-20 |
@@ -113,6 +118,50 @@ All six routes verified present and footer-linked: `terms`, `privacy`,
 - **H-16 remains Partial.** It closes only when the owner/lawyer approves
   the final wording per page, the missing details above are supplied, and
   the banner is removed from the approved pages.
+
+## P1-12 notes (2026-11-20) — auth and server-action rate limiting (H-12)
+
+- **Step 1 (dashboard verification): NOT DONE — no access.** This session
+  has no Supabase dashboard access and the task forbids hosted access, so
+  the project's Auth rate limits, JWT expiry, and password policy are
+  recorded UNVERIFIED in the table above, not assumed. Read them from the
+  dashboard before launch.
+- **What was built:** migration 39 (`auth_rate_limits` table +
+  `consume_auth_quota` RPC, service-role only, mirroring migration 11's
+  checkout quota shape); `src/lib/rate-limit.ts` (shared helper, 12 Vitest
+  cases); `supabase/tests/rate_limits_test.sql` (new 15th RLS suite).
+- **Limits (`src/lib/rate-limit.ts`, all windows rolling):** login IP 20/15
+  min + per-email 10/15 min; signup IP 5/hr; password-reset request IP 5/hr
+  + per-email 3/hr; password reset IP 10/hr + per-account 5/hr; order
+  recovery IP 5/hr + per-target 5/hr; order claim IP 10/hr + per-order 5/hr;
+  order cancel/refund IP 20/hr + per-order 5/hr; admin/vendor mutations
+  per-account 120/hr + IP backstop 300/hr. The P1-01 reset and P1-02
+  recovery guards were moved off the checkout quota table onto the auth
+  table and now also carry an account bucket.
+- **Fail-closed (step 3):** every auth quota check fails closed — a
+  quota-service error denies the attempt with the retry message. The
+  previous fail-open behaviour in the reset/recovery guards is gone.
+  Checkout keeps its own fail-open behaviour; this prompt does not change
+  it.
+- **IP retention:** raw IPs are never stored or logged. Buckets are SHA-256
+  hashes of scope + caller key; rows are pruned after 2 days by the RPC's
+  opportunistic cleanup.
+- **Login/signup gate:** those flows call Supabase Auth directly from the
+  browser, so there is no server action to gate. `AuthForm` now calls
+  `checkLoginQuota` / `checkSignupQuota` (new
+  `src/app/[locale]/(auth)/quota-actions.ts`) before touching Supabase
+  Auth; a refusal shows the retry message and the Auth call is skipped. A
+  caller who talks to Supabase Auth directly bypasses this gate and relies
+  on Supabase's own (UNVERIFIED) Auth limits.
+- **Coverage:** all 38 admin/vendor mutation actions are gated
+  (`checkMutationQuota` right after `requirePlatformAdmin()` /
+  `requireVendorRole()`), plus login, signup, both reset actions,
+  recovery, claim, both cancels, and all four refund actions. Deliberate
+  skips: `loadProductPickerPageAction` (a read, not a mutation) and vendor
+  `createSupportRequest` (already limited by the migration-23 DB trigger,
+  5/15 min per account — stricter than the app quota).
+- **Step 4 (CAPTCHA): OPEN.** No CAPTCHA provider was added unilaterally.
+  Owner to decide before launch; see the table row above.
 
 ## What would unblock verification
 

@@ -29,6 +29,7 @@ import {
   partitionGovernorates,
 } from "@/lib/governorates";
 import { requireVendorRole } from "@/lib/vendor";
+import { checkMutationQuota } from "@/lib/rate-limit";
 
 const LOGO_MAX_BYTES = 5 * 1024 * 1024;
 const LOGO_TYPES: Record<string, string> = {
@@ -288,10 +289,13 @@ export async function saveVendorSettings(
     );
   }
 
-  const { supabase, access, isPlatformAdmin } = await requireVendorRole(
+  const { supabase, access, isPlatformAdmin, user } = await requireVendorRole(
     formData.get("vendor") as string | null,
     { verifyWithAuthServer: true },
   );
+
+  const quotaError = await checkMutationQuota("vendor", user.id);
+  if (quotaError) return invalid(values, quotaError, attempt);
 
   if (!canEditShop(access, isPlatformAdmin)) {
     return invalid(
@@ -373,10 +377,13 @@ export async function setVendorAcceptingOrders(
   }
   const accepting = raw === "true";
 
-  const { supabase, access, isPlatformAdmin } = await requireVendorRole(
+  const { supabase, access, isPlatformAdmin, user } = await requireVendorRole(
     formData.get("vendor") as string | null,
     { verifyWithAuthServer: true },
   );
+
+  const quotaError = await checkMutationQuota("vendor", user.id);
+  if (quotaError) return { error: quotaError, attempt };
 
   if (!canEditShop(access, isPlatformAdmin)) {
     return {
@@ -461,10 +468,13 @@ async function uploadVendorBranding(
     };
   }
 
-  const { supabase, access, isPlatformAdmin } = await requireVendorRole(
+  const { supabase, access, isPlatformAdmin, user } = await requireVendorRole(
     formData.get("vendor") as string | null,
     { verifyWithAuthServer: true },
   );
+
+  const quotaError = await checkMutationQuota("vendor", user.id);
+  if (quotaError) return { error: quotaError, attempt };
 
   if (!canEditShop(access, isPlatformAdmin)) {
     return {
@@ -542,10 +552,13 @@ async function removeVendorBranding(
       : 0) + 1;
 
   const spec = BRANDING[kind];
-  const { supabase, access, isPlatformAdmin } = await requireVendorRole(
+  const { supabase, access, isPlatformAdmin, user } = await requireVendorRole(
     formData.get("vendor") as string | null,
     { verifyWithAuthServer: true },
   );
+
+  const quotaError = await checkMutationQuota("vendor", user.id);
+  if (quotaError) return { error: quotaError, attempt };
 
   if (!canEditShop(access, isPlatformAdmin)) {
     return {

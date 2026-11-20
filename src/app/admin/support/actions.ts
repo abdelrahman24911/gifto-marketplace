@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requirePlatformAdmin } from "@/lib/auth";
+import { checkMutationQuota } from "@/lib/rate-limit";
 import { notifySupportRequestStatusChanged } from "@/lib/mail";
 import { isSupportStatus } from "@/lib/support-requests";
 
@@ -35,7 +36,10 @@ export async function updateSupportRequestStatus(
     return { error: "Choose a valid support status.", attempt };
   }
 
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { error: quotaError, attempt };
   const { data, error } = await supabase
     .from("support_requests")
     .update({ status })

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { parseEgpToMinor } from "@/lib/money";
 import { notifyRefundCaseOpened } from "@/lib/mail";
+import { checkAuthQuota } from "@/lib/rate-limit";
 import { refundReasonError } from "@/lib/refunds";
 
 export type OpenRefundState =
@@ -43,7 +44,16 @@ export async function openRefundCase(
     }
   }
 
-  const { supabase } = await requireUser({ verifyWithAuthServer: true });
+  const { supabase, user } = await requireUser({ verifyWithAuthServer: true });
+
+  // P1-12: IP + per-suborder-and-account buckets, fail-closed.
+  const quota = await checkAuthQuota("refundCase", {
+    accountKey: `${orderVendorId}:${user.id}`,
+  });
+  if (quota.limited) {
+    return { error: quota.message ?? "Please wait and try again.", attempt };
+  }
+
   const { data: caseId, error } = await supabase.rpc("open_refund_case", {
     p_order_vendor_id: orderVendorId,
     p_reason: reason,
@@ -90,7 +100,16 @@ export async function escalateRefundCase(
     };
   }
 
-  const { supabase } = await requireUser({ verifyWithAuthServer: true });
+  const { supabase, user } = await requireUser({ verifyWithAuthServer: true });
+
+  // P1-12: IP + per-case-and-account buckets, fail-closed.
+  const quota = await checkAuthQuota("refundCase", {
+    accountKey: `${caseId}:${user.id}`,
+  });
+  if (quota.limited) {
+    return { error: quota.message ?? "Please wait and try again.", attempt };
+  }
+
   const { error } = await supabase.rpc("escalate_refund_case", {
     p_case_id: caseId,
     p_note: note,

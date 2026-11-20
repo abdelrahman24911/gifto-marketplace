@@ -8,6 +8,7 @@ import {
   isValidGuestToken,
   sha256Hex,
 } from "@/lib/guest-order";
+import { checkAuthQuota } from "@/lib/rate-limit";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export type GuestCancelState =
@@ -40,6 +41,14 @@ export async function cancelGuestOrder(
   const token = cookieStore.get(guestCookieName(orderId))?.value;
   if (!isValidGuestToken(token)) {
     return { error: "This order link is not valid in this browser.", attempt };
+  }
+
+  // P1-12: IP + per-order buckets, fail-closed.
+  const quota = await checkAuthQuota("orderCancel", {
+    accountKey: orderId,
+  });
+  if (quota.limited) {
+    return { error: quota.message ?? "Please wait and try again.", attempt };
   }
 
   const service = createServiceClient();

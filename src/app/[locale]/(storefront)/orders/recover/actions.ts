@@ -1,14 +1,11 @@
 "use server";
 
-import { headers } from "next/headers";
-
 import {
   PUBLIC_REFERENCE_PATTERN,
-  clientIpFromHeaders,
   isValidEmail,
-  sha256Hex,
 } from "@/lib/guest-order";
 import { sendGuestOrderRecoveryEmail } from "@/lib/mail";
+import { checkAuthQuota } from "@/lib/rate-limit";
 import { getSiteUrl } from "@/lib/site-url";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -16,9 +13,6 @@ export type RecoverOrderState =
   | { error: string; attempt: number }
   | { success: string; attempt: number }
   | null;
-
-const RECOVERY_RATE_LIMIT = 5;
-const RECOVERY_RATE_WINDOW_SECONDS = 60 * 60;
 
 /**
  * Requests a guest-order recovery link (P1-02, H-18).
@@ -61,28 +55,17 @@ export async function requestGuestOrderRecovery(
     return { error: "Enter a valid email address or phone number.", attempt };
   }
 
-  // Abuse guard, reusing the Postgres quota table behind checkout.
-  try {
-    const headerStore = await headers();
-    const ip = clientIpFromHeaders(
-      headerStore.get("x-forwarded-for"),
-      headerStore.get("x-real-ip"),
-    );
-    const service = createServiceClient();
-    const { data } = await service.rpc("consume_checkout_quota", {
-      p_bucket: sha256Hex(`gifto-recovery:${ip.trim().toLowerCase()}`),
-      p_limit: RECOVERY_RATE_LIMIT,
-      p_window_seconds: RECOVERY_RATE_WINDOW_SECONDS,
-    });
-    if (typeof data === "number" && data > RECOVERY_RATE_LIMIT) {
-      return {
-        error:
-          "Too many recovery attempts from this connection. Please wait a few minutes and try again.",
-        attempt,
-      };
-    }
-  } catch {
-    // The quota check is a guard, not the feature.
+  // P1-12: IP bucket plus a per-target bucket (order reference + contact),
+  // fail-closed. The previous fail-open guard lived on the checkout quota
+  // table and was IP-only.
+  const quota = await checkAuthQuota("orderRecovery", {
+    accountKey: `${reference}:${contact.toLowerCase()}`,
+  });
+  if (quota.limited) {
+    return {
+      error: quota.message ?? "Please wait and try again.",
+      attempt,
+    };
   }
 
   try {

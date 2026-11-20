@@ -1,10 +1,8 @@
 "use server";
 
-import { headers } from "next/headers";
-
-import { isValidEmail, sha256Hex } from "@/lib/guest-order";
-import { clientIpFromHeaders } from "@/lib/guest-order";
+import { isValidEmail } from "@/lib/guest-order";
 import { sendPasswordResetEmail } from "@/lib/mail";
+import { checkAuthQuota } from "@/lib/rate-limit";
 import { getSiteUrl } from "@/lib/site-url";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -12,9 +10,6 @@ export type RequestResetState =
   | { error: string; attempt: number }
   | { success: string; attempt: number }
   | null;
-
-const RESET_RATE_LIMIT = 5;
-const RESET_RATE_WINDOW_SECONDS = 60 * 60;
 
 /**
  * Requests a password-reset email (P1-01, H-21).
@@ -39,30 +34,15 @@ export async function requestPasswordReset(
     return { error: "Enter a valid email address.", attempt };
   }
 
-  // Light abuse guard (full auth rate limiting is P1-12): 5 requests per
-  // hour per caller, reusing the Postgres quota table behind checkout.
-  try {
-    const headerStore = await headers();
-    const ip = clientIpFromHeaders(
-      headerStore.get("x-forwarded-for"),
-      headerStore.get("x-real-ip"),
-    );
-    const service = createServiceClient();
-    const { data } = await service.rpc("consume_checkout_quota", {
-      p_bucket: sha256Hex(`gifto-password-reset:${ip.trim().toLowerCase()}`),
-      p_limit: RESET_RATE_LIMIT,
-      p_window_seconds: RESET_RATE_WINDOW_SECONDS,
-    });
-    if (typeof data === "number" && data > RESET_RATE_LIMIT) {
-      return {
-        error:
-          "Too many reset requests from this connection. Please wait a few minutes and try again.",
-        attempt,
-      };
-    }
-  } catch {
-    // The quota check is a guard, not the feature: a quota failure must not
-    // block a legitimate reset request.
+  // P1-12: IP bucket plus per-email bucket (5/hr per connection, 3/hr per
+  // email), fail-closed — a quota-service failure denies the attempt with
+  // the retry message instead of silently letting it through. The light
+  // fail-open guard this replaced lived on the checkout quota table.
+  const quota = await checkAuthQuota("passwordResetRequest", {
+    accountKey: email,
+  });
+  if (quota.limited) {
+    return { error: quota.message ?? "Please wait and try again.", attempt };
   }
 
   try {

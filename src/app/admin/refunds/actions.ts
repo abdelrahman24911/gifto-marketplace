@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requirePlatformAdmin } from "@/lib/auth";
+import { checkMutationQuota } from "@/lib/rate-limit";
 import { parseEgpToMinor } from "@/lib/money";
 import { notifyRefundCaseResolved } from "@/lib/mail";
 
@@ -49,7 +50,10 @@ export async function resolveRefundCase(
     }
   }
 
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { error: quotaError, attempt };
   const { error } = await supabase.rpc("resolve_refund_case", {
     p_case_id: caseId,
     p_approved: decision === "approve",
@@ -104,7 +108,10 @@ export async function restockRefundCase(
     return { error: "That refund case could not be found.", attempt };
   }
 
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { error: quotaError, attempt };
   const { error } = await supabase.rpc("restock_refund_case", {
     p_case_id: caseId,
   });

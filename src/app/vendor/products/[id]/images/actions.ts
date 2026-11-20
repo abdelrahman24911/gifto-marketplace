@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { revalidatePublicCatalog } from "@/lib/catalog-cache";
 import { requireVendorRole } from "@/lib/vendor";
+import { checkMutationQuota } from "@/lib/rate-limit";
 
 import { PRODUCT_IMAGES_BUCKET } from "@/lib/supabase/database.types";
 
@@ -62,10 +63,13 @@ export async function uploadProductImages(
     return { error: "Upload up to 5 images at a time.", attempt };
   }
 
-  const { supabase, access, canManage } = await requireVendorRole(
+  const { supabase, access, canManage, user } = await requireVendorRole(
     formData.get("vendor") as string | null,
     { verifyWithAuthServer: true },
   );
+
+  const quotaError = await checkMutationQuota("vendor", user.id);
+  if (quotaError) return { error: quotaError, attempt };
   if (!canManage) {
     return {
       error: "Only shop owners and managers can manage images.",
@@ -163,10 +167,13 @@ export async function deleteProductImage(
   const path = String(formData.get("path") ?? "").trim();
   if (!productId || !path) return { error: "Missing image details.", attempt };
 
-  const { supabase, access, canManage } = await requireVendorRole(
+  const { supabase, access, canManage, user } = await requireVendorRole(
     formData.get("vendor") as string | null,
     { verifyWithAuthServer: true },
   );
+
+  const quotaError = await checkMutationQuota("vendor", user.id);
+  if (quotaError) return { error: quotaError, attempt };
   if (!canManage) {
     return {
       error: "Only shop owners and managers can manage images.",

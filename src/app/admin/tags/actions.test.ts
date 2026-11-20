@@ -6,6 +6,7 @@ type QueryResult = { data: unknown; error: FakeError | null };
 
 const state = vi.hoisted(() => ({
   authRejected: false,
+  quotaError: null as string | null,
   tags: [] as FakeRow[],
   rpc: vi.fn(),
   insertError: null as FakeError | null,
@@ -83,8 +84,16 @@ function makeClient() {
 vi.mock("@/lib/auth", () => ({
   requirePlatformAdmin: async () => {
     if (state.authRejected) throw new Error("REDIRECT:/login");
-    return { supabase: makeClient() };
+    return { supabase: makeClient(), user: { id: "admin-1" } };
   },
+}));
+
+// P1-12: the quota limiter is covered by src/lib/rate-limit.test.ts and
+// supabase/tests/rate_limits_test.sql; these tests exercise the action
+// logic with the quota allowed (state.quotaError flips it for the
+// refusal test in settlements).
+vi.mock("@/lib/rate-limit", () => ({
+  checkMutationQuota: vi.fn(async () => state.quotaError),
 }));
 
 vi.mock("next/cache", () => ({
@@ -114,6 +123,7 @@ function form(values: Record<string, string>) {
 describe("admin tag actions", () => {
   beforeEach(() => {
     state.authRejected = false;
+    state.quotaError = null;
     state.tags = [];
     state.rpc.mockReset();
     state.insertError = null;

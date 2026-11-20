@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requirePlatformAdmin } from "@/lib/auth";
+import { checkMutationQuota } from "@/lib/rate-limit";
 import { revalidatePublicCatalog } from "@/lib/catalog-cache";
 import { getSiteUrl } from "@/lib/site-url";
 import { slugify } from "@/lib/slugify";
@@ -41,7 +42,10 @@ export async function setVendorStatus(
     return { vendorId, error: "Invalid status." };
   }
 
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { error: quotaError };
 
   const { error } = await supabase
     .from("vendors")
@@ -78,7 +82,10 @@ export async function setCommissionRate(
 
   const rate = Math.round(percentValue * 100) / 10000; // numeric(5,4)
 
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { error: quotaError };
 
   const { error } = await supabase
     .from("vendors")
@@ -142,7 +149,10 @@ export async function createVendor(
     return { error: "Shop names must contain Latin letters or numbers." };
   }
 
-  await requirePlatformAdmin();
+  const { user } = await requirePlatformAdmin();
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { error: quotaError };
   const admin = createServiceClient();
 
   const { data: existingVendors, error: existingError } = await admin
@@ -290,7 +300,10 @@ export async function createCategory(
     };
   }
 
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { error: quotaError };
 
   const { error } = await supabase.from("categories").insert({
     name,
@@ -368,7 +381,10 @@ export async function updateCategory(
     };
   }
 
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { error: quotaError };
 
   const { data: updated, error } = await supabase
     .from("categories")
@@ -427,7 +443,10 @@ export async function deleteCategory(
     };
   }
 
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { error: quotaError };
 
   const { data: existing, error: readError } = await supabase
     .from("categories")

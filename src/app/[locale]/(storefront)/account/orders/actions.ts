@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requireUser } from "@/lib/auth";
+import { checkAuthQuota } from "@/lib/rate-limit";
 
 export type CancelOrderState =
   | { error: string; attempt: number }
@@ -23,7 +24,15 @@ export async function cancelOrder(
 
   if (!orderId) return { error: "Missing order id.", attempt };
 
-  const { supabase } = await requireUser({ verifyWithAuthServer: true });
+  const { supabase, user } = await requireUser({ verifyWithAuthServer: true });
+
+  // P1-12: IP + per-order-and-account buckets, fail-closed.
+  const quota = await checkAuthQuota("orderCancel", {
+    accountKey: `${orderId}:${user.id}`,
+  });
+  if (quota.limited) {
+    return { error: quota.message ?? "Please wait and try again.", attempt };
+  }
 
   const { error } = await supabase.rpc("cancel_order", {
     p_order_id: orderId,

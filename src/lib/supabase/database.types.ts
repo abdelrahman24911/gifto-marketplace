@@ -1662,6 +1662,14 @@ export type Database = {
         };
         Returns: undefined;
       };
+      consume_auth_quota: {
+        Args: {
+          p_bucket: string;
+          p_limit: number;
+          p_window_seconds: number;
+        };
+        Returns: number;
+      };
       consume_checkout_quota: {
         Args: {
           p_bucket: string;

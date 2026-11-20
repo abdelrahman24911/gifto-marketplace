@@ -10,6 +10,7 @@ import {
 } from "@/lib/guest-order";
 import { parseEgpToMinor } from "@/lib/money";
 import { notifyRefundCaseOpened } from "@/lib/mail";
+import { checkAuthQuota } from "@/lib/rate-limit";
 import { refundReasonError } from "@/lib/refunds";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -53,6 +54,14 @@ export async function openGuestRefundCase(
   const token = cookieStore.get(guestCookieName(orderId))?.value;
   if (!isValidGuestToken(token)) {
     return { error: "This order link is not valid in this browser.", attempt };
+  }
+
+  // P1-12: IP + per-suborder buckets, fail-closed.
+  const quota = await checkAuthQuota("refundCase", {
+    accountKey: orderVendorId,
+  });
+  if (quota.limited) {
+    return { error: quota.message ?? "Please wait and try again.", attempt };
   }
 
   const service = createServiceClient();
@@ -109,6 +118,14 @@ export async function escalateGuestRefundCase(
   const token = cookieStore.get(guestCookieName(orderId))?.value;
   if (!isValidGuestToken(token)) {
     return { error: "This order link is not valid in this browser.", attempt };
+  }
+
+  // P1-12: IP + per-case buckets, fail-closed.
+  const quota = await checkAuthQuota("refundCase", {
+    accountKey: caseId,
+  });
+  if (quota.limited) {
+    return { error: quota.message ?? "Please wait and try again.", attempt };
   }
 
   const service = createServiceClient();

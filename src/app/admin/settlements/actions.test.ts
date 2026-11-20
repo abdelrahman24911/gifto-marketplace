@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   mode: "missing" as "missing" | "failed" | "truncated" | "complete",
   authRejected: false,
+  quotaError: null as string | null,
   fromCalls: 0,
   rpc: vi.fn(),
 }));
@@ -14,6 +15,7 @@ vi.mock("@/lib/auth", () => ({
     }
 
     return {
+      user: { id: "admin-1" },
       supabase: {
         from(table: string) {
           state.fromCalls += 1;
@@ -93,6 +95,14 @@ vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
 }));
 
+// P1-12: the quota limiter is covered by src/lib/rate-limit.test.ts and
+// supabase/tests/rate_limits_test.sql; these tests exercise the action
+// logic with the quota allowed, and one test flips state.quotaError to
+// prove the refusal surfaces.
+vi.mock("@/lib/rate-limit", () => ({
+  checkMutationQuota: vi.fn(async () => state.quotaError),
+}));
+
 vi.mock("next/navigation", () => ({
   redirect: vi.fn(),
 }));
@@ -113,6 +123,7 @@ function paidFormData(): FormData {
 beforeEach(() => {
   state.mode = "missing";
   state.authRejected = false;
+  state.quotaError = null;
   state.fromCalls = 0;
   state.rpc.mockReset();
   state.rpc.mockResolvedValue({ error: null });
@@ -161,6 +172,20 @@ describe("markSettlementPaid verification guard", () => {
     await expect(markSettlementPaid(null, formData)).rejects.toThrow(
       "REDIRECT:/login",
     );
+    expect(state.fromCalls).toBe(0);
+    expect(state.rpc).not.toHaveBeenCalled();
+  });
+
+  it("refuses the mutation when the P1-12 quota is exceeded, before any read or RPC call", async () => {
+    state.quotaError =
+      "Too many changes. Please wait an hour and try again.";
+
+    const result = await markSettlementPaid(null, paidFormData());
+
+    expect(result).toEqual({
+      error: "Too many changes. Please wait an hour and try again.",
+      attempt: 1,
+    });
     expect(state.fromCalls).toBe(0);
     expect(state.rpc).not.toHaveBeenCalled();
   });
