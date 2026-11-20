@@ -10,9 +10,11 @@ import type { MoneyLocale } from "@/lib/money";
 
 import { requireUser } from "@/lib/auth";
 import { scopeOrdersToUser } from "@/lib/account-orders";
+import { loadLiveProductsByIds } from "@/lib/catalog";
 import { formatEgp } from "@/lib/money";
 import { loadOrderVendorProfiles } from "@/lib/order-vendors.server";
 import { ORDER_STATUS_STYLES, isOrderStatus } from "@/lib/orders";
+import { resolveReorderItems } from "@/lib/reorder";
 import {
   REFUND_CASE_STATUS_STYLES,
   canRequestRefundWithinWindow,
@@ -21,6 +23,7 @@ import {
 } from "@/lib/refunds";
 import { EscalateRefundForm } from "@/components/escalate-refund-form";
 import { CancelRefundForm } from "@/components/cancel-refund-form";
+import { ReorderButton } from "@/components/reorder-button";
 
 import { CancelOrderButton } from "./cancel-order-button";
 import { RefundRequestForm } from "./refund-request-form";
@@ -129,7 +132,7 @@ export default async function AccountOrderPage({
     supabase
     .from("orders")
     .select(
-      "id, status, payment_method, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, address_line, city, governorate, notes, gift_wrap, gift_message, preferred_delivery_date, delivery_time_note, created_at, order_vendors(id, status, subtotal_minor, vendor_id, delivered_at, courier_name, tracking_ref, handed_over_at, order_items(id, product_name, product_slug, unit_price_minor, quantity, line_total_minor))",
+      "id, status, payment_method, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, address_line, city, governorate, notes, gift_wrap, gift_message, preferred_delivery_date, delivery_time_note, created_at, order_vendors(id, status, subtotal_minor, vendor_id, delivered_at, courier_name, tracking_ref, handed_over_at, order_items(id, product_id, product_name, product_slug, unit_price_minor, quantity, line_total_minor))",
     )
     .eq("id", id)
     ,
@@ -145,6 +148,22 @@ export default async function AccountOrderPage({
   const suborders = order.order_vendors ?? [];
   const vendorProfiles = await loadOrderVendorProfiles(suborders);
   const canCancel = order.status === "placed";
+
+  // Reorder is resolved against live prices and stock, not the order's
+  // historical lines: only what is still orderable today is offered.
+  const reorderLines = suborders.flatMap((suborder) =>
+    (suborder.order_items ?? []).map((item) => ({
+      productId: item.product_id,
+      productName: item.product_name,
+      quantity: item.quantity,
+    })),
+  );
+  const reorderResolution = resolveReorderItems(
+    reorderLines,
+    await loadLiveProductsByIds(
+      reorderLines.map((line) => line.productId),
+    ),
+  );
 
   const { data: refundCases, error: refundError } = await supabase
     .from("refund_cases")
@@ -481,6 +500,7 @@ export default async function AccountOrderPage({
         </div>
 
         {canCancel ? <CancelOrderButton orderId={order.id} /> : null}
+        <ReorderButton resolution={reorderResolution} />
       </section>
     </div>
   );

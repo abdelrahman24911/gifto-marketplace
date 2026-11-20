@@ -14,8 +14,10 @@ import {
   isValidGuestToken,
   sha256Hex,
 } from "@/lib/guest-order";
+import { loadLiveProductsByIds } from "@/lib/catalog";
 import { formatEgp } from "@/lib/money";
 import { isOrderStatus } from "@/lib/orders";
+import { resolveReorderItems } from "@/lib/reorder";
 import {
   REFUND_CASE_STATUS_STYLES,
   canRequestRefundWithinWindow,
@@ -25,6 +27,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { EscalateRefundForm } from "@/components/escalate-refund-form";
 import { CancelRefundForm } from "@/components/cancel-refund-form";
+import { ReorderButton } from "@/components/reorder-button";
 
 import { GuestRefundRequestForm } from "./refund-request-form";
 import { GuestCancelOrderButton } from "./cancel-order-form";
@@ -73,6 +76,7 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type GuestOrderItem = {
+  product_id: string;
   product_name: string;
   product_slug: string;
   unit_price_minor: number;
@@ -214,6 +218,23 @@ export default async function GuestOrderPage({
   const order = data;
   const reference = order.reference ?? `#${order.id.slice(0, 8)}`;
   const status = isOrderStatus(order.status) ? order.status : "placed";
+
+  // Reorder, resolved against live prices and stock like the account
+  // order page. The guest holds the token, so the product ids in the
+  // RPC shape are theirs to use.
+  const reorderLines = order.vendors.flatMap((vendor) =>
+    vendor.items.map((item) => ({
+      productId: item.product_id,
+      productName: item.product_name,
+      quantity: item.quantity,
+    })),
+  );
+  const reorderResolution = resolveReorderItems(
+    reorderLines,
+    await loadLiveProductsByIds(
+      reorderLines.map((line) => line.productId),
+    ),
+  );
 
   const { data: refundData, error: refundError } = await service.rpc(
     "get_guest_refund_cases",
@@ -538,6 +559,8 @@ export default async function GuestOrderPage({
         <p className="mt-4 rounded-xl bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
           {t("payCourier")}
         </p>
+
+        <ReorderButton resolution={reorderResolution} />
       </section>
 
       <div className="mt-6 flex flex-wrap gap-3">

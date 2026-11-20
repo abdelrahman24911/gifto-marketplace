@@ -31,6 +31,7 @@ type CartContextValue = {
   /** False until the stored cart has been read, to avoid flashing an empty cart. */
   ready: boolean;
   add: (item: CartItem) => void;
+  addMany: (items: CartItem[]) => void;
   update: (productId: string, quantity: number) => void;
   remove: (productId: string) => void;
   clear: () => void;
@@ -56,6 +57,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
       count: cartCount(items),
       subtotalMinor: cartSubtotalMinor(items),
       add: (item) => mutateCart((current) => addToCart(current, item)),
+      addMany: (items) =>
+        mutateCart((current) =>
+          items.reduce((acc, item) => addToCart(acc, item), current),
+        ),
       update: (productId, quantity) =>
         mutateCart((current) => setQuantity(current, productId, quantity)),
       remove: (productId) =>

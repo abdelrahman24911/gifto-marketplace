@@ -535,6 +535,29 @@ begin
   raise notice 'TEST 9 PASSED: get_guest_order exposes gift fields to the token holder only';
 end $$;
 
+-- ============================================================
+-- TEST 10: get_guest_order exposes product_id on order items
+-- (migration 49), so a guest can reorder from their order page.
+-- ============================================================
+do $$
+declare
+  v_hash text := encode(digest('guest-token-gift', 'sha256'), 'hex');
+  v_oid uuid := current_setting('gifto_test.guest_gift_order_id')::uuid;
+  v_order jsonb;
+  v_item jsonb;
+begin
+  v_order := public.get_guest_order(v_oid, v_hash);
+  if v_order is null then
+    raise exception 'TEST 10 FAILED: get_guest_order returned nothing';
+  end if;
+  v_item := (v_order -> 'vendors' -> 0 -> 'items' -> 0);
+  if v_item is null or v_item ->> 'product_id' is null then
+    raise exception 'TEST 10 FAILED: order item has no product_id: %',
+      v_item;
+  end if;
+  raise notice 'TEST 10 PASSED: get_guest_order exposes product_id on order items';
+end $$;
+
 reset role;
 
 rollback;

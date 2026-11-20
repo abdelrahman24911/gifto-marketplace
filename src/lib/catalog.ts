@@ -330,6 +330,28 @@ export async function getCategories(): Promise<CatalogCategory[]> {
   return result.ok ? result.data : [];
 }
 
+/**
+ * Live products by id, deliberately NOT cached: reorder needs today's
+ * price and stock, not the catalog cache's snapshot. Only active
+ * products from shops that are still published come back; anything
+ * missing is treated as unavailable by the caller.
+ */
+export async function loadLiveProductsByIds(
+  ids: (string | null)[],
+): Promise<CatalogProduct[]> {
+  const unique = [...new Set(ids.filter((id): id is string => Boolean(id)))];
+  if (unique.length === 0) return [];
+  const supabase = createPublicClient();
+  const { data, error } = await supabase
+    .from("products")
+    .select(PRODUCT_SELECT)
+    .in("id", unique)
+    .eq("status", "active")
+    .returns<ProductRow[]>();
+  if (error) return [];
+  return toCatalogProducts(data ?? []);
+}
+
 export const loadOccasions = cachedCatalogRead(
   "occasions",
   async (): Promise<CatalogRead<Load<CatalogOccasion[]>>> => {
