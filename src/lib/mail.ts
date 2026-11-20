@@ -332,6 +332,64 @@ export function passwordResetEmail(input: {
   };
 }
 
+export function vendorStaffInviteEmail(input: {
+  shopName: string;
+  role: string;
+  inviteUrl: string;
+}): MailMessage {
+  const text =
+    `You have been invited to join ${input.shopName} on Gifto as ${input.role}.\n\n` +
+    `Use this link to set your password and join the shop (it expires after 24 hours and can be used once):\n${input.inviteUrl}\n\n` +
+    `If you were not expecting this invitation, ignore this email — no access has been granted yet.`;
+  return {
+    to: "",
+    subject: `Invitation to join ${input.shopName} on Gifto`,
+    text,
+    html: htmlWrap(`Invitation to join ${input.shopName} on Gifto`, text),
+  };
+}
+
+/** Sends the staff invitation link through the same mail module. */
+export async function sendVendorStaffInviteEmail(
+  email: string,
+  shopName: string,
+  role: string,
+  inviteUrl: string,
+): Promise<MailSendResult> {
+  return sendMail({
+    ...vendorStaffInviteEmail({ shopName, role, inviteUrl }),
+    to: email,
+  });
+}
+
+export function vendorStaffAddedEmail(input: {
+  shopName: string;
+  role: string;
+}): MailMessage {
+  const text =
+    `You have been added to ${input.shopName} on Gifto as ${input.role}.\n\n` +
+    `Sign in with your existing Gifto account to open the shop dashboard. ` +
+    `If you cannot sign in, ask the shop owner to resend the invitation.`;
+  return {
+    to: "",
+    subject: `You were added to ${input.shopName} on Gifto`,
+    text,
+    html: htmlWrap(`You were added to ${input.shopName} on Gifto`, text),
+  };
+}
+
+/** Tells an existing account they were added to a shop (no invite link). */
+export async function sendVendorStaffAddedEmail(
+  email: string,
+  shopName: string,
+  role: string,
+): Promise<MailSendResult> {
+  return sendMail({
+    ...vendorStaffAddedEmail({ shopName, role }),
+    to: email,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Notify helpers — each fetches what it needs through the service client and
 // never throws. A missing recipient email means "no email to send to", not

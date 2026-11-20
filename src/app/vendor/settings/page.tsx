@@ -128,6 +128,18 @@ export default async function VendorSettingsPage({
         shop needs to be paused or reviewed.
       </p>
 
+      <p className="mt-3 text-sm">
+        <Link
+          href={`/vendor/settings/staff?vendor=${access.vendorId}`}
+          className="font-medium text-berry hover:text-berry-deep hover:underline"
+        >
+          Manage shop staff →
+        </Link>{" "}
+        <span className="text-ink-mute">
+          Invite teammates, change roles, and remove access.
+        </span>
+      </p>
+
       <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <section
           aria-labelledby="profile-heading"

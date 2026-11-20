@@ -1794,6 +1794,18 @@ export type Database = {
         };
         Returns: Json;
       };
+      list_vendor_members: {
+        Args: {
+          p_vendor_id: string;
+        };
+        Returns: {
+          profile_id: string;
+          email: string;
+          full_name: string | null;
+          role: VendorRole;
+          created_at: string;
+        }[];
+      };
       create_settlement: {
         Args: { p_vendor_id: string; p_note?: string | null };
         Returns: string;

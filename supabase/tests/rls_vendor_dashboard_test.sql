@@ -715,4 +715,256 @@ begin
   raise notice 'TEST 16 PASSED: analytics vendor/date index exists';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST 17 (P1-14, H-07): the owner manages the roster through RLS; staff,
+-- outsiders and cross-vendor owners cannot.
+-- ---------------------------------------------------------------------------
+reset role;
+do $$
+begin
+  -- A second active shop whose owner is NOT a member of Privacy Shop.
+  insert into auth.users (id, email, raw_user_meta_data) values
+    ('55000000-0000-0000-0000-000000000005', 'owner-c@dashboard.gifto.test', '{"full_name":"Owner C"}'::jsonb);
+  insert into public.vendors (id, name, slug, status, commission_rate) values
+    ('c3000000-0000-0000-0000-0000000000cc', 'Second Shop', 'second-shop', 'active', 0.10);
+  insert into public.vendor_members (vendor_id, profile_id, role) values
+    ('c3000000-0000-0000-0000-0000000000cc', '55000000-0000-0000-0000-000000000005', 'owner');
+end $$;
+
+set role authenticated;
+set request.jwt.claim.sub = '22000000-0000-0000-0000-000000000002';
+set request.jwt.claims = '{"sub":"22000000-0000-0000-0000-000000000002"}';
+do $$
+declare n int;
+begin
+  -- Owner invites the outsider as staff, promotes them, then removes them.
+  insert into public.vendor_members (vendor_id, profile_id, role)
+  values ('c1000000-0000-0000-0000-0000000000aa', '44000000-0000-0000-0000-000000000004', 'staff');
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'TEST 17 FAILED: owner inserted % members', n; end if;
+
+  update public.vendor_members set role = 'manager'
+   where vendor_id = 'c1000000-0000-0000-0000-0000000000aa'
+     and profile_id = '44000000-0000-0000-0000-000000000004';
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'TEST 17 FAILED: owner changed % roles', n; end if;
+  if (select role from public.vendor_members
+       where vendor_id = 'c1000000-0000-0000-0000-0000000000aa'
+         and profile_id = '44000000-0000-0000-0000-000000000004') <> 'manager' then
+    raise exception 'TEST 17 FAILED: role change did not persist';
+  end if;
+
+  delete from public.vendor_members
+   where vendor_id = 'c1000000-0000-0000-0000-0000000000aa'
+     and profile_id = '44000000-0000-0000-0000-000000000004';
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'TEST 17 FAILED: owner removed % members', n; end if;
+  raise notice 'TEST 17 PASSED: owner invites, re-roles and removes members';
+end $$;
+
+-- Staff cannot manage the roster at all.
+set request.jwt.claim.sub = '33000000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"33000000-0000-0000-0000-000000000003"}';
+do $$
+declare n int;
+begin
+  begin
+    insert into public.vendor_members (vendor_id, profile_id, role)
+    values ('c1000000-0000-0000-0000-0000000000aa', '44000000-0000-0000-0000-000000000004', 'staff');
+    raise exception 'TEST 17 FAILED: staff inserted a member';
+  exception when insufficient_privilege then
+    null;
+  end;
+
+  update public.vendor_members set role = 'manager'
+   where vendor_id = 'c1000000-0000-0000-0000-0000000000aa'
+     and profile_id = '22000000-0000-0000-0000-000000000002';
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'TEST 17 FAILED: staff changed % roles', n; end if;
+
+  delete from public.vendor_members
+   where vendor_id = 'c1000000-0000-0000-0000-0000000000aa'
+     and profile_id = '22000000-0000-0000-0000-000000000002';
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'TEST 17 FAILED: staff removed % members', n; end if;
+  raise notice 'TEST 17 PASSED: staff cannot manage the roster';
+end $$;
+
+-- Outsider and cross-vendor owner cannot touch this shop's roster.
+set request.jwt.claim.sub = '44000000-0000-0000-0000-000000000004';
+set request.jwt.claims = '{"sub":"44000000-0000-0000-0000-000000000004"}';
+do $$
+declare n int;
+begin
+  begin
+    insert into public.vendor_members (vendor_id, profile_id, role)
+    values ('c1000000-0000-0000-0000-0000000000aa', '44000000-0000-0000-0000-000000000004', 'staff');
+    raise exception 'TEST 17 FAILED: outsider inserted a member';
+  exception when insufficient_privilege then
+    null;
+  end;
+
+  delete from public.vendor_members
+   where vendor_id = 'c1000000-0000-0000-0000-0000000000aa'
+     and profile_id = '33000000-0000-0000-0000-000000000003';
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'TEST 17 FAILED: outsider removed % members', n; end if;
+  raise notice 'TEST 17 PASSED: outsiders cannot manage the roster';
+end $$;
+
+set request.jwt.claim.sub = '55000000-0000-0000-0000-000000000005';
+set request.jwt.claims = '{"sub":"55000000-0000-0000-0000-000000000005"}';
+do $$
+declare n int;
+begin
+  begin
+    insert into public.vendor_members (vendor_id, profile_id, role)
+    values ('c1000000-0000-0000-0000-0000000000aa', '44000000-0000-0000-0000-000000000004', 'staff');
+    raise exception 'TEST 17 FAILED: cross-vendor owner inserted a member';
+  exception when insufficient_privilege then
+    null;
+  end;
+
+  update public.vendor_members set role = 'manager'
+   where vendor_id = 'c1000000-0000-0000-0000-0000000000aa'
+     and profile_id = '33000000-0000-0000-0000-000000000003';
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'TEST 17 FAILED: cross-vendor owner changed % roles', n; end if;
+  raise notice 'TEST 17 PASSED: a shop owner cannot manage another shop''s roster';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 18 (P1-14, H-07): list_vendor_members shows the roster with contact
+-- details only to members of that shop (or platform admins).
+-- ---------------------------------------------------------------------------
+set request.jwt.claim.sub = '22000000-0000-0000-0000-000000000002';
+set request.jwt.claims = '{"sub":"22000000-0000-0000-0000-000000000002"}';
+do $$
+declare
+  v_count int;
+  v_staff_email text;
+begin
+  if has_function_privilege('anon', 'public.list_vendor_members(uuid)', 'execute')
+     or not has_function_privilege('authenticated', 'public.list_vendor_members(uuid)', 'execute') then
+    raise exception 'TEST 18 FAILED: roster RPC grants are wrong';
+  end if;
+
+  select count(*) into v_count
+    from public.list_vendor_members('c1000000-0000-0000-0000-0000000000aa');
+  if v_count <> 2 then
+    raise exception 'TEST 18 FAILED: owner saw % roster rows (expected 2)', v_count;
+  end if;
+
+  select email into v_staff_email
+    from public.list_vendor_members('c1000000-0000-0000-0000-0000000000aa')
+   where role = 'staff';
+  if v_staff_email <> 'staff@dashboard.gifto.test' then
+    raise exception 'TEST 18 FAILED: roster hides member contact details';
+  end if;
+  raise notice 'TEST 18 PASSED: owner reads the roster with emails';
+end $$;
+
+set request.jwt.claim.sub = '33000000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"33000000-0000-0000-0000-000000000003"}';
+do $$
+declare v_count int;
+begin
+  select count(*) into v_count
+    from public.list_vendor_members('c1000000-0000-0000-0000-0000000000aa');
+  if v_count <> 2 then
+    raise exception 'TEST 18 FAILED: staff saw % roster rows (expected 2)', v_count;
+  end if;
+  raise notice 'TEST 18 PASSED: staff sees the read-only roster';
+end $$;
+
+set request.jwt.claim.sub = '44000000-0000-0000-0000-000000000004';
+set request.jwt.claims = '{"sub":"44000000-0000-0000-0000-000000000004"}';
+do $$
+declare v_count int;
+begin
+  select count(*) into v_count
+    from public.list_vendor_members('c1000000-0000-0000-0000-0000000000aa');
+  if v_count <> 0 then
+    raise exception 'TEST 18 FAILED: outsider saw % roster rows', v_count;
+  end if;
+  raise notice 'TEST 18 PASSED: outsiders see no roster';
+end $$;
+
+set request.jwt.claim.sub = '55000000-0000-0000-0000-000000000005';
+set request.jwt.claims = '{"sub":"55000000-0000-0000-0000-000000000005"}';
+do $$
+declare v_count int;
+begin
+  select count(*) into v_count
+    from public.list_vendor_members('c1000000-0000-0000-0000-0000000000aa');
+  if v_count <> 0 then
+    raise exception 'TEST 18 FAILED: cross-vendor owner saw % roster rows', v_count;
+  end if;
+
+  select count(*) into v_count
+    from public.list_vendor_members('c3000000-0000-0000-0000-0000000000cc');
+  if v_count <> 1 then
+    raise exception 'TEST 18 FAILED: owner saw % own roster rows (expected 1)', v_count;
+  end if;
+  raise notice 'TEST 18 PASSED: rosters are isolated per shop';
+end $$;
+
+set request.jwt.claim.sub = '11000000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"11000000-0000-0000-0000-000000000001"}';
+do $$
+declare v_count int;
+begin
+  select count(*) into v_count
+    from public.list_vendor_members('c1000000-0000-0000-0000-0000000000aa');
+  if v_count <> 2 then
+    raise exception 'TEST 18 FAILED: admin saw % roster rows (expected 2)', v_count;
+  end if;
+  raise notice 'TEST 18 PASSED: platform admin reads any roster';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 19 (P1-14, H-07): the last-owner guard still holds — the sole owner
+-- cannot be demoted or removed, but can hand over once a second owner exists.
+-- ---------------------------------------------------------------------------
+set request.jwt.claim.sub = '22000000-0000-0000-0000-000000000002';
+set request.jwt.claims = '{"sub":"22000000-0000-0000-0000-000000000002"}';
+do $$
+begin
+  begin
+    update public.vendor_members set role = 'manager'
+     where vendor_id = 'c1000000-0000-0000-0000-0000000000aa'
+       and profile_id = '22000000-0000-0000-0000-000000000002';
+    raise exception 'TEST 19 FAILED: sole owner was demoted';
+  exception when raise_exception then
+    null;
+  end;
+
+  begin
+    delete from public.vendor_members
+     where vendor_id = 'c1000000-0000-0000-0000-0000000000aa'
+       and profile_id = '22000000-0000-0000-0000-000000000002';
+    raise exception 'TEST 19 FAILED: sole owner was removed';
+  exception when raise_exception then
+    null;
+  end;
+  raise notice 'TEST 19 PASSED: sole owner cannot be demoted or removed';
+end $$;
+
+do $$
+begin
+  -- Promote staff to owner, then the original owner can step down.
+  update public.vendor_members set role = 'owner'
+   where vendor_id = 'c1000000-0000-0000-0000-0000000000aa'
+     and profile_id = '33000000-0000-0000-0000-000000000003';
+  update public.vendor_members set role = 'manager'
+   where vendor_id = 'c1000000-0000-0000-0000-0000000000aa'
+     and profile_id = '22000000-0000-0000-0000-000000000002';
+  if (select role from public.vendor_members
+       where vendor_id = 'c1000000-0000-0000-0000-0000000000aa'
+         and profile_id = '22000000-0000-0000-0000-000000000002') <> 'manager' then
+    raise exception 'TEST 19 FAILED: handover demotion did not persist';
+  end if;
+  raise notice 'TEST 19 PASSED: ownership hands over once a second owner exists';
+end $$;
+
 rollback;

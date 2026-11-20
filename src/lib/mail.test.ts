@@ -19,6 +19,8 @@ import {
   passwordResetEmail,
   refundCaseResolvedEmail,
   sendMail,
+  vendorStaffAddedEmail,
+  vendorStaffInviteEmail,
 } from "./mail";
 
 describe("getMailConfig", () => {
@@ -173,6 +175,30 @@ describe("mail templates", () => {
     );
     expect(message.text).toContain("expires after one hour");
     expect(message.text).not.toMatch(/password is|your password:/i);
+  });
+
+  it("invites staff with the shop, role and a single-use link", () => {
+    const message = vendorStaffInviteEmail({
+      shopName: "Flower Shop",
+      role: "manager",
+      inviteUrl: "https://gifto.example/auth/accept-invite?code=abc",
+    });
+    expect(message.subject).toContain("Flower Shop");
+    expect(message.text).toContain("as manager");
+    expect(message.text).toContain(
+      "https://gifto.example/auth/accept-invite?code=abc",
+    );
+    expect(message.text).toContain("expires after 24 hours");
+  });
+
+  it("tells an existing account they were added, with no link to leak", () => {
+    const message = vendorStaffAddedEmail({
+      shopName: "Flower Shop",
+      role: "staff",
+    });
+    expect(message.text).toContain("Flower Shop");
+    expect(message.text).toContain("as staff");
+    expect(message.text).not.toMatch(/https?:\/\//);
   });
 });
 
