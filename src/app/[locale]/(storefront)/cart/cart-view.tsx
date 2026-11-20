@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { useLocale, useTranslations } from "next-intl";
 
 import { useCart } from "@/components/cart-provider";
+import { useToast } from "@/components/toast-provider";
 import { ProductImage } from "@/components/product-image";
 import { Link } from "@/i18n/navigation";
 import { MAX_LINE_QUANTITY, type CartItem } from "@/lib/cart";
@@ -28,6 +29,17 @@ export function CartView({
   const tc = useTranslations("common");
   const locale = useLocale() as MoneyLocale;
   const { items, subtotalMinor, ready, update, remove, clear } = useCart();
+  const { notify } = useToast();
+
+  function removeItem(item: CartItem): void {
+    remove(item.productId);
+    notify(t("removedFromCart", { name: item.name }), "info");
+  }
+
+  function clearCart(): void {
+    clear();
+    notify(t("cartCleared"), "info");
+  }
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-10">
@@ -38,7 +50,7 @@ export function CartView({
         {items.length > 0 ? (
           <button
             type="button"
-            onClick={clear}
+            onClick={clearCart}
             className="text-sm text-zinc-500 underline hover:text-zinc-800"
           >
             {t("clearCart")}
@@ -135,7 +147,7 @@ export function CartView({
                           />
                           <button
                             type="button"
-                            onClick={() => remove(item.productId)}
+                            onClick={() => removeItem(item)}
                             className="text-sm text-zinc-500 underline hover:text-zinc-800"
                           >
                             {t("remove")}

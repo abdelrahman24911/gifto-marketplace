@@ -4,6 +4,11 @@
  * Gifto design tokens — warm ivory paper, deep berry accents, gold detail.
  * Neighbouring neutrals are tinted toward the same warm hue so the whole
  * surface reads as one material rather than "white with a red button".
+ *
+ * Theme decision (UX Batch 1, 2026-11-20, recorded in docs/HOSTED_STATE.md):
+ * Gifto ships LIGHT-ONLY. There is no dark mode, no `dark:` variant, and no
+ * theme toggle. Do not add a half-finished dark theme; a dark theme is a
+ * separate, owner-approved piece of work if it is ever wanted.
  */
 @theme {
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;

@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { getLocale } from "next-intl/server";
 
 import { NavigationGuardProvider } from "@/components/navigation-guard";
+import { ToastProvider } from "@/components/toast-provider";
 import { LOCALE_DIRECTIONS, type AppLocale } from "@/i18n/routing";
 import { isIndexingEnabled } from "@/lib/indexing";
 import { SOCIAL_IMAGE } from "@/lib/metadata";
@@ -110,7 +111,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             __html: serializeJsonLd(organizationJsonLd()),
           }}
         />
-        <NavigationGuardProvider>{children}</NavigationGuardProvider>
+        <ToastProvider>
+          <NavigationGuardProvider>{children}</NavigationGuardProvider>
+        </ToastProvider>
       </body>
     </html>
   );

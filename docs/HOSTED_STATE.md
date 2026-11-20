@@ -210,3 +210,41 @@ P0-02 CI is not blamed for it; it must be fixed before CI can ever be green.
 **Update (P0-02, 2026-11-20): fixed** — `layout.tsx` now uses
 `{ children: ReactNode }`; `npm run typecheck` passes. See "P0-02 notes"
 below.
+
+## UX Batch 1 — Accessibility + gift-shopper features (2026-11-20)
+
+Baseline UI/UX rating 6.5/10 (up from ~5.5 at audit). This batch is worked
+in the discovery loop ahead of remaining P2 backend work, on branch
+`muse/p0-fixes`, local only, no push.
+
+### Theme decision — LIGHT-ONLY (recorded 2026-11-20)
+
+Gifto ships light-only. There is no dark mode, no `dark:` variant anywhere
+in `src/`, and no theme toggle. This is deliberate, not an omission: the
+brand palette (warm ivory paper, berry, gold) is defined once in
+`src/app/globals.css` and every surface is built against it. Adding a dark
+theme is a separate piece of work that needs an owner decision and a full
+pass over every surface — a partial dark theme (some pages dark, some
+light) would be worse than none. No UI doc exists in the repo, so this
+file and the comment at the top of `globals.css` are the record.
+
+### Accessibility (commit 1)
+
+- Skip link: the storefront layout renders a "Skip to main content" link
+  targeting `#main-content` (the storefront `<main>`, `tabIndex={-1}`).
+  Admin/vendor dashboards already had their own skip link to
+  `#dashboard-main` (`src/components/dashboard/dashboard-shell.tsx`) and
+  are unchanged.
+- Toast / announcement system: `src/components/toast-provider.tsx`
+  (mounted once in the root layout) + `src/lib/toast.ts`. `notify()` shows
+  a toast on the current page; `flash()` stores one in sessionStorage and
+  the provider drains it on the next mount/navigation, so success/error
+  feedback survives a navigation. Stored toasts are consumed exactly once
+  and expire after 30s. The region is `aria-live="polite"` (`role="alert"`
+  for errors). Existing per-component `aria-live` feedback (quick add,
+  purchase panel) is kept and is NOT duplicated through toasts. Wired so
+  far: cart remove / clear.
+- Loading states: `loading.tsx` added for product detail
+  (`shops/[slug]/[productSlug]`) and checkout, mirroring the existing
+  search skeleton. Cart already had a loading state; admin/vendor already
+  had `loading.tsx`.
