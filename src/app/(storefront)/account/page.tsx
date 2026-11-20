@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { ProductRail } from "@/components/product-rail";
 import { getRequestContext } from "@/lib/auth";
+import { loadNewArrivals } from "@/lib/catalog";
 
 export const metadata = { title: "Account — Gifto" };
 
@@ -40,22 +42,24 @@ export default async function AccountPage() {
 
   // Only profile details and (when the user belongs to a shop) shop locations
   // are fetched here; shops are skipped entirely for plain customers.
-  const [{ data: profile }, { data: shopRows }] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("full_name, phone, is_platform_admin")
-      .eq("id", user.id)
-      .maybeSingle(),
-    memberships.length > 0
-      ? supabase
-          .from("vendor_members")
-          .select(
-            "role, vendor:vendors(id, name, slug, status, city, governorate)",
-          )
-          .eq("profile_id", user.id)
-          .order("created_at", { ascending: true })
-      : Promise.resolve({ data: [] }),
-  ]);
+  const [{ data: profile }, { data: shopRows }, recommendations] =
+    await Promise.all([
+      supabase
+        .from("profiles")
+        .select("full_name, phone, is_platform_admin")
+        .eq("id", user.id)
+        .maybeSingle(),
+      memberships.length > 0
+        ? supabase
+            .from("vendor_members")
+            .select(
+              "role, vendor:vendors(id, name, slug, status, city, governorate)",
+            )
+            .eq("profile_id", user.id)
+            .order("created_at", { ascending: true })
+        : Promise.resolve({ data: [] }),
+      loadNewArrivals(4),
+    ]);
 
   const shops = (shopRows ?? []).filter(
     (m): m is typeof m & { vendor: NonNullable<typeof m.vendor> } =>
@@ -151,6 +155,17 @@ export default async function AccountPage() {
           </ul>
         )}
       </section>
+
+      {recommendations.ok && recommendations.data.length > 0 ? (
+        <section className="mt-6">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+            Gift ideas
+          </h2>
+          <div className="mt-4">
+            <ProductRail products={recommendations.data} />
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

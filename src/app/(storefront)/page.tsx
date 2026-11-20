@@ -16,9 +16,11 @@ import {
 } from "@/components/ui/section";
 import {
   loadCategories,
+  loadCategoryPreviews,
   loadGiftFinderPage,
   loadNewArrivals,
   loadOccasions,
+  loadShopPreviews,
   loadShops,
 } from "@/lib/catalog";
 import { GIFT_FINDER_PAGE_SIZE } from "@/lib/gift-finder";
@@ -37,20 +39,29 @@ export const metadata: Metadata = pageMetadata({
 });
 
 export default async function HomePage() {
-  const [occasions, categories, freshPicks, shops, giftFinderPage] =
-    await Promise.all([
-      loadOccasions(),
-      loadCategories(),
-      loadNewArrivals(8),
-      loadShops(4),
-      loadGiftFinderPage({
-        recipient: "any",
-        occasionSlug: null,
-        budget: "any",
-        offset: 0,
-        limit: GIFT_FINDER_PAGE_SIZE,
-      }),
-    ]);
+  const [
+    occasions,
+    categories,
+    freshPicks,
+    shops,
+    giftFinderPage,
+    categoryPreviews,
+    shopPreviews,
+  ] = await Promise.all([
+    loadOccasions(),
+    loadCategories(),
+    loadNewArrivals(8),
+    loadShops(4),
+    loadGiftFinderPage({
+      recipient: "any",
+      occasionSlug: null,
+      budget: "any",
+      offset: 0,
+      limit: GIFT_FINDER_PAGE_SIZE,
+    }),
+    loadCategoryPreviews(),
+    loadShopPreviews(),
+  ]);
 
   const giftFinderOccasions = occasions.ok
     ? occasions.data.map((occasion) => ({
@@ -116,6 +127,11 @@ export default async function HomePage() {
                     key={category.id}
                     category={category}
                     index={index}
+                    previews={
+                      categoryPreviews.ok
+                        ? (categoryPreviews.data[category.id] ?? [])
+                        : []
+                    }
                   />
                 ))}
               </div>
@@ -208,7 +224,13 @@ export default async function HomePage() {
             shops.data.length > 0 ? (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {shops.data.map((shop) => (
-                  <ShopCard key={shop.id} shop={shop} />
+                  <ShopCard
+                    key={shop.id}
+                    shop={shop}
+                    previews={
+                      shopPreviews.ok ? (shopPreviews.data[shop.id] ?? []) : []
+                    }
+                  />
                 ))}
               </div>
             ) : (

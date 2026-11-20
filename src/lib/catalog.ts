@@ -48,6 +48,13 @@ export type CatalogProduct = {
   categorySlug: string | null;
 };
 
+export type CatalogImagePreview = {
+  path: string;
+  alt: string | null;
+};
+
+export type CatalogPreviewMap = Record<string, CatalogImagePreview[]>;
+
 export type CatalogCategory = {
   id: string;
   name: string;
@@ -445,6 +452,87 @@ export const loadShops = cachedCatalogRead(
   },
   [CATALOG_TAGS.shops],
 );
+
+type PreviewRow = {
+  category_id: string | null;
+  vendor_id: string;
+  vendor?: unknown;
+  product_images: ImageRow[] | null;
+};
+
+const PREVIEW_IMAGE_COUNT = 3;
+const PREVIEW_PRODUCT_LIMIT = 500;
+
+function addImagePreview(
+  map: CatalogPreviewMap,
+  key: string,
+  preview: CatalogImagePreview,
+) {
+  const previews = map[key] ?? [];
+  if (
+    previews.length >= PREVIEW_IMAGE_COUNT ||
+    previews.some((existing) => existing.path === preview.path)
+  ) {
+    return;
+  }
+  map[key] = [...previews, preview];
+}
+
+const readStorefrontPreviews = cachedCatalogRead(
+  "storefront-previews",
+  async (): Promise<
+    CatalogRead<
+      Load<{ categories: CatalogPreviewMap; shops: CatalogPreviewMap }>
+    >
+  > => {
+    const supabase = createPublicClient();
+    const { data, error } = await supabase
+      .from("products")
+      .select(
+        "category_id, vendor_id, vendor:public_vendors!inner(id), product_images(path, alt, position)",
+      )
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(PREVIEW_PRODUCT_LIMIT)
+      .returns<PreviewRow[]>();
+
+    if (error) return FAILED_LOAD;
+
+    const categories: CatalogPreviewMap = {};
+    const shops: CatalogPreviewMap = {};
+
+    for (const row of data ?? []) {
+      const image = [...(row.product_images ?? [])]
+        .sort((a, b) => a.position - b.position)
+        .find((candidate) => candidate.path);
+      if (!image) continue;
+
+      const preview = { path: image.path, alt: image.alt };
+      if (row.category_id) {
+        addImagePreview(categories, row.category_id, preview);
+      }
+      addImagePreview(shops, row.vendor_id, preview);
+    }
+
+    return {
+      value: { ok: true, data: { categories, shops } },
+      cacheable: true,
+    };
+  },
+  [CATALOG_TAGS.catalog, CATALOG_TAGS.categories, CATALOG_TAGS.shops],
+);
+
+export async function loadCategoryPreviews(): Promise<Load<CatalogPreviewMap>> {
+  const result = await readStorefrontPreviews();
+  return result.ok
+    ? { ok: true, data: result.data.categories }
+    : { ok: false };
+}
+
+export async function loadShopPreviews(): Promise<Load<CatalogPreviewMap>> {
+  const result = await readStorefrontPreviews();
+  return result.ok ? { ok: true, data: result.data.shops } : { ok: false };
+}
 
 const readShop = cachedCatalogRead(
   "shop",

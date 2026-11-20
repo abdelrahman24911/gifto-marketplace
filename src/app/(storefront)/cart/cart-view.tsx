@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 import { useCart } from "@/components/cart-provider";
 import { ProductImage } from "@/components/product-image";
@@ -17,7 +18,11 @@ function groupByVendor(items: CartItem[]): [string, CartItem[]][] {
   return [...groups.entries()];
 }
 
-export function CartView() {
+export function CartView({
+  emptyRecommendations,
+}: {
+  emptyRecommendations?: ReactNode;
+}) {
   const { items, subtotalMinor, ready, update, remove, clear } = useCart();
 
   return (
@@ -40,14 +45,19 @@ export function CartView() {
       {!ready ? (
         <p className="mt-6 text-sm text-zinc-500">Loading your cart…</p>
       ) : items.length === 0 ? (
-        <div className="mt-6 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-12 text-center">
-          <p className="text-sm text-zinc-600">Your cart is empty.</p>
-          <Link
-            href="/shops"
-            className="mt-4 inline-block rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
-          >
-            Browse shops
-          </Link>
+        <div className="mt-6">
+          <div className="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-12 text-center">
+            <p className="text-sm text-zinc-600">Your cart is empty.</p>
+            <Link
+              href="/shops"
+              className="mt-4 inline-block rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
+            >
+              Browse shops
+            </Link>
+          </div>
+          {emptyRecommendations ? (
+            <div className="mt-8">{emptyRecommendations}</div>
+          ) : null}
         </div>
       ) : (
         <>

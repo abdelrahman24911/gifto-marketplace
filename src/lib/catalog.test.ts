@@ -117,11 +117,13 @@ vi.mock("next/cache", () => ({
 
 import {
   getNewArrivals,
+  loadCategoryPreviews,
   loadGiftFinderPage,
   loadOccasion,
   loadOccasions,
   loadProductsByCategory,
   loadProductsByOccasion,
+  loadShopPreviews,
   searchProducts,
 } from "./catalog";
 
@@ -153,6 +155,73 @@ describe("public catalog queries", () => {
       "eq:status=active",
     ]);
     expect(query.limit).toBe(7);
+  });
+
+  it("builds three image previews per category and shop from public products", async () => {
+    db.results.products = {
+      data: [
+        {
+          category_id: "category-1",
+          vendor_id: "vendor-1",
+          product_images: [
+            { path: "product-1/b.webp", alt: "Second", position: 2 },
+            { path: "product-1/a.webp", alt: "First", position: 1 },
+          ],
+        },
+        {
+          category_id: "category-1",
+          vendor_id: "vendor-1",
+          product_images: [{ path: "product-2.webp", alt: null, position: 0 }],
+        },
+        {
+          category_id: "category-1",
+          vendor_id: "vendor-1",
+          product_images: [{ path: "product-3.webp", alt: "Third", position: 0 }],
+        },
+        {
+          category_id: "category-1",
+          vendor_id: "vendor-1",
+          product_images: [{ path: "product-4.webp", alt: "Fourth", position: 0 }],
+        },
+        {
+          category_id: null,
+          vendor_id: "vendor-1",
+          product_images: [{ path: "product-5.webp", alt: null, position: 0 }],
+        },
+      ],
+      error: null,
+    };
+
+    const categories = await loadCategoryPreviews();
+    const shops = await loadShopPreviews();
+
+    expect(categories).toEqual({
+      ok: true,
+      data: {
+        "category-1": [
+          { path: "product-1/a.webp", alt: "First" },
+          { path: "product-2.webp", alt: null },
+          { path: "product-3.webp", alt: "Third" },
+        ],
+      },
+    });
+    expect(shops).toEqual({
+      ok: true,
+      data: {
+        "vendor-1": [
+          { path: "product-1/a.webp", alt: "First" },
+          { path: "product-2.webp", alt: null },
+          { path: "product-3.webp", alt: "Third" },
+        ],
+      },
+    });
+
+    const query = db.queries[0];
+    expect(query.table).toBe("products");
+    expect(query.select).toContain("vendor:public_vendors!inner(");
+    expect(query.filters).toEqual(["eq:status=active"]);
+    expect(query.orders).toEqual(["created_at:desc"]);
+    expect(query.limit).toBe(500);
   });
 
   it("keeps search filters and limits on the inner-joined product query", async () => {

@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { CategoryTile } from "@/components/category-tile";
 import { Container, EmptyState, Eyebrow } from "@/components/ui/section";
-import { loadCategories } from "@/lib/catalog";
+import { loadCategories, loadCategoryPreviews } from "@/lib/catalog";
 import { pageMetadata } from "@/lib/metadata";
 
 export const metadata: Metadata = pageMetadata({
@@ -14,7 +14,10 @@ export const metadata: Metadata = pageMetadata({
 });
 
 export default async function CategoriesPage() {
-  const result = await loadCategories();
+  const [result, categoryPreviews] = await Promise.all([
+    loadCategories(),
+    loadCategoryPreviews(),
+  ]);
 
   return (
     <div className="pb-8">
@@ -48,6 +51,11 @@ export default async function CategoriesPage() {
                 key={category.id}
                 category={category}
                 index={index}
+                previews={
+                  categoryPreviews.ok
+                    ? (categoryPreviews.data[category.id] ?? [])
+                    : []
+                }
               />
             ))}
           </div>

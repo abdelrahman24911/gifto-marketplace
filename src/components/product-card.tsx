@@ -39,12 +39,14 @@ function CardMedia({
 }) {
   return (
     <div className="relative overflow-hidden bg-gradient-to-br from-berry-soft via-paper-deep to-gold-soft">
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0 flex items-center justify-center font-display text-6xl text-berry-deep/20"
-      >
-        {name.trim().charAt(0).toUpperCase() || "?"}
-      </span>
+      {!imagePath ? (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 flex items-center justify-center font-display text-6xl text-berry-deep/20"
+        >
+          {name.trim().charAt(0).toUpperCase() || "?"}
+        </span>
+      ) : null}
       <ProductImage
         path={imagePath}
         alt={imageAlt ?? name}

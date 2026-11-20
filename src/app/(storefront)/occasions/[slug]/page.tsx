@@ -11,6 +11,7 @@ import { OccasionFallbackArt } from "@/components/occasion-artwork";
 import { OccasionEmpty } from "@/components/occasion-empty";
 import { ProductCard } from "@/components/product-card";
 import { ProductImage } from "@/components/product-image";
+import { ProductRail } from "@/components/product-rail";
 import {
   Breadcrumb,
   Container,
@@ -18,6 +19,7 @@ import {
 } from "@/components/ui/section";
 import {
   getOccasions,
+  loadNewArrivals,
   loadOccasion,
   loadProductsByOccasion,
   type CatalogOccasion,
@@ -125,9 +127,10 @@ export default async function OccasionPage({ params }: Props) {
 
   const occasion = lookup.occasion;
   const occasionName = occasionDisplayName(occasion.slug, occasion.name);
-  const [productsResult, occasions] = await Promise.all([
+  const [productsResult, occasions, recommendations] = await Promise.all([
     loadProductsByOccasion(occasion.id),
     getOccasions(),
+    loadNewArrivals(4),
   ]);
 
   const products = productsResult.ok ? productsResult.data.items : [];
@@ -224,20 +227,35 @@ export default async function OccasionPage({ params }: Props) {
               }
             />
           ) : products.length === 0 ? (
-            <OccasionEmpty
-              title="No gifts here yet"
-              description="No gifts match this occasion yet. Browse the shops to keep looking, or explore another moment."
-              action={
-                <>
-                  <Link href="/shops" className={primaryLinkClass}>
-                    Browse shops
-                  </Link>
-                  <Link href="/occasions" className={secondaryLinkClass}>
-                    Back to occasions
-                  </Link>
-                </>
-              }
-            />
+            <>
+              <OccasionEmpty
+                title="No gifts here yet"
+                description="No gifts match this occasion yet. Browse the shops to keep looking, or explore another moment."
+                action={
+                  <>
+                    <Link href="/shops" className={primaryLinkClass}>
+                      Browse shops
+                    </Link>
+                    <Link href="/occasions" className={secondaryLinkClass}>
+                      Back to occasions
+                    </Link>
+                  </>
+                }
+              />
+              {recommendations.ok && recommendations.data.length > 0 ? (
+                <div className="mt-10 border-t border-line pt-8">
+                  <h2 className="font-display text-2xl leading-tight text-ink sm:text-3xl">
+                    Fresh gift ideas
+                  </h2>
+                  <p className="mt-2 text-ink-soft">
+                    Start with the newest gifts from our independent shops.
+                  </p>
+                  <div className="mt-5">
+                    <ProductRail products={recommendations.data} />
+                  </div>
+                </div>
+              ) : null}
+            </>
           ) : (
             <div className="grid grid-cols-2 gap-4 sm:gap-5 lg:grid-cols-4">
               {products.map((product) => (

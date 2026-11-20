@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { ShopCard } from "@/components/shop-card";
 import { Container, EmptyState, Eyebrow } from "@/components/ui/section";
-import { loadShops } from "@/lib/catalog";
+import { loadShopPreviews, loadShops } from "@/lib/catalog";
 import { pageMetadata } from "@/lib/metadata";
 
 export const metadata: Metadata = pageMetadata({
@@ -14,7 +14,10 @@ export const metadata: Metadata = pageMetadata({
 });
 
 export default async function ShopsPage() {
-  const result = await loadShops();
+  const [result, shopPreviews] = await Promise.all([
+    loadShops(),
+    loadShopPreviews(),
+  ]);
 
   return (
     <div className="pb-8">
@@ -57,7 +60,13 @@ export default async function ShopsPage() {
             </p>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {result.data.map((shop) => (
-                <ShopCard key={shop.id} shop={shop} />
+                <ShopCard
+                  key={shop.id}
+                  shop={shop}
+                  previews={
+                    shopPreviews.ok ? (shopPreviews.data[shop.id] ?? []) : []
+                  }
+                />
               ))}
             </div>
           </>
