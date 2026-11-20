@@ -37,7 +37,7 @@ export type AddressCorrectionValues = {
 
 /**
  * Validates one correction the way the RPC does (same length rules
- * place_order enforces, canonical governorate from P1-06, mandatory reason,
+ * place_order_with_price_check enforces, canonical governorate from P1-06, mandatory reason,
  * note required when the reason is "other"). Returns the first problem, or
  * null when the input is acceptable. Trims values; the caller stores the
  * trimmed result.

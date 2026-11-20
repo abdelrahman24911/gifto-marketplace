@@ -96,7 +96,7 @@ set request.jwt.claims = '{"sub":"c1110000-0000-0000-0000-000000000001"}';
 do $$
 declare v_oid uuid;
 begin
-  v_oid := public.place_order(
+  v_oid := gifto_test.place_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1},
       {"product_id":"51100000-0000-0000-0000-000000000004","quantity":1}]'::jsonb,
     'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria');
@@ -269,7 +269,7 @@ set request.jwt.claims = '{"sub":"c1110000-0000-0000-0000-000000000001"}';
 do $$
 declare v_oid uuid;
 begin
-  v_oid := public.place_order(
+  v_oid := gifto_test.place_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
     'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria');
   perform set_config('gifto_test.comm_cancelled_id', v_oid::text, false);
@@ -452,7 +452,7 @@ set request.jwt.claims = '{"sub":"c1110000-0000-0000-0000-000000000001"}';
 do $$
 declare v_oid uuid;
 begin
-  v_oid := public.place_order(
+  v_oid := gifto_test.place_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000004","quantity":1}]'::jsonb,
     'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria');
   perform set_config('gifto_test.comm_order3_id', v_oid::text, false);
@@ -861,7 +861,7 @@ set request.jwt.claims = '{"sub":"c1110000-0000-0000-0000-000000000001"}';
 do $$
 declare v_oid uuid;
 begin
-  v_oid := public.place_order(
+  v_oid := gifto_test.place_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000004","quantity":1}]'::jsonb,
     'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria'
   );
@@ -922,7 +922,7 @@ set request.jwt.claims = '{"sub":"c1110000-0000-0000-0000-000000000001"}';
 do $$
 declare v_oid uuid;
 begin
-  v_oid := public.place_order(
+  v_oid := gifto_test.place_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
     'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria'
   );
@@ -1030,7 +1030,7 @@ set request.jwt.claims = '{"sub":"c1110000-0000-0000-0000-000000000001"}';
 do $$
 declare v_oid uuid;
 begin
-  v_oid := public.place_order(
+  v_oid := gifto_test.place_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
     'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria'
   );
@@ -1216,7 +1216,7 @@ set request.jwt.claims = '{"sub":"c1110000-0000-0000-0000-000000000001"}';
 do $$
 declare v_oid uuid;
 begin
-  v_oid := public.place_order(
+  v_oid := gifto_test.place_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
     'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria'
   );

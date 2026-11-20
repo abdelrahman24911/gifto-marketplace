@@ -7,8 +7,9 @@
 //
 // What it does, all on a DISPOSABLE database (gifto_conc_test) only:
 //   1. Drops/creates the database, applies scripts/auth-emulation.sql when
-//      the server lacks auth.users, supabase/tests/storage_stub.sql, and
-//      supabase/migrations/ in order.
+//      the server lacks auth.users, supabase/tests/storage_stub.sql,
+//      supabase/migrations/ in order, and supabase/tests/test_helpers.sql
+//      (test-only order helpers, R-03).
 //   2. Runs supabase/tests/concurrency_mark_settlement_paid.sql (setup +
 //      sequential mismatch and zero-value cases; the vendor-A settlement
 //      is left open and its id is printed as CONCURRENCY_SETTLEMENT_ID).
@@ -84,6 +85,9 @@ console.log("== step 1: fresh disposable database ==");
     const mig = await psql(["-f", join(ROOT, "supabase/migrations", file)]);
     if (mig.code !== 0) fail(`migration ${file}`, mig.err);
   }
+  // Test-only order helpers (R-03): never applied to a hosted project.
+  const helpers = await psql(["-f", join(ROOT, "supabase/tests/test_helpers.sql")]);
+  if (helpers.code !== 0) fail("test helpers", helpers.err);
   console.log("PASS: migrations applied on disposable database");
 }
 

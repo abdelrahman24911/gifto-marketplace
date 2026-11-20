@@ -123,9 +123,9 @@ and the backup drill are tracked in `docs/HOSTED_STATE.md`.
 
 ### Verifying RLS locally
 
-Fourteen suites exercise the policies against a disposable `supabase/postgres` container
-(`ls supabase/tests/*_test.sql | wc -l` → 14, recounted 2026-11-20; all 14 pass on a
-fresh schema after migrations 1–32, run 2026-11-20)
+Sixteen suites exercise the policies against a disposable `supabase/postgres` container
+(`ls supabase/tests/*_test.sql | wc -l` → 16, recounted 2026-11-21; all 16 pass on a
+fresh schema after migrations 1–51, run 2026-11-21)
 (which already ships the `auth` schema, `auth.users`, `auth.uid()`, and the
 `anon`/`authenticated`/`service_role` roles). They simulate Supabase request context the
 way PostgREST does and abort non-zero on any failure. Each test sets both
@@ -140,7 +140,7 @@ transaction and ends with `rollback`, even on success.
 | `supabase/tests/rls_foundation_test.sql` | Phase 1: vendor privacy, membership, self-elevation guard, status history, `public_vendors` view |
 | `supabase/tests/rls_onboarding_test.sql` | Phase 2/14/15: profile provisioning, managed-only onboarding, active-vendor authorization, pending/suspended profile+roster denial, atomic service-role vendor creation, approval, pending invisibility |
 | `supabase/tests/rls_catalog_test.sql` | Phase 3/15: categories, products, product images, slug derivation, vendor isolation, stock-column denial, audited stock RPC, inactive catalog delete denial |
-| `supabase/tests/rls_orders_test.sql` | Phase 4/15: checkout split/pricing/stock, suborder transition rules, privacy (buyer, each shop, admin), pending-shop PII denial, cancellation and restock; migration 42 (P1-15): shipping requires courier and tracking reference, handover time is stamped, courier/tracking are ignored on other transitions |
+| `supabase/tests/rls_orders_test.sql` | Phase 4/15: checkout split/pricing/stock, suborder transition rules, privacy (buyer, each shop, admin), pending-shop PII denial, cancellation and restock; migration 42 (P1-15): shipping requires courier and tracking reference, handover time is stamped, courier/tracking are ignored on other transitions; migration 51 (R-03): legacy no-check checkout RPCs dropped, only the price-check RPCs remain, order creation in tests goes through `supabase/tests/test_helpers.sql` |
 | `supabase/tests/rls_commissions_test.sql` | Phase 6/15: commission earned on delivery (rate × subtotal), idempotent delivery, return reversal, admin-only settlements, vendor isolation, suspended-vendor denial |
 | `supabase/tests/rls_inventory_test.sql` | Phase 7/15: manual stock adjustments are audited and role-gated, no direct movement or stock-column writes, validation and history isolation |
 | `supabase/tests/rls_hardening_test.sql` | Phase 8: admin self-provisioning INSERT guard, dropped `is_vendor_staff`, last-owner demotion/deletion guard, service-role bootstrap path |
@@ -168,7 +168,7 @@ Three details matter when running them:
 ```bash
 docker run -d --name gifto-rls-test -e POSTGRES_PASSWORD=postgres \
   -p 65432:5432 public.ecr.aws/supabase/postgres:17.11.0.003
-# wait for the init gate described above, then for each of the fourteen suites:
+# wait for the init gate described above, then for each of the sixteen suites:
 docker exec gifto-rls-test psql -U postgres -c \
   'drop schema public cascade; create schema public; grant usage on schema public to anon, authenticated, service_role;'
 docker cp supabase/tests/storage_stub.sql gifto-rls-test:/tmp/storage_stub.sql
@@ -180,6 +180,8 @@ for s in rls_foundation rls_onboarding rls_catalog rls_orders rls_commissions rl
   docker cp supabase/migrations gifto-rls-test:/tmp/migrations
   docker cp "supabase/tests/${s}_test.sql" gifto-rls-test:/tmp/$s.sql
   docker exec gifto-rls-test sh -c 'for f in /tmp/migrations/*.sql; do psql -q -v ON_ERROR_STOP=1 -U postgres -f "$f"; done'
+  docker cp supabase/tests/test_helpers.sql gifto-rls-test:/tmp/test_helpers.sql
+  docker exec gifto-rls-test psql -q -v ON_ERROR_STOP=1 -U postgres -f /tmp/test_helpers.sql
   docker exec gifto-rls-test psql -v ON_ERROR_STOP=1 -U postgres \
     -c "set gifto.rls_test_disposable = 'yes';" -f "/tmp/$s.sql"
 done

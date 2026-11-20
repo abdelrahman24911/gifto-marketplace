@@ -104,12 +104,16 @@ begin
     null;
   end;
   begin
-    perform public.place_order('[]'::jsonb, 'A', '123456', 'Street 1', 'Alex', 'Alex');
-    raise exception 'TEST 2 FAILED: anon called place_order';
+    -- R-03: the only signed-in checkout RPC is place_order_with_price_check;
+    -- anon has no EXECUTE on it (the legacy place_order was dropped).
+    perform public.place_order_with_price_check(
+      '[]'::jsonb, 'A', '123456', null, 'Street 1', 'Alex', 'Alex', null,
+      gen_random_uuid(), null, null);
+    raise exception 'TEST 2 FAILED: anon called place_order_with_price_check';
   exception when insufficient_privilege then
     null;
   end;
-  raise notice 'TEST 2 PASSED: anon cannot read orders or call place_order';
+  raise notice 'TEST 2 PASSED: anon cannot read orders or call place_order_with_price_check';
 end $$;
 
 -- ---------------------------------------------------------------------------
@@ -121,9 +125,12 @@ set request.jwt.claims = '{}';
 do $$
 begin
   begin
-    perform public.place_order(
+    -- R-03: the legacy place_order is dropped; the price-check RPC rejects
+    -- a caller with no session (auth.uid() is null) with 42501.
+    perform public.place_order_with_price_check(
       '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
-      'A Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria');
+      'A Buyer', '01001112233', null, '12 Main Street', 'Alexandria', 'Alexandria', null,
+      gen_random_uuid(), null, null);
     raise exception 'TEST 3 FAILED: placed an order without a session';
   exception when insufficient_privilege then
     raise notice 'TEST 3 PASSED: checkout rejected for a caller with no session';
@@ -145,7 +152,7 @@ declare
   v_items   int;
   v_rate    numeric;
 begin
-  v_oid := public.place_order(
+  v_oid := gifto_test.place_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":2},
       {"product_id":"51100000-0000-0000-0000-000000000004","quantity":1}]'::jsonb,
     'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria', null);
@@ -578,7 +585,7 @@ declare v_msg text;
 begin
   -- insufficient stock (A Two has 2)
   begin
-    perform public.place_order(
+    perform gifto_test.place_order(
       '[{"product_id":"51100000-0000-0000-0000-000000000002","quantity":3}]'::jsonb,
       'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria');
     raise exception 'TEST 11 FAILED: ordered more than stock';
@@ -592,7 +599,7 @@ begin
 
   -- a draft product
   begin
-    perform public.place_order(
+    perform gifto_test.place_order(
       '[{"product_id":"51100000-0000-0000-0000-000000000003","quantity":1}]'::jsonb,
       'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria');
     raise exception 'TEST 11 FAILED: ordered a draft product';
@@ -604,7 +611,7 @@ begin
 
   -- a product belonging to a pending vendor
   begin
-    perform public.place_order(
+    perform gifto_test.place_order(
       '[{"product_id":"51100000-0000-0000-0000-000000000005","quantity":1}]'::jsonb,
       'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria');
     raise exception 'TEST 11 FAILED: ordered from a pending vendor';
@@ -616,7 +623,7 @@ begin
 
   -- empty cart
   begin
-    perform public.place_order(
+    perform gifto_test.place_order(
       '[]'::jsonb, 'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria');
     raise exception 'TEST 11 FAILED: accepted an empty cart';
   exception when others then
@@ -627,7 +634,7 @@ begin
 
   -- duplicate lines
   begin
-    perform public.place_order(
+    perform gifto_test.place_order(
       '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1},
         {"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
       'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria');
@@ -640,7 +647,7 @@ begin
 
   -- missing address
   begin
-    perform public.place_order(
+    perform gifto_test.place_order(
       '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
       'Sara Buyer', '01001112233', '', 'Alexandria', 'Alexandria');
     raise exception 'TEST 11 FAILED: accepted an empty address';
@@ -741,7 +748,7 @@ do $$
 declare v_second uuid; v_third uuid; v_stock int;
 begin
   -- second order, still cancellable
-  v_second := public.place_order(
+  v_second := gifto_test.place_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
     'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria');
   perform set_config('gifto_test.second_order_id', v_second::text, false);
@@ -764,7 +771,7 @@ begin
     raise exception 'TEST 15 FAILED: stock not restored (expected 3, got %)', v_stock;
   end if;
   -- third order, confirmed by a vendor -> no longer cancellable
-  v_third := public.place_order(
+  v_third := gifto_test.place_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000004","quantity":1}]'::jsonb,
     'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria');
   perform set_config('gifto_test.third_order_id', v_third::text, false);
@@ -833,7 +840,7 @@ set request.jwt.claims = '{"sub":"11100000-0000-0000-0000-000000000001"}';
 do $$
 declare v_oid uuid;
 begin
-  v_oid := public.place_order(
+  v_oid := gifto_test.place_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1},
       {"product_id":"51100000-0000-0000-0000-000000000004","quantity":1}]'::jsonb,
     'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria');
@@ -1048,15 +1055,28 @@ begin
   end if;
   raise notice 'TEST 17d PASSED: wrong expected total blocks with PRICE_CHANGED';
 
-  -- (e) The legacy wrapper keeps its old behaviour (no check) — checkout no
-  -- longer uses it, but its signature is stable for existing callers.
-  v_oid := public.place_order_with_idempotency(
-    '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
-    'Sara Buyer', '01001112233', 'buyer@orders.gifto.test',
-    '12 Main Street', 'Alexandria', 'Alexandria', null,
-    gen_random_uuid());
-  if v_oid is null then
-    raise exception 'TEST 17 FAILED: legacy wrapper stopped placing';
+  -- (e) R-03: the legacy no-check wrapper is gone. An authenticated caller
+  -- can no longer reach place_order_with_idempotency at all — the function
+  -- does not exist (42883) — and no order is created by the attempt. The
+  -- only signed-in checkout path is place_order_with_price_check, covered
+  -- in (a)–(d) above.
+  select count(*) into v_orders_before from public.orders;
+  v_blocked := false;
+  begin
+    perform public.place_order_with_idempotency(
+      '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+      'Sara Buyer', '01001112233', 'buyer@orders.gifto.test',
+      '12 Main Street', 'Alexandria', 'Alexandria', null,
+      gen_random_uuid());
+  exception when undefined_function then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 17 FAILED: legacy place_order_with_idempotency is still callable';
+  end if;
+  select count(*) into v_orders_after from public.orders;
+  if v_orders_after <> v_orders_before then
+    raise exception 'TEST 17 FAILED: legacy checkout attempt created an order';
   end if;
   raise notice 'TEST 17 PASSED: signed-in price consent blocks, re-confirms, and totals are checked';
 end $$;
@@ -1072,7 +1092,7 @@ set request.jwt.claims = '{"sub":"11100000-0000-0000-0000-000000000001"}';
 do $$
 declare v_oid uuid;
 begin
-  v_oid := public.place_order(
+  v_oid := gifto_test.place_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
     'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria', null);
   perform set_config('gifto_test.courier_order_id', v_oid::text, false);
@@ -1151,6 +1171,34 @@ begin
     raise exception 'TEST 18 FAILED: a later transition overwrote the handover record';
   end if;
   raise notice 'TEST 18 PASSED: handover survives the delivery transition unchanged';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 19 (R-03): the legacy no-check checkout RPCs are retired
+-- ---------------------------------------------------------------------------
+-- Migration 51 dropped place_order, place_order_with_idempotency and
+-- place_guest_order. No API role can execute them (they do not exist), and
+-- the price-check RPCs are the only checkout paths left.
+reset role;
+do $$
+begin
+  if to_regprocedure('public.place_order(jsonb,text,text,text,text,text,text)') is not null
+     or to_regprocedure('public.place_order_with_idempotency(jsonb,text,text,text,text,text,text,text,uuid)') is not null
+     or to_regprocedure('public.place_guest_order(jsonb,text,text,text,text,text,text,text,uuid,text)') is not null then
+    raise exception 'TEST 19 FAILED: a legacy no-check checkout RPC still exists';
+  end if;
+
+  if not has_function_privilege('authenticated', 'public.place_order_with_price_check(jsonb,text,text,text,text,text,text,text,uuid,jsonb,int,boolean,text,date,text)', 'execute')
+     or has_function_privilege('anon', 'public.place_order_with_price_check(jsonb,text,text,text,text,text,text,text,uuid,jsonb,int,boolean,text,date,text)', 'execute') then
+    raise exception 'TEST 19 FAILED: place_order_with_price_check grants are wrong';
+  end if;
+
+  if not has_function_privilege('service_role', 'public.place_guest_order_with_price_check(jsonb,text,text,text,text,text,text,text,uuid,text,jsonb,int,boolean,text,date,text)', 'execute')
+     or has_function_privilege('authenticated', 'public.place_guest_order_with_price_check(jsonb,text,text,text,text,text,text,text,uuid,text,jsonb,int,boolean,text,date,text)', 'execute') then
+    raise exception 'TEST 19 FAILED: place_guest_order_with_price_check grants are wrong';
+  end if;
+
+  raise notice 'TEST 19 PASSED: legacy no-check checkout RPCs are gone; only the price-check RPCs remain';
 end $$;
 
 reset role;

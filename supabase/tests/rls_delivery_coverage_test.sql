@@ -89,7 +89,7 @@ declare
   v_blocked  boolean := false;
 begin
   begin
-    perform public.place_order(
+    perform gifto_test.place_order(
       '[{"product_id":"51200000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
       'Coverage Buyer', '01001112233', '12 Pyramid Street',
       'Giza', 'Giza', null
@@ -102,7 +102,7 @@ begin
     raise exception 'TEST 3 FAILED: out-of-coverage checkout was accepted';
   end if;
 
-  v_order_id := public.place_order(
+  v_order_id := gifto_test.place_order(
     '[{"product_id":"51200000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
     'Coverage Buyer', '01001112233', '12 Road 9, Maadi',
     'Maadi', 'Cairo', null
@@ -175,7 +175,7 @@ set request.jwt.claims = '{"sub":"11200000-0000-0000-0000-000000000001"}';
 do $$
 declare v_order_id uuid;
 begin
-  v_order_id := public.place_order(
+  v_order_id := gifto_test.place_order(
     '[{"product_id":"51200000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
     'Coverage Buyer', '01001112233', '12 Road 9, Maadi',
     'Maadi', 'Cairo Governorate', null
@@ -278,7 +278,7 @@ declare
 begin
   -- "axb" must not match the "a_b" area: blocked, nothing ordered.
   begin
-    perform public.place_order(
+    perform gifto_test.place_order(
       '[{"product_id":"51200000-0000-0000-0000-000000000002","quantity":1}]'::jsonb,
       'Coverage Buyer', '01001112233', 'Flat axb, 5 Road',
       'Cairo', 'Cairo', null
@@ -298,7 +298,7 @@ begin
   end if;
 
   -- A literal "a_b" in the address places.
-  v_order_id := public.place_order(
+  v_order_id := gifto_test.place_order(
     '[{"product_id":"51200000-0000-0000-0000-000000000002","quantity":1}]'::jsonb,
     'Coverage Buyer', '01001112233', 'Flat a_b, 5 Road',
     'Cairo', 'Cairo', null
@@ -330,7 +330,7 @@ begin
   end if;
 
   begin
-    perform public.place_order(
+    perform gifto_test.place_order(
       '[{"product_id":"51200000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
       'Coverage Buyer', '01001112233', '12 Pyramid Street',
       'Giza', 'Giza', null
@@ -358,7 +358,7 @@ begin
     raise exception 'TEST 6 FAILED: expected 2 orders for the shop, got %', v_orders;
   end if;
 
-  v_order_id := public.place_order(
+  v_order_id := gifto_test.place_order(
     '[{"product_id":"51200000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
     'Coverage Buyer', '01001112233', '12 Road 9, Maadi',
     'Maadi', 'Cairo', null

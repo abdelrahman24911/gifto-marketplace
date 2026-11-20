@@ -94,15 +94,15 @@ declare
   v_oid uuid;
   v_ov  uuid;
 begin
-  v_oid := public.place_order(
+  v_oid := gifto_test.place_order(
     '[{"product_id":"51100000-0000-0000-0000-0000000000a1","quantity":1}]'::jsonb,
     'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria');
   perform set_config('gifto_test.conc_order_a', v_oid::text, false);
-  v_oid := public.place_order(
+  v_oid := gifto_test.place_order(
     '[{"product_id":"51100000-0000-0000-0000-0000000000a4","quantity":1}]'::jsonb,
     'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria');
   perform set_config('gifto_test.conc_order_b', v_oid::text, false);
-  v_oid := public.place_order(
+  v_oid := gifto_test.place_order(
     '[{"product_id":"51100000-0000-0000-0000-0000000000a7","quantity":1}]'::jsonb,
     'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria');
   perform set_config('gifto_test.conc_order_c', v_oid::text, false);

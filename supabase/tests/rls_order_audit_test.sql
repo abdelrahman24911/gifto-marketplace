@@ -108,7 +108,7 @@ set request.jwt.claims = '{"sub":"a1110000-0000-0000-0000-000000000001"}';
 do $$
 declare v_oid uuid;
 begin
-  v_oid := public.place_order(
+  v_oid := gifto_test.place_order(
     '[{"product_id":"a5110000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
     'Audit Buyer', '01001112233', '12 Audit Street', 'Alexandria', 'Alexandria');
   perform set_config('gifto_test.audit_order1', v_oid::text, false);
@@ -239,7 +239,7 @@ set request.jwt.claims = '{"sub":"a1110000-0000-0000-0000-000000000001"}';
 do $$
 declare v_oid uuid;
 begin
-  v_oid := public.place_order(
+  v_oid := gifto_test.place_order(
     '[{"product_id":"a5110000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
     'Audit Buyer', '01001112233', '12 Audit Street', 'Alexandria', 'Alexandria');
   perform set_config('gifto_test.audit_order2', v_oid::text, false);
@@ -314,7 +314,7 @@ set request.jwt.claims = '{"sub":"a1110000-0000-0000-0000-000000000001"}';
 do $$
 declare v_oid uuid;
 begin
-  v_oid := public.place_order(
+  v_oid := gifto_test.place_order(
     '[{"product_id":"a5110000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
     'Audit Buyer', '01001112233', '12 Audit Street', 'Alexandria', 'Alexandria');
   perform set_config('gifto_test.audit_order3', v_oid::text, false);
@@ -351,7 +351,7 @@ set request.jwt.claims = '{"sub":"a1110000-0000-0000-0000-000000000001"}';
 do $$
 declare v_oid uuid;
 begin
-  v_oid := public.place_order(
+  v_oid := gifto_test.place_order(
     '[{"product_id":"a5110000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
     'Audit Buyer', '01001112233', '12 Audit Street', 'Alexandria', 'Alexandria');
   perform set_config('gifto_test.audit_order4', v_oid::text, false);
@@ -492,7 +492,7 @@ set request.jwt.claims = '{"sub":"a1110000-0000-0000-0000-000000000001"}';
 do $$
 declare v_oid uuid;
 begin
-  v_oid := public.place_order(
+  v_oid := gifto_test.place_order(
     '[{"product_id":"a5110000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
     'Audit Buyer', '01001112233', '12 Audit Street', 'Alexandria', 'Alexandria');
   perform set_config('gifto_test.addr_order1', v_oid::text, false);
@@ -687,7 +687,7 @@ set request.jwt.claims = '{"sub":"a1110000-0000-0000-0000-000000000001"}';
 do $$
 declare v_oid uuid;
 begin
-  v_oid := public.place_order(
+  v_oid := gifto_test.place_order(
     '[{"product_id":"a5110000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
     'Audit Buyer', '01001112233', '22 Audit Street', 'Alexandria', 'Alexandria');
   perform set_config('gifto_test.addr_order2', v_oid::text, false);
@@ -766,28 +766,28 @@ set request.jwt.claim.sub = 'a1110000-0000-0000-0000-000000000001';
 set request.jwt.claims = '{"sub":"a1110000-0000-0000-0000-000000000001"}';
 do $$
 begin
-  perform set_config('gifto_test.audit_order_e1', public.place_order(
+  perform set_config('gifto_test.audit_order_e1', gifto_test.place_order(
     '[{"product_id":"a5110000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
     'Audit Buyer', '01001112233', '12 Audit Street', 'Alexandria', 'Alexandria')::text, false);
-  perform set_config('gifto_test.audit_order_e2', public.place_order(
+  perform set_config('gifto_test.audit_order_e2', gifto_test.place_order(
     '[{"product_id":"a5110000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
     'Audit Buyer', '01001112233', '12 Audit Street', 'Alexandria', 'Alexandria')::text, false);
-  perform set_config('gifto_test.audit_order_e3', public.place_order(
+  perform set_config('gifto_test.audit_order_e3', gifto_test.place_order(
     '[{"product_id":"a5110000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
     'Audit Buyer', '01001112233', '12 Audit Street', 'Alexandria', 'Alexandria')::text, false);
-  perform set_config('gifto_test.audit_order_e4', public.place_order(
+  perform set_config('gifto_test.audit_order_e4', gifto_test.place_order(
     '[{"product_id":"a5110000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
     'Audit Buyer', '01001112233', '12 Audit Street', 'Alexandria', 'Alexandria')::text, false);
-  perform set_config('gifto_test.audit_order_e5', public.place_order(
+  perform set_config('gifto_test.audit_order_e5', gifto_test.place_order(
     '[{"product_id":"a5110000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
     'Audit Buyer', '01001112233', '12 Audit Street', 'Alexandria', 'Alexandria')::text, false);
-  perform set_config('gifto_test.audit_order_e6', public.place_order(
+  perform set_config('gifto_test.audit_order_e6', gifto_test.place_order(
     '[{"product_id":"a5110000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
     'Audit Buyer', '01001112233', '12 Audit Street', 'Alexandria', 'Alexandria')::text, false);
-  perform set_config('gifto_test.audit_order_e7', public.place_order(
+  perform set_config('gifto_test.audit_order_e7', gifto_test.place_order(
     '[{"product_id":"a5110000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
     'Audit Buyer', '01001112233', '12 Audit Street', 'Alexandria', 'Alexandria')::text, false);
-  perform set_config('gifto_test.audit_order_e8', public.place_order(
+  perform set_config('gifto_test.audit_order_e8', gifto_test.place_order(
     '[{"product_id":"a5110000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
     'Audit Buyer', '01001112233', '12 Audit Street', 'Alexandria', 'Alexandria')::text, false);
 end $$;

@@ -52,6 +52,10 @@ apply_schema() {
   for migration in "$ROOT"/supabase/migrations/*.sql; do
     psql -v ON_ERROR_STOP=1 -f "$migration" > /dev/null
   done
+  # Test-only order helpers (R-03): gifto_test.place_order* builds expected
+  # prices from live rows and calls the price-check RPCs. Test infrastructure
+  # only — never applied to a hosted project.
+  psql -v ON_ERROR_STOP=1 -f "$ROOT/supabase/tests/test_helpers.sql" > /dev/null
 }
 
 reset_schema() {

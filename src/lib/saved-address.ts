@@ -32,7 +32,7 @@ export type SavedAddressInput = {
 
 /**
  * Client/server-shared mirror of the database checks on
- * `saved_addresses` (migration 47) — same length rules `place_order`
+ * `saved_addresses` (migration 47) — same length rules `place_order_with_price_check`
  * enforces, so an address that saves can always be used at checkout.
  * Returns a friendly error message, or null when the input is acceptable.
  * The database re-checks everything.

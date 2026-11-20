@@ -5,7 +5,7 @@
  * Phase 2 view: public_vendors.
  * Phase 3 tables: categories, products, product_images; helper: is_public_vendor.
  * Phase 4 tables: orders, order_vendors, order_items, inventory_movements;
- *                 RPCs: place_order, cancel_order.
+ *                 RPCs: place_order_with_price_check, cancel_order. (R-03, migration 51: the legacy no-check place_order / place_order_with_idempotency / place_guest_order RPCs were dropped.)
  * Phase 6 tables: commission_entries, settlements, settlement_lines;
  *                 RPCs: create_settlement, mark_settlement_paid.
  * Phase 14: managed vendor onboarding; self-onboarding RPC removed.
@@ -1869,47 +1869,6 @@ export type Database = {
       is_public_vendor: {
         Args: { p_vendor_id: string };
         Returns: boolean;
-      };
-      place_order: {
-        Args: {
-          p_items: Json;
-          p_recipient_name: string;
-          p_contact_phone: string;
-          p_address_line: string;
-          p_city: string;
-          p_governorate: string;
-          p_notes?: string | null;
-        };
-        Returns: string;
-      };
-      place_order_with_idempotency: {
-        Args: {
-          p_items: Json;
-          p_recipient_name: string;
-          p_contact_phone: string;
-          p_contact_email: string | null;
-          p_address_line: string;
-          p_city: string;
-          p_governorate: string;
-          p_notes: string | null;
-          p_idempotency_key: string;
-        };
-        Returns: string;
-      };
-      place_guest_order: {
-        Args: {
-          p_items: Json;
-          p_recipient_name: string;
-          p_contact_phone: string;
-          p_contact_email: string | null;
-          p_address_line: string;
-          p_city: string;
-          p_governorate: string;
-          p_notes: string | null;
-          p_idempotency_key: string;
-          p_guest_token_hash: string;
-        };
-        Returns: string;
       };
       place_order_with_price_check: {
         Args: {

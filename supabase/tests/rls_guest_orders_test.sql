@@ -59,8 +59,7 @@ declare
   r text;
 begin
   for r in select unnest(array['anon', 'authenticated']) loop
-    if has_function_privilege(r, 'public.place_guest_order(jsonb,text,text,text,text,text,text,text,uuid,text)', 'execute')
-       or has_function_privilege(r, 'public.get_guest_order(uuid,text)', 'execute')
+    if has_function_privilege(r, 'public.get_guest_order(uuid,text)', 'execute')
        or has_function_privilege(r, 'public.consume_checkout_quota(text,integer,integer)', 'execute') then
       raise exception 'TEST 1 FAILED: % can execute a guest/service-only function', r;
     end if;
@@ -71,8 +70,15 @@ begin
     raise exception 'TEST 1 FAILED: _create_order is executable by an API role';
   end if;
 
-  if not has_function_privilege('service_role', 'public.place_guest_order(jsonb,text,text,text,text,text,text,text,uuid,text)', 'execute') then
-    raise exception 'TEST 1 FAILED: service_role cannot execute place_guest_order';
+  -- R-03: the legacy no-check place_guest_order is dropped (migration 51);
+  -- no API role can execute it, and the price-check guest RPC is the only
+  -- guest checkout path, executable by service_role only.
+  if to_regprocedure('public.place_guest_order(jsonb,text,text,text,text,text,text,text,uuid,text)') is not null then
+    raise exception 'TEST 1 FAILED: legacy place_guest_order still exists';
+  end if;
+
+  if not has_function_privilege('service_role', 'public.place_guest_order_with_price_check(jsonb,text,text,text,text,text,text,text,uuid,text,jsonb,int,boolean,text,date,text)', 'execute') then
+    raise exception 'TEST 1 FAILED: service_role cannot execute place_guest_order_with_price_check';
   end if;
 
   raise notice 'TEST 1 PASSED: guest RPCs are service_role-only and _create_order is private';
@@ -88,7 +94,7 @@ do $$
 declare v_hash text := repeat('a', 64);
 begin
   begin
-    perform public.place_guest_order(
+    perform gifto_test.place_guest_order(
       '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
       'Guest Buyer', '01001112233', null, '12 Main Street', 'Alexandria', 'Alexandria',
       null, gen_random_uuid(), v_hash);
@@ -110,7 +116,7 @@ declare
   v_key    uuid := gen_random_uuid();
   v_oid    uuid;
 begin
-  v_oid := public.place_guest_order(
+  v_oid := gifto_test.place_guest_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1},
       {"product_id":"51100000-0000-0000-0000-000000000102","quantity":1}]'::jsonb,
     'Nour Guest', '01001112233', 'Nour@Example.com',
@@ -193,7 +199,7 @@ do $$
 declare v_hash text := encode(digest('guest-token-bad', 'sha256'), 'hex');
 begin
   begin
-    perform public.place_guest_order(
+    perform gifto_test.place_guest_order(
       '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1},
         {"quantity":1}]'::jsonb,
       'Nour Guest', '01001112233', null,
@@ -219,7 +225,7 @@ declare
   v_first uuid := current_setting('gifto_test.guest_order_id')::uuid;
   v_again uuid;
 begin
-  v_again := public.place_guest_order(
+  v_again := gifto_test.place_guest_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1},
       {"product_id":"51100000-0000-0000-0000-000000000102","quantity":1}]'::jsonb,
     'Nour Guest', '01001112233', null,
@@ -255,7 +261,7 @@ declare
   v_key uuid := current_setting('gifto_test.guest_key')::uuid;
 begin
   begin
-    perform public.place_guest_order(
+    perform gifto_test.place_guest_order(
       '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
       'Nour Guest', '01001112233', null,
       '12 Main Street', 'Alexandria', 'Alexandria', null,
@@ -421,7 +427,7 @@ declare v_hash text := encode(digest('guest-token-two', 'sha256'), 'hex');
 begin
   -- message that is not valid JSON / not an array
   begin
-    perform public.place_guest_order(
+    perform gifto_test.place_guest_order(
       '"nope"'::jsonb, 'Guest', '01001112233', null,
       '12 Main Street', 'Alexandria', 'Alexandria', null, gen_random_uuid(), v_hash);
     raise exception 'TEST 9a FAILED: accepted a non-array cart';
@@ -431,7 +437,7 @@ begin
 
   -- invalid email
   begin
-    perform public.place_guest_order(
+    perform gifto_test.place_guest_order(
       '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
       'Guest', '01001112233', 'not-an-email',
       '12 Main Street', 'Alexandria', 'Alexandria', null, gen_random_uuid(), v_hash);
@@ -442,7 +448,7 @@ begin
 
   -- missing recipient
   begin
-    perform public.place_guest_order(
+    perform gifto_test.place_guest_order(
       '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
       'G', '01001112233', null,
       '12 Main Street', 'Alexandria', 'Alexandria', null, gen_random_uuid(), v_hash);
@@ -453,7 +459,7 @@ begin
 
   -- invalid token hash
   begin
-    perform public.place_guest_order(
+    perform gifto_test.place_guest_order(
       '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
       'Guest Buyer', '01001112233', null,
       '12 Main Street', 'Alexandria', 'Alexandria', null, gen_random_uuid(), 'XYZ');
@@ -464,7 +470,7 @@ begin
 
   -- oversized quantity
   begin
-    perform public.place_guest_order(
+    perform gifto_test.place_guest_order(
       '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":999}]'::jsonb,
       'Guest Buyer', '01001112233', null,
       '12 Main Street', 'Alexandria', 'Alexandria', null, gen_random_uuid(), v_hash);
@@ -497,7 +503,7 @@ declare
   v_hash text := encode(digest('guest-token-three', 'sha256'), 'hex');
   v_oid uuid;
 begin
-  v_oid := public.place_guest_order(
+  v_oid := gifto_test.place_guest_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1,"price_minor":1,"total_minor":1}]'::jsonb,
     'Guest Buyer', '01001112233', null,
     '12 Main Street', 'Alexandria', 'Alexandria', null,
@@ -589,7 +595,7 @@ declare
   v_key uuid := gen_random_uuid();
   v_again uuid;
 begin
-  v_oid := public.place_order(
+  v_oid := gifto_test.place_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
     'Owner Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria', null);
 
@@ -602,11 +608,11 @@ begin
   end if;
 
   -- the idempotent variant returns the same order for the same key
-  v_again := public.place_order_with_idempotency(
+  v_again := gifto_test.place_order_with_idempotency(
     '[{"product_id":"51100000-0000-0000-0000-000000000102","quantity":1}]'::jsonb,
     'Owner Buyer', '01001112233', null, '12 Main Street', 'Alexandria', 'Alexandria',
     null, v_key);
-  if public.place_order_with_idempotency(
+  if gifto_test.place_order_with_idempotency(
     '[{"product_id":"51100000-0000-0000-0000-000000000102","quantity":1}]'::jsonb,
     'Owner Buyer', '01001112233', null, '12 Main Street', 'Alexandria', 'Alexandria',
     null, v_key) <> v_again then
@@ -626,11 +632,13 @@ set request.jwt.claims = '{}';
 do $$
 begin
   begin
-    perform public.place_order_with_idempotency(
+    -- R-03: the only authenticated checkout RPC is place_order_with_price_check;
+    -- anon has no EXECUTE on it (the legacy place_order_with_idempotency was dropped).
+    perform public.place_order_with_price_check(
       '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
       'Anon', '01001112233', null, '12 Main Street', 'Alexandria', 'Alexandria',
-      null, gen_random_uuid());
-    raise exception 'TEST 14 FAILED: anon called place_order_with_idempotency';
+      null, gen_random_uuid(), null, null);
+    raise exception 'TEST 14 FAILED: anon called place_order_with_price_check';
   exception when insufficient_privilege then
     null;
   end;
@@ -674,7 +682,7 @@ declare
   v_hash text := encode(digest('guest-token-cancel', 'sha256'), 'hex');
   v_oid uuid;
 begin
-  v_oid := public.place_guest_order(
+  v_oid := gifto_test.place_guest_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
     'Cancel Guest', '01001112233', null,
     '12 Main Street', 'Alexandria', 'Alexandria', null,
@@ -743,7 +751,7 @@ declare
   v_hash text := encode(digest('guest-token-cancel-two', 'sha256'), 'hex');
   v_oid uuid;
 begin
-  v_oid := public.place_guest_order(
+  v_oid := gifto_test.place_guest_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
     'Cancel Guest Two', '01001112233', null,
     '12 Main Street', 'Alexandria', 'Alexandria', null,
@@ -786,7 +794,7 @@ set request.jwt.claims = '{"sub":"31100000-0000-0000-0000-000000000101"}';
 do $$
 declare v_oid uuid;
 begin
-  v_oid := public.place_order(
+  v_oid := gifto_test.place_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
     'Owner Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria', null);
   perform set_config('gifto_test.signed_order_id', v_oid::text, false);
@@ -834,7 +842,7 @@ declare
   v_hash text := encode(digest('guest-token-cancel-three', 'sha256'), 'hex');
   v_oid uuid;
 begin
-  v_oid := public.place_guest_order(
+  v_oid := gifto_test.place_guest_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
     'Cancel Guest Three', '01001112233', null,
     '12 Main Street', 'Alexandria', 'Alexandria', null,
@@ -930,7 +938,7 @@ declare
   v_hash text := encode(digest('guest-token-expiry', 'sha256'), 'hex');
   v_oid uuid;
 begin
-  v_oid := public.place_guest_order(
+  v_oid := gifto_test.place_guest_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
     'Expiry Guest', '01001112233', 'expiry@guest.gifto.test',
     '12 Main Street', 'Alexandria', 'Alexandria', null,
@@ -1201,7 +1209,7 @@ declare
   v_hash text := encode(digest('guest-token-claim', 'sha256'), 'hex');
   v_oid uuid;
 begin
-  v_oid := public.place_guest_order(
+  v_oid := gifto_test.place_guest_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
     'Claim Guest', '01001112234', null,
     '12 Main Street', 'Alexandria', 'Alexandria', null,

@@ -7,8 +7,9 @@
 //
 // What it does, all on a DISPOSABLE database (gifto_parent_conc_test) only:
 //   1. Drops/creates the database, applies scripts/auth-emulation.sql when
-//      the server lacks auth.users, supabase/tests/storage_stub.sql, and
-//      supabase/migrations/ in order (including migration 31).
+//      the server lacks auth.users, supabase/tests/storage_stub.sql,
+//      supabase/migrations/ in order (including migration 31), and
+//      supabase/tests/test_helpers.sql (test-only order helpers, R-03).
 //   2. Runs supabase/tests/concurrency_parent_status_test.sql in setup-only
 //      mode (order 1 delivered sequentially; order 2 left placed with its
 //      ids printed).
@@ -85,6 +86,9 @@ console.log("== step 1: fresh disposable database ==");
     const mig = await psql(["-f", join(ROOT, "supabase/migrations", file)]);
     if (mig.code !== 0) fail(`migration ${file}`, mig.err);
   }
+  // Test-only order helpers (R-03): never applied to a hosted project.
+  const helpers = await psql(["-f", join(ROOT, "supabase/tests/test_helpers.sql")]);
+  if (helpers.code !== 0) fail("test helpers", helpers.err);
   console.log("PASS: migrations 1-31 applied on disposable database");
 }
 
@@ -111,7 +115,9 @@ const callA = [
   `set request.jwt.claim.sub = '${OWNER_A}';`,
   `set request.jwt.claims = '{"sub":"${OWNER_A}"}';`,
   `select public.set_order_vendor_status('${subA}', 'confirmed', 'placed');`,
-  `select public.set_order_vendor_status('${subA}', 'shipped', 'confirmed');`,
+  // P1-15 (migration 42): shipping requires a courier and a tracking
+  // reference; the pre-P1-15 call without them failed here.
+  `select public.set_order_vendor_status('${subA}', 'shipped', 'confirmed', null, null, 'Test Courier', 'TRK-0001');`,
   `select public.set_order_vendor_status('${subA}', 'delivered', 'shipped');`,
 ].join(" ");
 const callB = [

@@ -202,7 +202,7 @@ describe("totals", () => {
     expect(cartCount(cart)).toBe(3);
   });
 
-  it("sends only product ids and quantities to place_order", () => {
+  it("sends only product ids and quantities to place_order_with_price_check", () => {
     const cart = [item({ productId: "p1", quantity: 2 })];
     expect(toOrderItems(cart)).toEqual([{ product_id: "p1", quantity: 2 }]);
   });

@@ -3,7 +3,7 @@
  *
  * Same shape as the cart: the browser (localStorage) holds the wishlist so
  * guests can save gifts without an account, and nothing stored here is
- * trusted — prices and stock are re-checked by `place_order` at checkout.
+ * trusted — prices and stock are re-checked by `place_order_with_price_check` at checkout.
  * Signed-in customers additionally persist to the `wishlists` table
  * (migration 47) through the server actions in
  * `src/app/[locale]/(storefront)/wishlist/actions.ts`; the provider loads

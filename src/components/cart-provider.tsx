@@ -42,7 +42,7 @@ const CartContext = createContext<CartContextValue | null>(null);
 /**
  * Holds the whole cart in one place. localStorage is the source of truth so the
  * cart survives reloads and stays in step across tabs; nothing stored here is
- * trusted — `place_order` prices and validates the order in the database.
+ * trusted — `place_order_with_price_check` prices and validates the order in the database.
  */
 export function CartProvider({ children }: { children: ReactNode }) {
   const items = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
