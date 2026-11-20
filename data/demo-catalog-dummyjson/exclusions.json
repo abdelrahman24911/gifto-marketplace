@@ -1,0 +1,1662 @@
+{
+  "datasetId": "gifto-demo-catalog-dummyjson",
+  "source": {
+    "provider": "DummyJSON",
+    "api": "https://dummyjson.com/products?limit=0",
+    "totalProducts": 194,
+    "selectedProducts": 46,
+    "excludedProducts": 148
+  },
+  "categorySummary": [
+    {
+      "category": "beauty",
+      "categoryLabel": "Beauty",
+      "total": 5,
+      "selected": 5,
+      "excluded": 0
+    },
+    {
+      "category": "fragrances",
+      "categoryLabel": "Fragrances",
+      "total": 5,
+      "selected": 5,
+      "excluded": 0
+    },
+    {
+      "category": "furniture",
+      "categoryLabel": "Furniture",
+      "total": 5,
+      "selected": 0,
+      "excluded": 5
+    },
+    {
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "total": 27,
+      "selected": 2,
+      "excluded": 25
+    },
+    {
+      "category": "home-decoration",
+      "categoryLabel": "Home decoration",
+      "total": 5,
+      "selected": 4,
+      "excluded": 1
+    },
+    {
+      "category": "kitchen-accessories",
+      "categoryLabel": "Kitchen accessories",
+      "total": 30,
+      "selected": 6,
+      "excluded": 24
+    },
+    {
+      "category": "laptops",
+      "categoryLabel": "Laptops",
+      "total": 5,
+      "selected": 0,
+      "excluded": 5
+    },
+    {
+      "category": "mens-shirts",
+      "categoryLabel": "Men's shirts",
+      "total": 5,
+      "selected": 0,
+      "excluded": 5
+    },
+    {
+      "category": "mens-shoes",
+      "categoryLabel": "Men's shoes",
+      "total": 5,
+      "selected": 0,
+      "excluded": 5
+    },
+    {
+      "category": "mens-watches",
+      "categoryLabel": "Men's watches",
+      "total": 6,
+      "selected": 6,
+      "excluded": 0
+    },
+    {
+      "category": "mobile-accessories",
+      "categoryLabel": "Mobile accessories",
+      "total": 14,
+      "selected": 0,
+      "excluded": 14
+    },
+    {
+      "category": "motorcycle",
+      "categoryLabel": "Motorcycle",
+      "total": 5,
+      "selected": 0,
+      "excluded": 5
+    },
+    {
+      "category": "skin-care",
+      "categoryLabel": "Skin care",
+      "total": 3,
+      "selected": 3,
+      "excluded": 0
+    },
+    {
+      "category": "smartphones",
+      "categoryLabel": "Smartphones",
+      "total": 16,
+      "selected": 0,
+      "excluded": 16
+    },
+    {
+      "category": "sports-accessories",
+      "categoryLabel": "Sports accessories",
+      "total": 17,
+      "selected": 0,
+      "excluded": 17
+    },
+    {
+      "category": "sunglasses",
+      "categoryLabel": "Sunglasses",
+      "total": 5,
+      "selected": 4,
+      "excluded": 1
+    },
+    {
+      "category": "tablets",
+      "categoryLabel": "Tablets",
+      "total": 3,
+      "selected": 0,
+      "excluded": 3
+    },
+    {
+      "category": "tops",
+      "categoryLabel": "Tops",
+      "total": 5,
+      "selected": 0,
+      "excluded": 5
+    },
+    {
+      "category": "vehicle",
+      "categoryLabel": "Vehicle",
+      "total": 5,
+      "selected": 0,
+      "excluded": 5
+    },
+    {
+      "category": "womens-bags",
+      "categoryLabel": "Women's bags",
+      "total": 5,
+      "selected": 5,
+      "excluded": 0
+    },
+    {
+      "category": "womens-dresses",
+      "categoryLabel": "Women's dresses",
+      "total": 5,
+      "selected": 0,
+      "excluded": 5
+    },
+    {
+      "category": "womens-jewellery",
+      "categoryLabel": "Women's jewellery",
+      "total": 3,
+      "selected": 3,
+      "excluded": 0
+    },
+    {
+      "category": "womens-shoes",
+      "categoryLabel": "Women's shoes",
+      "total": 5,
+      "selected": 0,
+      "excluded": 5
+    },
+    {
+      "category": "womens-watches",
+      "categoryLabel": "Women's watches",
+      "total": 5,
+      "selected": 3,
+      "excluded": 2
+    }
+  ],
+  "excluded": [
+    {
+      "id": 11,
+      "title": "Annibale Colombo Bed",
+      "brand": "Annibale Colombo",
+      "category": "furniture",
+      "categoryLabel": "Furniture",
+      "sourcePriceUsd": 1899.99,
+      "imageCount": 3,
+      "reason": "Large furniture; unsuitable for this lightweight gift edit."
+    },
+    {
+      "id": 12,
+      "title": "Annibale Colombo Sofa",
+      "brand": "Annibale Colombo",
+      "category": "furniture",
+      "categoryLabel": "Furniture",
+      "sourcePriceUsd": 2499.99,
+      "imageCount": 3,
+      "reason": "Large furniture; unsuitable for this lightweight gift edit."
+    },
+    {
+      "id": 13,
+      "title": "Bedside Table African Cherry",
+      "brand": "Furniture Co.",
+      "category": "furniture",
+      "categoryLabel": "Furniture",
+      "sourcePriceUsd": 299.99,
+      "imageCount": 3,
+      "reason": "Large furniture; unsuitable for this lightweight gift edit."
+    },
+    {
+      "id": 14,
+      "title": "Knoll Saarinen Executive Conference Chair",
+      "brand": "Knoll",
+      "category": "furniture",
+      "categoryLabel": "Furniture",
+      "sourcePriceUsd": 499.99,
+      "imageCount": 3,
+      "reason": "Large furniture; unsuitable for this lightweight gift edit."
+    },
+    {
+      "id": 15,
+      "title": "Wooden Bathroom Sink With Mirror",
+      "brand": "Bath Trends",
+      "category": "furniture",
+      "categoryLabel": "Furniture",
+      "sourcePriceUsd": 799.99,
+      "imageCount": 3,
+      "reason": "Large furniture; unsuitable for this lightweight gift edit."
+    },
+    {
+      "id": 16,
+      "title": "Apple",
+      "brand": null,
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "sourcePriceUsd": 1.99,
+      "imageCount": 1,
+      "reason": "Grocery item outside the selected honey-and-coffee gift pair."
+    },
+    {
+      "id": 17,
+      "title": "Beef Steak",
+      "brand": null,
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "sourcePriceUsd": 12.99,
+      "imageCount": 1,
+      "reason": "Grocery item outside the selected honey-and-coffee gift pair."
+    },
+    {
+      "id": 18,
+      "title": "Cat Food",
+      "brand": null,
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "sourcePriceUsd": 8.99,
+      "imageCount": 1,
+      "reason": "Grocery item outside the selected honey-and-coffee gift pair."
+    },
+    {
+      "id": 19,
+      "title": "Chicken Meat",
+      "brand": null,
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "sourcePriceUsd": 9.99,
+      "imageCount": 2,
+      "reason": "Grocery item outside the selected honey-and-coffee gift pair."
+    },
+    {
+      "id": 20,
+      "title": "Cooking Oil",
+      "brand": null,
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "sourcePriceUsd": 4.99,
+      "imageCount": 1,
+      "reason": "Grocery item outside the selected honey-and-coffee gift pair."
+    },
+    {
+      "id": 21,
+      "title": "Cucumber",
+      "brand": null,
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "sourcePriceUsd": 1.49,
+      "imageCount": 1,
+      "reason": "Grocery item outside the selected honey-and-coffee gift pair."
+    },
+    {
+      "id": 22,
+      "title": "Dog Food",
+      "brand": null,
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "sourcePriceUsd": 10.99,
+      "imageCount": 1,
+      "reason": "Grocery item outside the selected honey-and-coffee gift pair."
+    },
+    {
+      "id": 23,
+      "title": "Eggs",
+      "brand": null,
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "sourcePriceUsd": 2.99,
+      "imageCount": 1,
+      "reason": "Grocery item outside the selected honey-and-coffee gift pair."
+    },
+    {
+      "id": 24,
+      "title": "Fish Steak",
+      "brand": null,
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "sourcePriceUsd": 14.99,
+      "imageCount": 1,
+      "reason": "Grocery item outside the selected honey-and-coffee gift pair."
+    },
+    {
+      "id": 25,
+      "title": "Green Bell Pepper",
+      "brand": null,
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "sourcePriceUsd": 1.29,
+      "imageCount": 1,
+      "reason": "Grocery item outside the selected honey-and-coffee gift pair."
+    },
+    {
+      "id": 26,
+      "title": "Green Chili Pepper",
+      "brand": null,
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "sourcePriceUsd": 0.99,
+      "imageCount": 1,
+      "reason": "Grocery item outside the selected honey-and-coffee gift pair."
+    },
+    {
+      "id": 28,
+      "title": "Ice Cream",
+      "brand": null,
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "sourcePriceUsd": 5.49,
+      "imageCount": 4,
+      "reason": "Grocery item outside the selected honey-and-coffee gift pair."
+    },
+    {
+      "id": 29,
+      "title": "Juice",
+      "brand": null,
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "sourcePriceUsd": 3.99,
+      "imageCount": 1,
+      "reason": "Grocery item outside the selected honey-and-coffee gift pair."
+    },
+    {
+      "id": 30,
+      "title": "Kiwi",
+      "brand": null,
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "sourcePriceUsd": 2.49,
+      "imageCount": 1,
+      "reason": "Grocery item outside the selected honey-and-coffee gift pair."
+    },
+    {
+      "id": 31,
+      "title": "Lemon",
+      "brand": null,
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "sourcePriceUsd": 0.79,
+      "imageCount": 1,
+      "reason": "Grocery item outside the selected honey-and-coffee gift pair."
+    },
+    {
+      "id": 32,
+      "title": "Milk",
+      "brand": null,
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "sourcePriceUsd": 3.49,
+      "imageCount": 1,
+      "reason": "Grocery item outside the selected honey-and-coffee gift pair."
+    },
+    {
+      "id": 33,
+      "title": "Mulberry",
+      "brand": null,
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "sourcePriceUsd": 4.99,
+      "imageCount": 1,
+      "reason": "Grocery item outside the selected honey-and-coffee gift pair."
+    },
+    {
+      "id": 35,
+      "title": "Potatoes",
+      "brand": null,
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "sourcePriceUsd": 2.29,
+      "imageCount": 1,
+      "reason": "Grocery item outside the selected honey-and-coffee gift pair."
+    },
+    {
+      "id": 36,
+      "title": "Protein Powder",
+      "brand": null,
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "sourcePriceUsd": 19.99,
+      "imageCount": 1,
+      "reason": "Grocery item outside the selected honey-and-coffee gift pair."
+    },
+    {
+      "id": 37,
+      "title": "Red Onions",
+      "brand": null,
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "sourcePriceUsd": 1.99,
+      "imageCount": 1,
+      "reason": "Grocery item outside the selected honey-and-coffee gift pair."
+    },
+    {
+      "id": 38,
+      "title": "Rice",
+      "brand": null,
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "sourcePriceUsd": 5.99,
+      "imageCount": 1,
+      "reason": "Grocery item outside the selected honey-and-coffee gift pair."
+    },
+    {
+      "id": 39,
+      "title": "Soft Drinks",
+      "brand": null,
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "sourcePriceUsd": 1.99,
+      "imageCount": 1,
+      "reason": "Grocery item outside the selected honey-and-coffee gift pair."
+    },
+    {
+      "id": 40,
+      "title": "Strawberry",
+      "brand": null,
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "sourcePriceUsd": 3.99,
+      "imageCount": 1,
+      "reason": "Grocery item outside the selected honey-and-coffee gift pair."
+    },
+    {
+      "id": 41,
+      "title": "Tissue Paper Box",
+      "brand": null,
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "sourcePriceUsd": 2.49,
+      "imageCount": 2,
+      "reason": "Grocery item outside the selected honey-and-coffee gift pair."
+    },
+    {
+      "id": 42,
+      "title": "Water",
+      "brand": null,
+      "category": "groceries",
+      "categoryLabel": "Groceries",
+      "sourcePriceUsd": 0.99,
+      "imageCount": 1,
+      "reason": "Grocery item outside the selected honey-and-coffee gift pair."
+    },
+    {
+      "id": 43,
+      "title": "Decoration Swing",
+      "brand": null,
+      "category": "home-decoration",
+      "categoryLabel": "Home decoration",
+      "sourcePriceUsd": 59.99,
+      "imageCount": 3,
+      "reason": "Decorative swing is an oversized novelty; weaker fit for the gift edit."
+    },
+    {
+      "id": 48,
+      "title": "Bamboo Spatula",
+      "brand": null,
+      "category": "kitchen-accessories",
+      "categoryLabel": "Kitchen accessories",
+      "sourcePriceUsd": 7.99,
+      "imageCount": 1,
+      "reason": "Ordinary single utensil; the six selected kitchen items offer stronger gift presentation and visual variety."
+    },
+    {
+      "id": 50,
+      "title": "Black Whisk",
+      "brand": null,
+      "category": "kitchen-accessories",
+      "categoryLabel": "Kitchen accessories",
+      "sourcePriceUsd": 9.99,
+      "imageCount": 1,
+      "reason": "Ordinary single utensil; the six selected kitchen items offer stronger gift presentation and visual variety."
+    },
+    {
+      "id": 51,
+      "title": "Boxed Blender",
+      "brand": null,
+      "category": "kitchen-accessories",
+      "categoryLabel": "Kitchen accessories",
+      "sourcePriceUsd": 39.99,
+      "imageCount": 4,
+      "reason": "Boxed blender is a bulky appliance; outside the lightweight kitchen gift edit."
+    },
+    {
+      "id": 52,
+      "title": "Carbon Steel Wok",
+      "brand": null,
+      "category": "kitchen-accessories",
+      "categoryLabel": "Kitchen accessories",
+      "sourcePriceUsd": 29.99,
+      "imageCount": 1,
+      "reason": "Ordinary single utensil; the six selected kitchen items offer stronger gift presentation and visual variety."
+    },
+    {
+      "id": 54,
+      "title": "Citrus Squeezer Yellow",
+      "brand": null,
+      "category": "kitchen-accessories",
+      "categoryLabel": "Kitchen accessories",
+      "sourcePriceUsd": 8.99,
+      "imageCount": 1,
+      "reason": "Ordinary single utensil; the six selected kitchen items offer stronger gift presentation and visual variety."
+    },
+    {
+      "id": 55,
+      "title": "Egg Slicer",
+      "brand": null,
+      "category": "kitchen-accessories",
+      "categoryLabel": "Kitchen accessories",
+      "sourcePriceUsd": 6.99,
+      "imageCount": 1,
+      "reason": "Ordinary single utensil; the six selected kitchen items offer stronger gift presentation and visual variety."
+    },
+    {
+      "id": 56,
+      "title": "Electric Stove",
+      "brand": null,
+      "category": "kitchen-accessories",
+      "categoryLabel": "Kitchen accessories",
+      "sourcePriceUsd": 49.99,
+      "imageCount": 4,
+      "reason": "Electric stove is a bulky appliance; outside the lightweight kitchen gift edit."
+    },
+    {
+      "id": 57,
+      "title": "Fine Mesh Strainer",
+      "brand": null,
+      "category": "kitchen-accessories",
+      "categoryLabel": "Kitchen accessories",
+      "sourcePriceUsd": 9.99,
+      "imageCount": 1,
+      "reason": "Ordinary single utensil; the six selected kitchen items offer stronger gift presentation and visual variety."
+    },
+    {
+      "id": 58,
+      "title": "Fork",
+      "brand": null,
+      "category": "kitchen-accessories",
+      "categoryLabel": "Kitchen accessories",
+      "sourcePriceUsd": 3.99,
+      "imageCount": 1,
+      "reason": "Ordinary single utensil; the six selected kitchen items offer stronger gift presentation and visual variety."
+    },
+    {
+      "id": 59,
+      "title": "Glass",
+      "brand": null,
+      "category": "kitchen-accessories",
+      "categoryLabel": "Kitchen accessories",
+      "sourcePriceUsd": 4.99,
+      "imageCount": 1,
+      "reason": "Ordinary single utensil; the six selected kitchen items offer stronger gift presentation and visual variety."
+    },
+    {
+      "id": 60,
+      "title": "Grater Black",
+      "brand": null,
+      "category": "kitchen-accessories",
+      "categoryLabel": "Kitchen accessories",
+      "sourcePriceUsd": 10.99,
+      "imageCount": 1,
+      "reason": "Ordinary single utensil; the six selected kitchen items offer stronger gift presentation and visual variety."
+    },
+    {
+      "id": 61,
+      "title": "Hand Blender",
+      "brand": null,
+      "category": "kitchen-accessories",
+      "categoryLabel": "Kitchen accessories",
+      "sourcePriceUsd": 34.99,
+      "imageCount": 1,
+      "reason": "Ordinary single utensil; the six selected kitchen items offer stronger gift presentation and visual variety."
+    },
+    {
+      "id": 62,
+      "title": "Ice Cube Tray",
+      "brand": null,
+      "category": "kitchen-accessories",
+      "categoryLabel": "Kitchen accessories",
+      "sourcePriceUsd": 5.99,
+      "imageCount": 1,
+      "reason": "Ordinary single utensil; the six selected kitchen items offer stronger gift presentation and visual variety."
+    },
+    {
+      "id": 63,
+      "title": "Kitchen Sieve",
+      "brand": null,
+      "category": "kitchen-accessories",
+      "categoryLabel": "Kitchen accessories",
+      "sourcePriceUsd": 7.99,
+      "imageCount": 1,
+      "reason": "Ordinary single utensil; the six selected kitchen items offer stronger gift presentation and visual variety."
+    },
+    {
+      "id": 64,
+      "title": "Knife",
+      "brand": null,
+      "category": "kitchen-accessories",
+      "categoryLabel": "Kitchen accessories",
+      "sourcePriceUsd": 14.99,
+      "imageCount": 1,
+      "reason": "Single kitchen knife; a less comfortable gift item than the selected kitchen pieces."
+    },
+    {
+      "id": 66,
+      "title": "Microwave Oven",
+      "brand": null,
+      "category": "kitchen-accessories",
+      "categoryLabel": "Kitchen accessories",
+      "sourcePriceUsd": 89.99,
+      "imageCount": 4,
+      "reason": "Microwave oven is a bulky appliance; outside the lightweight kitchen gift edit."
+    },
+    {
+      "id": 68,
+      "title": "Pan",
+      "brand": null,
+      "category": "kitchen-accessories",
+      "categoryLabel": "Kitchen accessories",
+      "sourcePriceUsd": 24.99,
+      "imageCount": 1,
+      "reason": "Ordinary single utensil; the six selected kitchen items offer stronger gift presentation and visual variety."
+    },
+    {
+      "id": 69,
+      "title": "Plate",
+      "brand": null,
+      "category": "kitchen-accessories",
+      "categoryLabel": "Kitchen accessories",
+      "sourcePriceUsd": 3.99,
+      "imageCount": 1,
+      "reason": "Ordinary single utensil; the six selected kitchen items offer stronger gift presentation and visual variety."
+    },
+    {
+      "id": 70,
+      "title": "Red Tongs",
+      "brand": null,
+      "category": "kitchen-accessories",
+      "categoryLabel": "Kitchen accessories",
+      "sourcePriceUsd": 6.99,
+      "imageCount": 1,
+      "reason": "Ordinary single utensil; the six selected kitchen items offer stronger gift presentation and visual variety."
+    },
+    {
+      "id": 71,
+      "title": "Silver Pot With Glass Cap",
+      "brand": null,
+      "category": "kitchen-accessories",
+      "categoryLabel": "Kitchen accessories",
+      "sourcePriceUsd": 39.99,
+      "imageCount": 1,
+      "reason": "Large covered pot is cookware rather than a gift-led kitchen piece."
+    },
+    {
+      "id": 72,
+      "title": "Slotted Turner",
+      "brand": null,
+      "category": "kitchen-accessories",
+      "categoryLabel": "Kitchen accessories",
+      "sourcePriceUsd": 8.99,
+      "imageCount": 1,
+      "reason": "Ordinary single utensil; the six selected kitchen items offer stronger gift presentation and visual variety."
+    },
+    {
+      "id": 74,
+      "title": "Spoon",
+      "brand": null,
+      "category": "kitchen-accessories",
+      "categoryLabel": "Kitchen accessories",
+      "sourcePriceUsd": 4.99,
+      "imageCount": 1,
+      "reason": "Ordinary single utensil; the six selected kitchen items offer stronger gift presentation and visual variety."
+    },
+    {
+      "id": 76,
+      "title": "Wooden Rolling Pin",
+      "brand": null,
+      "category": "kitchen-accessories",
+      "categoryLabel": "Kitchen accessories",
+      "sourcePriceUsd": 11.99,
+      "imageCount": 1,
+      "reason": "Ordinary single utensil; the six selected kitchen items offer stronger gift presentation and visual variety."
+    },
+    {
+      "id": 77,
+      "title": "Yellow Peeler",
+      "brand": null,
+      "category": "kitchen-accessories",
+      "categoryLabel": "Kitchen accessories",
+      "sourcePriceUsd": 5.99,
+      "imageCount": 1,
+      "reason": "Ordinary single utensil; the six selected kitchen items offer stronger gift presentation and visual variety."
+    },
+    {
+      "id": 78,
+      "title": "Apple MacBook Pro 14 Inch Space Grey",
+      "brand": "Apple",
+      "category": "laptops",
+      "categoryLabel": "Laptops",
+      "sourcePriceUsd": 1999.99,
+      "imageCount": 3,
+      "reason": "Laptop; electronics sit outside this gift-focused edit."
+    },
+    {
+      "id": 79,
+      "title": "Asus Zenbook Pro Dual Screen Laptop",
+      "brand": "Asus",
+      "category": "laptops",
+      "categoryLabel": "Laptops",
+      "sourcePriceUsd": 1799.99,
+      "imageCount": 3,
+      "reason": "Laptop; electronics sit outside this gift-focused edit."
+    },
+    {
+      "id": 80,
+      "title": "Huawei Matebook X Pro",
+      "brand": "Huawei",
+      "category": "laptops",
+      "categoryLabel": "Laptops",
+      "sourcePriceUsd": 1399.99,
+      "imageCount": 3,
+      "reason": "Laptop; electronics sit outside this gift-focused edit."
+    },
+    {
+      "id": 81,
+      "title": "Lenovo Yoga 920",
+      "brand": "Lenovo",
+      "category": "laptops",
+      "categoryLabel": "Laptops",
+      "sourcePriceUsd": 1099.99,
+      "imageCount": 3,
+      "reason": "Laptop; electronics sit outside this gift-focused edit."
+    },
+    {
+      "id": 82,
+      "title": "New DELL XPS 13 9300 Laptop",
+      "brand": "Dell",
+      "category": "laptops",
+      "categoryLabel": "Laptops",
+      "sourcePriceUsd": 1499.99,
+      "imageCount": 3,
+      "reason": "Laptop; electronics sit outside this gift-focused edit."
+    },
+    {
+      "id": 83,
+      "title": "Blue & Black Check Shirt",
+      "brand": "Fashion Trends",
+      "category": "mens-shirts",
+      "categoryLabel": "Men's shirts",
+      "sourcePriceUsd": 29.99,
+      "imageCount": 4,
+      "reason": "Apparel; sizing complexity and outside this accessory-led edit."
+    },
+    {
+      "id": 84,
+      "title": "Gigabyte Aorus Men Tshirt",
+      "brand": "Gigabyte",
+      "category": "mens-shirts",
+      "categoryLabel": "Men's shirts",
+      "sourcePriceUsd": 24.99,
+      "imageCount": 4,
+      "reason": "Apparel; sizing complexity and outside this accessory-led edit."
+    },
+    {
+      "id": 85,
+      "title": "Man Plaid Shirt",
+      "brand": "Classic Wear",
+      "category": "mens-shirts",
+      "categoryLabel": "Men's shirts",
+      "sourcePriceUsd": 34.99,
+      "imageCount": 4,
+      "reason": "Apparel; sizing complexity and outside this accessory-led edit."
+    },
+    {
+      "id": 86,
+      "title": "Man Short Sleeve Shirt",
+      "brand": "Casual Comfort",
+      "category": "mens-shirts",
+      "categoryLabel": "Men's shirts",
+      "sourcePriceUsd": 19.99,
+      "imageCount": 4,
+      "reason": "Apparel; sizing complexity and outside this accessory-led edit."
+    },
+    {
+      "id": 87,
+      "title": "Men Check Shirt",
+      "brand": "Urban Chic",
+      "category": "mens-shirts",
+      "categoryLabel": "Men's shirts",
+      "sourcePriceUsd": 27.99,
+      "imageCount": 4,
+      "reason": "Apparel; sizing complexity and outside this accessory-led edit."
+    },
+    {
+      "id": 88,
+      "title": "Nike Air Jordan 1 Red And Black",
+      "brand": "Nike",
+      "category": "mens-shoes",
+      "categoryLabel": "Men's shoes",
+      "sourcePriceUsd": 149.99,
+      "imageCount": 4,
+      "reason": "Footwear; sizing complexity and outside this accessory-led edit."
+    },
+    {
+      "id": 89,
+      "title": "Nike Baseball Cleats",
+      "brand": "Nike",
+      "category": "mens-shoes",
+      "categoryLabel": "Men's shoes",
+      "sourcePriceUsd": 79.99,
+      "imageCount": 4,
+      "reason": "Footwear; sizing complexity and outside this accessory-led edit."
+    },
+    {
+      "id": 90,
+      "title": "Puma Future Rider Trainers",
+      "brand": "Puma",
+      "category": "mens-shoes",
+      "categoryLabel": "Men's shoes",
+      "sourcePriceUsd": 89.99,
+      "imageCount": 4,
+      "reason": "Footwear; sizing complexity and outside this accessory-led edit."
+    },
+    {
+      "id": 91,
+      "title": "Sports Sneakers Off White & Red",
+      "brand": "Off White",
+      "category": "mens-shoes",
+      "categoryLabel": "Men's shoes",
+      "sourcePriceUsd": 119.99,
+      "imageCount": 4,
+      "reason": "Footwear; sizing complexity and outside this accessory-led edit."
+    },
+    {
+      "id": 92,
+      "title": "Sports Sneakers Off White Red",
+      "brand": "Off White",
+      "category": "mens-shoes",
+      "categoryLabel": "Men's shoes",
+      "sourcePriceUsd": 109.99,
+      "imageCount": 4,
+      "reason": "Footwear; sizing complexity and outside this accessory-led edit."
+    },
+    {
+      "id": 99,
+      "title": "Amazon Echo Plus",
+      "brand": "Amazon",
+      "category": "mobile-accessories",
+      "categoryLabel": "Mobile accessories",
+      "sourcePriceUsd": 99.99,
+      "imageCount": 2,
+      "reason": "Mobile/consumer electronics accessory; outside this gift-focused edit."
+    },
+    {
+      "id": 100,
+      "title": "Apple Airpods",
+      "brand": "Apple",
+      "category": "mobile-accessories",
+      "categoryLabel": "Mobile accessories",
+      "sourcePriceUsd": 129.99,
+      "imageCount": 3,
+      "reason": "Mobile/consumer electronics accessory; outside this gift-focused edit."
+    },
+    {
+      "id": 101,
+      "title": "Apple AirPods Max Silver",
+      "brand": "Apple",
+      "category": "mobile-accessories",
+      "categoryLabel": "Mobile accessories",
+      "sourcePriceUsd": 549.99,
+      "imageCount": 1,
+      "reason": "Mobile/consumer electronics accessory; outside this gift-focused edit."
+    },
+    {
+      "id": 102,
+      "title": "Apple Airpower Wireless Charger",
+      "brand": "Apple",
+      "category": "mobile-accessories",
+      "categoryLabel": "Mobile accessories",
+      "sourcePriceUsd": 79.99,
+      "imageCount": 1,
+      "reason": "Mobile/consumer electronics accessory; outside this gift-focused edit."
+    },
+    {
+      "id": 103,
+      "title": "Apple HomePod Mini Cosmic Grey",
+      "brand": "Apple",
+      "category": "mobile-accessories",
+      "categoryLabel": "Mobile accessories",
+      "sourcePriceUsd": 99.99,
+      "imageCount": 1,
+      "reason": "Mobile/consumer electronics accessory; outside this gift-focused edit."
+    },
+    {
+      "id": 104,
+      "title": "Apple iPhone Charger",
+      "brand": "Apple",
+      "category": "mobile-accessories",
+      "categoryLabel": "Mobile accessories",
+      "sourcePriceUsd": 19.99,
+      "imageCount": 2,
+      "reason": "Mobile/consumer electronics accessory; outside this gift-focused edit."
+    },
+    {
+      "id": 105,
+      "title": "Apple MagSafe Battery Pack",
+      "brand": "Apple",
+      "category": "mobile-accessories",
+      "categoryLabel": "Mobile accessories",
+      "sourcePriceUsd": 99.99,
+      "imageCount": 2,
+      "reason": "Mobile/consumer electronics accessory; outside this gift-focused edit."
+    },
+    {
+      "id": 106,
+      "title": "Apple Watch Series 4 Gold",
+      "brand": "Apple",
+      "category": "mobile-accessories",
+      "categoryLabel": "Mobile accessories",
+      "sourcePriceUsd": 349.99,
+      "imageCount": 3,
+      "reason": "Mobile/consumer electronics accessory; outside this gift-focused edit."
+    },
+    {
+      "id": 107,
+      "title": "Beats Flex Wireless Earphones",
+      "brand": "Beats",
+      "category": "mobile-accessories",
+      "categoryLabel": "Mobile accessories",
+      "sourcePriceUsd": 49.99,
+      "imageCount": 1,
+      "reason": "Mobile/consumer electronics accessory; outside this gift-focused edit."
+    },
+    {
+      "id": 108,
+      "title": "iPhone 12 Silicone Case with MagSafe Plum",
+      "brand": "Apple",
+      "category": "mobile-accessories",
+      "categoryLabel": "Mobile accessories",
+      "sourcePriceUsd": 29.99,
+      "imageCount": 4,
+      "reason": "Mobile/consumer electronics accessory; outside this gift-focused edit."
+    },
+    {
+      "id": 109,
+      "title": "Monopod",
+      "brand": "TechGear",
+      "category": "mobile-accessories",
+      "categoryLabel": "Mobile accessories",
+      "sourcePriceUsd": 19.99,
+      "imageCount": 2,
+      "reason": "Mobile/consumer electronics accessory; outside this gift-focused edit."
+    },
+    {
+      "id": 110,
+      "title": "Selfie Lamp with iPhone",
+      "brand": "GadgetMaster",
+      "category": "mobile-accessories",
+      "categoryLabel": "Mobile accessories",
+      "sourcePriceUsd": 14.99,
+      "imageCount": 1,
+      "reason": "Mobile/consumer electronics accessory; outside this gift-focused edit."
+    },
+    {
+      "id": 111,
+      "title": "Selfie Stick Monopod",
+      "brand": "SnapTech",
+      "category": "mobile-accessories",
+      "categoryLabel": "Mobile accessories",
+      "sourcePriceUsd": 12.99,
+      "imageCount": 1,
+      "reason": "Mobile/consumer electronics accessory; outside this gift-focused edit."
+    },
+    {
+      "id": 112,
+      "title": "TV Studio Camera Pedestal",
+      "brand": "ProVision",
+      "category": "mobile-accessories",
+      "categoryLabel": "Mobile accessories",
+      "sourcePriceUsd": 499.99,
+      "imageCount": 1,
+      "reason": "Mobile/consumer electronics accessory; outside this gift-focused edit."
+    },
+    {
+      "id": 113,
+      "title": "Generic Motorcycle",
+      "brand": "Generic Motors",
+      "category": "motorcycle",
+      "categoryLabel": "Motorcycle",
+      "sourcePriceUsd": 3999.99,
+      "imageCount": 4,
+      "reason": "Motorcycle product; outside a lightweight gift catalogue."
+    },
+    {
+      "id": 114,
+      "title": "Kawasaki Z800",
+      "brand": "Kawasaki",
+      "category": "motorcycle",
+      "categoryLabel": "Motorcycle",
+      "sourcePriceUsd": 8999.99,
+      "imageCount": 4,
+      "reason": "Motorcycle product; outside a lightweight gift catalogue."
+    },
+    {
+      "id": 115,
+      "title": "MotoGP CI.H1",
+      "brand": "MotoGP",
+      "category": "motorcycle",
+      "categoryLabel": "Motorcycle",
+      "sourcePriceUsd": 14999.99,
+      "imageCount": 4,
+      "reason": "Motorcycle product; outside a lightweight gift catalogue."
+    },
+    {
+      "id": 116,
+      "title": "Scooter Motorcycle",
+      "brand": "ScootMaster",
+      "category": "motorcycle",
+      "categoryLabel": "Motorcycle",
+      "sourcePriceUsd": 2999.99,
+      "imageCount": 4,
+      "reason": "Motorcycle product; outside a lightweight gift catalogue."
+    },
+    {
+      "id": 117,
+      "title": "Sportbike Motorcycle",
+      "brand": "SpeedMaster",
+      "category": "motorcycle",
+      "categoryLabel": "Motorcycle",
+      "sourcePriceUsd": 7499.99,
+      "imageCount": 4,
+      "reason": "Motorcycle product; outside a lightweight gift catalogue."
+    },
+    {
+      "id": 121,
+      "title": "iPhone 5s",
+      "brand": "Apple",
+      "category": "smartphones",
+      "categoryLabel": "Smartphones",
+      "sourcePriceUsd": 199.99,
+      "imageCount": 3,
+      "reason": "Smartphone; electronics sit outside this gift-focused edit."
+    },
+    {
+      "id": 122,
+      "title": "iPhone 6",
+      "brand": "Apple",
+      "category": "smartphones",
+      "categoryLabel": "Smartphones",
+      "sourcePriceUsd": 299.99,
+      "imageCount": 3,
+      "reason": "Smartphone; electronics sit outside this gift-focused edit."
+    },
+    {
+      "id": 123,
+      "title": "iPhone 13 Pro",
+      "brand": "Apple",
+      "category": "smartphones",
+      "categoryLabel": "Smartphones",
+      "sourcePriceUsd": 1099.99,
+      "imageCount": 3,
+      "reason": "Smartphone; electronics sit outside this gift-focused edit."
+    },
+    {
+      "id": 124,
+      "title": "iPhone X",
+      "brand": "Apple",
+      "category": "smartphones",
+      "categoryLabel": "Smartphones",
+      "sourcePriceUsd": 899.99,
+      "imageCount": 3,
+      "reason": "Smartphone; electronics sit outside this gift-focused edit."
+    },
+    {
+      "id": 125,
+      "title": "Oppo A57",
+      "brand": "Oppo",
+      "category": "smartphones",
+      "categoryLabel": "Smartphones",
+      "sourcePriceUsd": 249.99,
+      "imageCount": 3,
+      "reason": "Smartphone; electronics sit outside this gift-focused edit."
+    },
+    {
+      "id": 126,
+      "title": "Oppo F19 Pro Plus",
+      "brand": "Oppo",
+      "category": "smartphones",
+      "categoryLabel": "Smartphones",
+      "sourcePriceUsd": 399.99,
+      "imageCount": 3,
+      "reason": "Smartphone; electronics sit outside this gift-focused edit."
+    },
+    {
+      "id": 127,
+      "title": "Oppo K1",
+      "brand": "Oppo",
+      "category": "smartphones",
+      "categoryLabel": "Smartphones",
+      "sourcePriceUsd": 299.99,
+      "imageCount": 4,
+      "reason": "Smartphone; electronics sit outside this gift-focused edit."
+    },
+    {
+      "id": 128,
+      "title": "Realme C35",
+      "brand": "Realme",
+      "category": "smartphones",
+      "categoryLabel": "Smartphones",
+      "sourcePriceUsd": 149.99,
+      "imageCount": 3,
+      "reason": "Smartphone; electronics sit outside this gift-focused edit."
+    },
+    {
+      "id": 129,
+      "title": "Realme X",
+      "brand": "Realme",
+      "category": "smartphones",
+      "categoryLabel": "Smartphones",
+      "sourcePriceUsd": 299.99,
+      "imageCount": 3,
+      "reason": "Smartphone; electronics sit outside this gift-focused edit."
+    },
+    {
+      "id": 130,
+      "title": "Realme XT",
+      "brand": "Realme",
+      "category": "smartphones",
+      "categoryLabel": "Smartphones",
+      "sourcePriceUsd": 349.99,
+      "imageCount": 3,
+      "reason": "Smartphone; electronics sit outside this gift-focused edit."
+    },
+    {
+      "id": 131,
+      "title": "Samsung Galaxy S7",
+      "brand": "Samsung",
+      "category": "smartphones",
+      "categoryLabel": "Smartphones",
+      "sourcePriceUsd": 299.99,
+      "imageCount": 3,
+      "reason": "Smartphone; electronics sit outside this gift-focused edit."
+    },
+    {
+      "id": 132,
+      "title": "Samsung Galaxy S8",
+      "brand": "Samsung",
+      "category": "smartphones",
+      "categoryLabel": "Smartphones",
+      "sourcePriceUsd": 499.99,
+      "imageCount": 3,
+      "reason": "Smartphone; electronics sit outside this gift-focused edit."
+    },
+    {
+      "id": 133,
+      "title": "Samsung Galaxy S10",
+      "brand": "Samsung",
+      "category": "smartphones",
+      "categoryLabel": "Smartphones",
+      "sourcePriceUsd": 699.99,
+      "imageCount": 3,
+      "reason": "Smartphone; electronics sit outside this gift-focused edit."
+    },
+    {
+      "id": 134,
+      "title": "Vivo S1",
+      "brand": "Vivo",
+      "category": "smartphones",
+      "categoryLabel": "Smartphones",
+      "sourcePriceUsd": 249.99,
+      "imageCount": 3,
+      "reason": "Smartphone; electronics sit outside this gift-focused edit."
+    },
+    {
+      "id": 135,
+      "title": "Vivo V9",
+      "brand": "Vivo",
+      "category": "smartphones",
+      "categoryLabel": "Smartphones",
+      "sourcePriceUsd": 299.99,
+      "imageCount": 3,
+      "reason": "Smartphone; electronics sit outside this gift-focused edit."
+    },
+    {
+      "id": 136,
+      "title": "Vivo X21",
+      "brand": "Vivo",
+      "category": "smartphones",
+      "categoryLabel": "Smartphones",
+      "sourcePriceUsd": 499.99,
+      "imageCount": 3,
+      "reason": "Smartphone; electronics sit outside this gift-focused edit."
+    },
+    {
+      "id": 137,
+      "title": "American Football",
+      "brand": null,
+      "category": "sports-accessories",
+      "categoryLabel": "Sports accessories",
+      "sourcePriceUsd": 19.99,
+      "imageCount": 1,
+      "reason": "Sports accessory; outside this non-food gift edit."
+    },
+    {
+      "id": 138,
+      "title": "Baseball Ball",
+      "brand": null,
+      "category": "sports-accessories",
+      "categoryLabel": "Sports accessories",
+      "sourcePriceUsd": 8.99,
+      "imageCount": 1,
+      "reason": "Sports accessory; outside this non-food gift edit."
+    },
+    {
+      "id": 139,
+      "title": "Baseball Glove",
+      "brand": null,
+      "category": "sports-accessories",
+      "categoryLabel": "Sports accessories",
+      "sourcePriceUsd": 24.99,
+      "imageCount": 3,
+      "reason": "Sports accessory; outside this non-food gift edit."
+    },
+    {
+      "id": 140,
+      "title": "Basketball",
+      "brand": null,
+      "category": "sports-accessories",
+      "categoryLabel": "Sports accessories",
+      "sourcePriceUsd": 14.99,
+      "imageCount": 1,
+      "reason": "Sports accessory; outside this non-food gift edit."
+    },
+    {
+      "id": 141,
+      "title": "Basketball Rim",
+      "brand": null,
+      "category": "sports-accessories",
+      "categoryLabel": "Sports accessories",
+      "sourcePriceUsd": 39.99,
+      "imageCount": 1,
+      "reason": "Sports accessory; outside this non-food gift edit."
+    },
+    {
+      "id": 142,
+      "title": "Cricket Ball",
+      "brand": null,
+      "category": "sports-accessories",
+      "categoryLabel": "Sports accessories",
+      "sourcePriceUsd": 12.99,
+      "imageCount": 1,
+      "reason": "Sports accessory; outside this non-food gift edit."
+    },
+    {
+      "id": 143,
+      "title": "Cricket Bat",
+      "brand": null,
+      "category": "sports-accessories",
+      "categoryLabel": "Sports accessories",
+      "sourcePriceUsd": 29.99,
+      "imageCount": 1,
+      "reason": "Sports accessory; outside this non-food gift edit."
+    },
+    {
+      "id": 144,
+      "title": "Cricket Helmet",
+      "brand": null,
+      "category": "sports-accessories",
+      "categoryLabel": "Sports accessories",
+      "sourcePriceUsd": 44.99,
+      "imageCount": 4,
+      "reason": "Sports accessory; outside this non-food gift edit."
+    },
+    {
+      "id": 145,
+      "title": "Cricket Wicket",
+      "brand": null,
+      "category": "sports-accessories",
+      "categoryLabel": "Sports accessories",
+      "sourcePriceUsd": 29.99,
+      "imageCount": 1,
+      "reason": "Sports accessory; outside this non-food gift edit."
+    },
+    {
+      "id": 146,
+      "title": "Feather Shuttlecock",
+      "brand": null,
+      "category": "sports-accessories",
+      "categoryLabel": "Sports accessories",
+      "sourcePriceUsd": 5.99,
+      "imageCount": 1,
+      "reason": "Sports accessory; outside this non-food gift edit."
+    },
+    {
+      "id": 147,
+      "title": "Football",
+      "brand": null,
+      "category": "sports-accessories",
+      "categoryLabel": "Sports accessories",
+      "sourcePriceUsd": 17.99,
+      "imageCount": 1,
+      "reason": "Sports accessory; outside this non-food gift edit."
+    },
+    {
+      "id": 148,
+      "title": "Golf Ball",
+      "brand": null,
+      "category": "sports-accessories",
+      "categoryLabel": "Sports accessories",
+      "sourcePriceUsd": 9.99,
+      "imageCount": 1,
+      "reason": "Sports accessory; outside this non-food gift edit."
+    },
+    {
+      "id": 149,
+      "title": "Iron Golf",
+      "brand": null,
+      "category": "sports-accessories",
+      "categoryLabel": "Sports accessories",
+      "sourcePriceUsd": 49.99,
+      "imageCount": 1,
+      "reason": "Sports accessory; outside this non-food gift edit."
+    },
+    {
+      "id": 150,
+      "title": "Metal Baseball Bat",
+      "brand": null,
+      "category": "sports-accessories",
+      "categoryLabel": "Sports accessories",
+      "sourcePriceUsd": 29.99,
+      "imageCount": 1,
+      "reason": "Sports accessory; outside this non-food gift edit."
+    },
+    {
+      "id": 151,
+      "title": "Tennis Ball",
+      "brand": null,
+      "category": "sports-accessories",
+      "categoryLabel": "Sports accessories",
+      "sourcePriceUsd": 6.99,
+      "imageCount": 1,
+      "reason": "Sports accessory; outside this non-food gift edit."
+    },
+    {
+      "id": 152,
+      "title": "Tennis Racket",
+      "brand": null,
+      "category": "sports-accessories",
+      "categoryLabel": "Sports accessories",
+      "sourcePriceUsd": 49.99,
+      "imageCount": 1,
+      "reason": "Sports accessory; outside this non-food gift edit."
+    },
+    {
+      "id": 153,
+      "title": "Volleyball",
+      "brand": null,
+      "category": "sports-accessories",
+      "categoryLabel": "Sports accessories",
+      "sourcePriceUsd": 11.99,
+      "imageCount": 1,
+      "reason": "Sports accessory; outside this non-food gift edit."
+    },
+    {
+      "id": 157,
+      "title": "Party Glasses",
+      "brand": "Fashion Fun",
+      "category": "sunglasses",
+      "categoryLabel": "Sunglasses",
+      "sourcePriceUsd": 19.99,
+      "imageCount": 3,
+      "reason": "Novelty party glasses; weaker gift presentation than the four selected sunglasses."
+    },
+    {
+      "id": 159,
+      "title": "iPad Mini 2021 Starlight",
+      "brand": "Apple",
+      "category": "tablets",
+      "categoryLabel": "Tablets",
+      "sourcePriceUsd": 499.99,
+      "imageCount": 4,
+      "reason": "Tablet; electronics sit outside this gift-focused edit."
+    },
+    {
+      "id": 160,
+      "title": "Samsung Galaxy Tab S8 Plus Grey",
+      "brand": "Samsung",
+      "category": "tablets",
+      "categoryLabel": "Tablets",
+      "sourcePriceUsd": 599.99,
+      "imageCount": 4,
+      "reason": "Tablet; electronics sit outside this gift-focused edit."
+    },
+    {
+      "id": 161,
+      "title": "Samsung Galaxy Tab White",
+      "brand": "Samsung",
+      "category": "tablets",
+      "categoryLabel": "Tablets",
+      "sourcePriceUsd": 349.99,
+      "imageCount": 4,
+      "reason": "Tablet; electronics sit outside this gift-focused edit."
+    },
+    {
+      "id": 162,
+      "title": "Blue Frock",
+      "brand": null,
+      "category": "tops",
+      "categoryLabel": "Tops",
+      "sourcePriceUsd": 29.99,
+      "imageCount": 4,
+      "reason": "Apparel; sizing complexity and outside this accessory-led edit."
+    },
+    {
+      "id": 163,
+      "title": "Girl Summer Dress",
+      "brand": null,
+      "category": "tops",
+      "categoryLabel": "Tops",
+      "sourcePriceUsd": 19.99,
+      "imageCount": 4,
+      "reason": "Apparel; sizing complexity and outside this accessory-led edit."
+    },
+    {
+      "id": 164,
+      "title": "Gray Dress",
+      "brand": null,
+      "category": "tops",
+      "categoryLabel": "Tops",
+      "sourcePriceUsd": 34.99,
+      "imageCount": 4,
+      "reason": "Apparel; sizing complexity and outside this accessory-led edit."
+    },
+    {
+      "id": 165,
+      "title": "Short Frock",
+      "brand": null,
+      "category": "tops",
+      "categoryLabel": "Tops",
+      "sourcePriceUsd": 24.99,
+      "imageCount": 4,
+      "reason": "Apparel; sizing complexity and outside this accessory-led edit."
+    },
+    {
+      "id": 166,
+      "title": "Tartan Dress",
+      "brand": null,
+      "category": "tops",
+      "categoryLabel": "Tops",
+      "sourcePriceUsd": 39.99,
+      "imageCount": 4,
+      "reason": "Apparel; sizing complexity and outside this accessory-led edit."
+    },
+    {
+      "id": 167,
+      "title": "300 Touring",
+      "brand": "Chrysler",
+      "category": "vehicle",
+      "categoryLabel": "Vehicle",
+      "sourcePriceUsd": 28999.99,
+      "imageCount": 6,
+      "reason": "Vehicle product; outside a lightweight gift catalogue."
+    },
+    {
+      "id": 168,
+      "title": "Charger SXT RWD",
+      "brand": "Dodge",
+      "category": "vehicle",
+      "categoryLabel": "Vehicle",
+      "sourcePriceUsd": 32999.99,
+      "imageCount": 6,
+      "reason": "Vehicle product; outside a lightweight gift catalogue."
+    },
+    {
+      "id": 169,
+      "title": "Dodge Hornet GT Plus",
+      "brand": "Dodge",
+      "category": "vehicle",
+      "categoryLabel": "Vehicle",
+      "sourcePriceUsd": 24999.99,
+      "imageCount": 6,
+      "reason": "Vehicle product; outside a lightweight gift catalogue."
+    },
+    {
+      "id": 170,
+      "title": "Durango SXT RWD",
+      "brand": "Dodge",
+      "category": "vehicle",
+      "categoryLabel": "Vehicle",
+      "sourcePriceUsd": 36999.99,
+      "imageCount": 6,
+      "reason": "Vehicle product; outside a lightweight gift catalogue."
+    },
+    {
+      "id": 171,
+      "title": "Pacifica Touring",
+      "brand": "Chrysler",
+      "category": "vehicle",
+      "categoryLabel": "Vehicle",
+      "sourcePriceUsd": 31999.99,
+      "imageCount": 6,
+      "reason": "Vehicle product; outside a lightweight gift catalogue."
+    },
+    {
+      "id": 177,
+      "title": "Black Women's Gown",
+      "brand": null,
+      "category": "womens-dresses",
+      "categoryLabel": "Women's dresses",
+      "sourcePriceUsd": 129.99,
+      "imageCount": 4,
+      "reason": "Apparel; sizing complexity and outside this accessory-led edit."
+    },
+    {
+      "id": 178,
+      "title": "Corset Leather With Skirt",
+      "brand": null,
+      "category": "womens-dresses",
+      "categoryLabel": "Women's dresses",
+      "sourcePriceUsd": 89.99,
+      "imageCount": 4,
+      "reason": "Apparel; sizing complexity and outside this accessory-led edit."
+    },
+    {
+      "id": 179,
+      "title": "Corset With Black Skirt",
+      "brand": null,
+      "category": "womens-dresses",
+      "categoryLabel": "Women's dresses",
+      "sourcePriceUsd": 79.99,
+      "imageCount": 4,
+      "reason": "Apparel; sizing complexity and outside this accessory-led edit."
+    },
+    {
+      "id": 180,
+      "title": "Dress Pea",
+      "brand": null,
+      "category": "womens-dresses",
+      "categoryLabel": "Women's dresses",
+      "sourcePriceUsd": 49.99,
+      "imageCount": 4,
+      "reason": "Apparel; sizing complexity and outside this accessory-led edit."
+    },
+    {
+      "id": 181,
+      "title": "Marni Red & Black Suit",
+      "brand": null,
+      "category": "womens-dresses",
+      "categoryLabel": "Women's dresses",
+      "sourcePriceUsd": 179.99,
+      "imageCount": 4,
+      "reason": "Apparel; sizing complexity and outside this accessory-led edit."
+    },
+    {
+      "id": 185,
+      "title": "Black & Brown Slipper",
+      "brand": "Comfort Trends",
+      "category": "womens-shoes",
+      "categoryLabel": "Women's shoes",
+      "sourcePriceUsd": 19.99,
+      "imageCount": 4,
+      "reason": "Footwear; sizing complexity and outside this accessory-led edit."
+    },
+    {
+      "id": 186,
+      "title": "Calvin Klein Heel Shoes",
+      "brand": "Calvin Klein",
+      "category": "womens-shoes",
+      "categoryLabel": "Women's shoes",
+      "sourcePriceUsd": 79.99,
+      "imageCount": 4,
+      "reason": "Footwear; sizing complexity and outside this accessory-led edit."
+    },
+    {
+      "id": 187,
+      "title": "Golden Shoes Woman",
+      "brand": "Fashion Diva",
+      "category": "womens-shoes",
+      "categoryLabel": "Women's shoes",
+      "sourcePriceUsd": 49.99,
+      "imageCount": 4,
+      "reason": "Footwear; sizing complexity and outside this accessory-led edit."
+    },
+    {
+      "id": 188,
+      "title": "Pampi Shoes",
+      "brand": "Pampi",
+      "category": "womens-shoes",
+      "categoryLabel": "Women's shoes",
+      "sourcePriceUsd": 29.99,
+      "imageCount": 4,
+      "reason": "Footwear; sizing complexity and outside this accessory-led edit."
+    },
+    {
+      "id": 189,
+      "title": "Red Shoes",
+      "brand": "Fashion Express",
+      "category": "womens-shoes",
+      "categoryLabel": "Women's shoes",
+      "sourcePriceUsd": 34.99,
+      "imageCount": 4,
+      "reason": "Footwear; sizing complexity and outside this accessory-led edit."
+    },
+    {
+      "id": 191,
+      "title": "Rolex Cellini Moonphase",
+      "brand": "Rolex",
+      "category": "womens-watches",
+      "categoryLabel": "Women's watches",
+      "sourcePriceUsd": 15999.99,
+      "imageCount": 3,
+      "reason": "Duplicate Rolex Cellini Moonphase concept; selected product 96 already covers it."
+    },
+    {
+      "id": 192,
+      "title": "Rolex Datejust Women",
+      "brand": "Rolex",
+      "category": "womens-watches",
+      "categoryLabel": "Women's watches",
+      "sourcePriceUsd": 10999.99,
+      "imageCount": 3,
+      "reason": "Near-duplicate Rolex Datejust Women; selected products 97 and 193 cover the Datejust and women's watch slots."
+    }
+  ]
+}

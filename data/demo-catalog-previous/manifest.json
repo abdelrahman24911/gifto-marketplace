@@ -1,0 +1,169 @@
+{
+  "datasetId": "gifto-demo-catalog-previous-refresh",
+  "version": 1,
+  "imagePolicy": "Original Gifto artwork generated for the pre-existing demo products; no third-party image assets.",
+  "products": [
+    {
+      "slug": "classic-red-rose-bouquet",
+      "name": "Classic Red Rose Bouquet",
+      "vendorSlug": "nile-blossoms",
+      "theme": "rose",
+      "kind": "roses",
+      "file": "classic-red-rose-bouquet.jpg",
+      "alt": "Illustration of a classic red rose bouquet wrapped in kraft paper with a gold ribbon."
+    },
+    {
+      "slug": "white-lily-arrangement",
+      "name": "White Lily & Gypsophila Arrangement",
+      "vendorSlug": "nile-blossoms",
+      "theme": "lily",
+      "kind": "lilies",
+      "file": "white-lily-arrangement.jpg",
+      "alt": "Illustration of white lilies and gypsophila arranged in a pale ceramic vase."
+    },
+    {
+      "slug": "sunflower-bright-bunch",
+      "name": "Sunflower Bright Bunch",
+      "vendorSlug": "nile-blossoms",
+      "theme": "sun",
+      "kind": "sunflowers",
+      "file": "sunflower-bright-bunch.jpg",
+      "alt": "Illustration of a bright sunflower bunch wrapped in warm kraft paper."
+    },
+    {
+      "slug": "pastel-peony-bouquet",
+      "name": "Pastel Peony Bouquet",
+      "vendorSlug": "nile-blossoms",
+      "theme": "peony",
+      "kind": "peonies",
+      "file": "pastel-peony-bouquet.jpg",
+      "alt": "Illustration of a pastel peony bouquet in blush and cream tones."
+    },
+    {
+      "slug": "dried-pampas-vase",
+      "name": "Dried Pampas Vase Arrangement",
+      "vendorSlug": "nile-blossoms",
+      "theme": "pampas",
+      "kind": "pampas",
+      "file": "dried-pampas-vase.jpg",
+      "alt": "Illustration of dried pampas grass stems arranged in a textured ceramic vase."
+    },
+    {
+      "slug": "graduation-flower-box",
+      "name": "Graduation Flower Box",
+      "vendorSlug": "nile-blossoms",
+      "theme": "graduation",
+      "kind": "graduation",
+      "file": "graduation-flower-box.jpg",
+      "alt": "Illustration of a graduation flower box with a gold ribbon and a small graduation cap."
+    },
+    {
+      "slug": "belgian-dark-truffle-box",
+      "name": "Belgian Dark Truffle Box (16 pc)",
+      "vendorSlug": "cairo-cocoa",
+      "theme": "chocolate",
+      "kind": "truffles",
+      "file": "belgian-dark-truffle-box.jpg",
+      "alt": "Illustration of sixteen dark chocolate truffles in a ribboned gift box."
+    },
+    {
+      "slug": "date-chocolate-gift-box",
+      "name": "Egyptian Date & Chocolate Gift Box",
+      "vendorSlug": "cairo-cocoa",
+      "theme": "date",
+      "kind": "dates",
+      "file": "date-chocolate-gift-box.jpg",
+      "alt": "Illustration of an Egyptian date and chocolate gift box with gold detailing."
+    },
+    {
+      "slug": "pistachio-baklava-tray",
+      "name": "Pistachio Baklava Tray (1 kg)",
+      "vendorSlug": "cairo-cocoa",
+      "theme": "baklava",
+      "kind": "baklava",
+      "file": "pistachio-baklava-tray.jpg",
+      "alt": "Illustration of a brass tray filled with pistachio baklava pieces."
+    },
+    {
+      "slug": "molten-cake-dessert-kit",
+      "name": "Molten Cake Dessert Kit",
+      "vendorSlug": "cairo-cocoa",
+      "theme": "cake",
+      "kind": "lava-cake",
+      "file": "molten-cake-dessert-kit.jpg",
+      "alt": "Illustration of a molten chocolate cake dessert kit with sauce and a gift box."
+    },
+    {
+      "slug": "luxury-chocolate-tower",
+      "name": "Luxury Chocolate Tower (3 tiers)",
+      "vendorSlug": "cairo-cocoa",
+      "theme": "chocolate",
+      "kind": "tower",
+      "file": "luxury-chocolate-tower.jpg",
+      "alt": "Illustration of a three-tier luxury chocolate tower tied with a gold ribbon."
+    },
+    {
+      "slug": "assorted-bonbon-bag",
+      "name": "Assorted Bonbon Bag (24 pc)",
+      "vendorSlug": "cairo-cocoa",
+      "theme": "bonbon",
+      "kind": "bonbons",
+      "file": "assorted-bonbon-bag.jpg",
+      "alt": "Illustration of a gift bag filled with assorted colourful bonbons."
+    },
+    {
+      "slug": "engraved-walnut-keepsake-box",
+      "name": "Engraved Walnut Keepsake Box",
+      "vendorSlug": "legacy-engraving",
+      "theme": "walnut",
+      "kind": "walnut-box",
+      "file": "engraved-walnut-keepsake-box.jpg",
+      "alt": "Illustration of an engraved walnut keepsake box with brass hinges."
+    },
+    {
+      "slug": "monogram-leather-journal",
+      "name": "Monogram Leather Journal",
+      "vendorSlug": "legacy-engraving",
+      "theme": "leather",
+      "kind": "journal",
+      "file": "monogram-leather-journal.jpg",
+      "alt": "Illustration of a burgundy leather journal with a gold monogram and strap."
+    },
+    {
+      "slug": "personalized-photo-frame",
+      "name": "Personalized Photo Frame (Oak)",
+      "vendorSlug": "legacy-engraving",
+      "theme": "frame",
+      "kind": "photo-frame",
+      "file": "personalized-photo-frame.jpg",
+      "alt": "Illustration of a personalised oak photo frame with an engraved nameplate."
+    },
+    {
+      "slug": "corporate-pen-card-set",
+      "name": "Corporate Pen & Card Set",
+      "vendorSlug": "legacy-engraving",
+      "theme": "corporate",
+      "kind": "pen-set",
+      "file": "corporate-pen-card-set.jpg",
+      "alt": "Illustration of a corporate pen and card set presented in a gift box."
+    },
+    {
+      "slug": "custom-name-wooden-toy",
+      "name": "Custom Name Wooden Toy",
+      "vendorSlug": "legacy-engraving",
+      "theme": "toy",
+      "kind": "name-toy",
+      "file": "custom-name-wooden-toy.jpg",
+      "alt": "Illustration of a custom wooden name puzzle toy with colourful letters."
+    },
+    {
+      "slug": "engraved-brass-compass",
+      "name": "Engraved Brass Compass",
+      "vendorSlug": "legacy-engraving",
+      "theme": "compass",
+      "kind": "compass",
+      "file": "engraved-brass-compass.jpg",
+      "alt": "Illustration of an engraved brass compass with an open lid and leather strap."
+    }
+  ]
+}

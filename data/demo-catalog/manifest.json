@@ -1,0 +1,50 @@
+{
+  "datasetId": "gifto-demo-catalog",
+  "version": 1,
+  "productCount": 52,
+  "targetDistribution": {
+    "Flowers": 8,
+    "Chocolates & Sweets": 10,
+    "Personalized Gifts": 8,
+    "Gift Boxes": 8,
+    "Perfumes & Accessories": 6,
+    "Toys & Cute Gifts": 6,
+    "Home & Lifestyle": 6
+  },
+  "actualDistribution": {
+    "Flowers": 8,
+    "Chocolates & Sweets": 10,
+    "Personalized Gifts": 8,
+    "Gift Boxes": 8,
+    "Perfumes & Accessories": 6,
+    "Toys & Cute Gifts": 6,
+    "Home & Lifestyle": 6
+  },
+  "categoryDistribution": {
+    "flowers": 8,
+    "chocolates-sweets": 10,
+    "personalized-gifts": 14,
+    "gift-boxes": 14,
+    "toys-kids": 6
+  },
+  "vendorDistribution": {
+    "nile-blossoms": 14,
+    "cairo-cocoa": 14,
+    "legacy-engraving": 18,
+    "alex-toy-corner": 6
+  },
+  "candidateSource": {
+    "provider": "DummyJSON",
+    "api": "https://dummyjson.com/products",
+    "license": "MIT",
+    "candidateCount": 9,
+    "note": "DummyJSON was used to shortlist generic gift concepts. Its product images were excluded because image-specific licensing is not separately stated; all images are original local artwork."
+  },
+  "imageSummary": {
+    "count": 52,
+    "format": "JPEG",
+    "localOnly": true,
+    "thirdPartyAssets": 0
+  },
+  "occasionProposal": "occasions.proposed.json"
+}

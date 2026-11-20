@@ -1,0 +1,240 @@
+{
+  "status": "proposed-not-applied",
+  "datasetId": "gifto-demo-catalog",
+  "datasetVersion": 1,
+  "generatedAt": "2026-11-18T16:05:54.467Z",
+  "hostedPreState": "Read-only snapshot recorded on 2026-11-16: both occasions active, match_mode=hybrid, 0 manual products, 0 category rules, 0 tag rules.",
+  "applyPolicy": "Do not apply without owner approval. This file is a proposal only; no hosted occasion_products row was inserted or changed.",
+  "occasions": [
+    {
+      "slug": "graduation",
+      "name": "Graduation",
+      "rationale": "A milestone assortment mixing keepsakes, flowers, a celebration box and a scent for the next chapter.",
+      "picks": [
+        {
+          "sortOrder": 1,
+          "demoId": "gdc-020",
+          "slug": "demo-catalog-initial-stamped-travel-journal",
+          "name": "Initial-Stamped Travel Journal",
+          "vendorSlug": "legacy-engraving",
+          "priceEgp": 460,
+          "reason": "A practical keepsake for a graduate's next trip and a natural place for an initial."
+        },
+        {
+          "sortOrder": 2,
+          "demoId": "gdc-021",
+          "slug": "demo-catalog-personalized-star-map-print",
+          "name": "Personalized Star Map Print",
+          "vendorSlug": "legacy-engraving",
+          "priceEgp": 520,
+          "reason": "A date-and-place print that makes the milestone personal without requiring a specific school."
+        },
+        {
+          "sortOrder": 3,
+          "demoId": "gdc-022",
+          "slug": "demo-catalog-custom-name-necklace-card",
+          "name": "Custom Name Necklace Card",
+          "vendorSlug": "legacy-engraving",
+          "priceEgp": 580,
+          "reason": "A small piece of jewellery with the graduate's name, easy to give alongside a card."
+        },
+        {
+          "sortOrder": 4,
+          "demoId": "gdc-023",
+          "slug": "demo-catalog-engraved-brass-keyring",
+          "name": "Engraved Brass Keyring",
+          "vendorSlug": "legacy-engraving",
+          "priceEgp": 220,
+          "reason": "A lower-price engraved keepsake for a group gift or a meaningful small token."
+        },
+        {
+          "sortOrder": 5,
+          "demoId": "gdc-026",
+          "slug": "demo-catalog-our-story-photo-album",
+          "name": "Our Story Photo Album",
+          "vendorSlug": "legacy-engraving",
+          "priceEgp": 720,
+          "reason": "A photo album for family celebrations and the years leading to graduation."
+        },
+        {
+          "sortOrder": 6,
+          "demoId": "gdc-025",
+          "slug": "demo-catalog-monogrammed-card-case",
+          "name": "Monogrammed Card Case",
+          "vendorSlug": "legacy-engraving",
+          "priceEgp": 340,
+          "reason": "A useful monogrammed accessory for a first job, internship or university placement."
+        },
+        {
+          "sortOrder": 7,
+          "demoId": "gdc-027",
+          "slug": "demo-catalog-golden-celebration-gift-box",
+          "name": "Golden Celebration Gift Box",
+          "vendorSlug": "cairo-cocoa",
+          "priceEgp": 780,
+          "reason": "A ready-wrapped celebration box for a family or group contribution."
+        },
+        {
+          "sortOrder": 8,
+          "demoId": "gdc-018",
+          "slug": "demo-catalog-celebration-chocolate-stack",
+          "name": "Celebration Chocolate Stack",
+          "vendorSlug": "cairo-cocoa",
+          "priceEgp": 950,
+          "reason": "A shareable chocolate centrepiece for a graduation gathering."
+        },
+        {
+          "sortOrder": 9,
+          "demoId": "gdc-004",
+          "slug": "demo-catalog-golden-sunflower-market-wrap",
+          "name": "Golden Sunflower Market Wrap",
+          "vendorSlug": "nile-blossoms",
+          "priceEgp": 540,
+          "reason": "A bright, celebratory flower option at a mid-range price."
+        },
+        {
+          "sortOrder": 10,
+          "demoId": "gdc-007",
+          "slug": "demo-catalog-coral-tulip-medley",
+          "name": "Coral Tulip Medley",
+          "vendorSlug": "nile-blossoms",
+          "priceEgp": 560,
+          "reason": "A softer flower alternative for graduates who prefer coral and cream tones."
+        },
+        {
+          "sortOrder": 11,
+          "demoId": "gdc-037",
+          "slug": "demo-catalog-citrus-neroli-eau-de-toilette-75-ml",
+          "name": "Citrus Neroli Eau de Toilette 75 ml",
+          "vendorSlug": "legacy-engraving",
+          "priceEgp": 980,
+          "reason": "A light citrus scent that works as a unisex milestone gift."
+        },
+        {
+          "sortOrder": 12,
+          "demoId": "gdc-050",
+          "slug": "demo-catalog-faux-olive-tree-in-pot",
+          "name": "Faux Olive Tree in Pot",
+          "vendorSlug": "nile-blossoms",
+          "priceEgp": 560,
+          "reason": "A new-home gift for graduates moving into their first place."
+        }
+      ]
+    },
+    {
+      "slug": "ramdan-night",
+      "name": "Ramadan Night",
+      "rationale": "A hosting-led assortment centred on dates, chocolate, coffee, table styling and a quiet evening at home.",
+      "picks": [
+        {
+          "sortOrder": 1,
+          "demoId": "gdc-030",
+          "slug": "demo-catalog-ramadan-sharing-box",
+          "name": "Ramadan Sharing Box",
+          "vendorSlug": "cairo-cocoa",
+          "priceEgp": 890,
+          "reason": "The anchor sharing box, designed for iftar tables and family visits."
+        },
+        {
+          "sortOrder": 2,
+          "demoId": "gdc-028",
+          "slug": "demo-catalog-coffee-and-date-hamper",
+          "name": "Coffee & Date Hamper",
+          "vendorSlug": "cairo-cocoa",
+          "priceEgp": 640,
+          "reason": "A morning-to-evening hamper with coffee, dates and a cup for hosting."
+        },
+        {
+          "sortOrder": 3,
+          "demoId": "gdc-009",
+          "slug": "demo-catalog-pistachio-and-rose-chocolate-box",
+          "name": "Pistachio & Rose Chocolate Box",
+          "vendorSlug": "cairo-cocoa",
+          "priceEgp": 420,
+          "reason": "A rose-and-pistachio chocolate box that suits the seasonal flavour palette."
+        },
+        {
+          "sortOrder": 4,
+          "demoId": "gdc-011",
+          "slug": "demo-catalog-dark-chocolate-date-bites",
+          "name": "Dark Chocolate Date Bites",
+          "vendorSlug": "cairo-cocoa",
+          "priceEgp": 310,
+          "reason": "Date bites in a reusable tin, a familiar Ramadan sweet with a modern finish."
+        },
+        {
+          "sortOrder": 5,
+          "demoId": "gdc-013",
+          "slug": "demo-catalog-milk-chocolate-covered-dates",
+          "name": "Milk Chocolate Covered Dates",
+          "vendorSlug": "cairo-cocoa",
+          "priceEgp": 330,
+          "reason": "Milk-chocolate dates at an accessible price for larger family groups."
+        },
+        {
+          "sortOrder": 6,
+          "demoId": "gdc-016",
+          "slug": "demo-catalog-saffron-and-almond-chocolate-bar",
+          "name": "Saffron & Almond Chocolate Bar",
+          "vendorSlug": "cairo-cocoa",
+          "priceEgp": 240,
+          "reason": "A saffron-and-almond bar for a smaller, considered food gift."
+        },
+        {
+          "sortOrder": 7,
+          "demoId": "gdc-014",
+          "slug": "demo-catalog-orange-blossom-chocolate-bark",
+          "name": "Orange Blossom Chocolate Bark",
+          "vendorSlug": "cairo-cocoa",
+          "priceEgp": 280,
+          "reason": "A light chocolate bark with orange blossom and pistachio for sharing."
+        },
+        {
+          "sortOrder": 8,
+          "demoId": "gdc-012",
+          "slug": "demo-catalog-hazelnut-praline-selection",
+          "name": "Hazelnut Praline Selection",
+          "vendorSlug": "cairo-cocoa",
+          "priceEgp": 480,
+          "reason": "A praline selection for a more classic chocolate gift."
+        },
+        {
+          "sortOrder": 9,
+          "demoId": "gdc-047",
+          "slug": "demo-catalog-cedar-and-fig-candle",
+          "name": "Cedar & Fig Candle",
+          "vendorSlug": "nile-blossoms",
+          "priceEgp": 380,
+          "reason": "A cedar-and-fig candle for the evening table after iftar."
+        },
+        {
+          "sortOrder": 10,
+          "demoId": "gdc-051",
+          "slug": "demo-catalog-mug-tree-and-tea-set",
+          "name": "Mug Tree & Tea Set",
+          "vendorSlug": "nile-blossoms",
+          "priceEgp": 340,
+          "reason": "A tea set for the quiet part of the evening and a reusable household gift."
+        },
+        {
+          "sortOrder": 11,
+          "demoId": "gdc-048",
+          "slug": "demo-catalog-ceramic-bud-vase-duo",
+          "name": "Ceramic Bud Vase Duo",
+          "vendorSlug": "nile-blossoms",
+          "priceEgp": 450,
+          "reason": "A pair of bud vases for a simple iftar table centrepiece."
+        },
+        {
+          "sortOrder": 12,
+          "demoId": "gdc-035",
+          "slug": "demo-catalog-amber-oud-eau-de-parfum-50-ml",
+          "name": "Amber Oud Eau de Parfum 50 ml",
+          "vendorSlug": "legacy-engraving",
+          "priceEgp": 1250,
+          "reason": "A warm amber-oud fragrance for an Eid-adjacent or hosting gift."
+        }
+      ]
+    }
+  ]
+}

@@ -1,49 +1,52 @@
 # Demo Data Guide
 
-How the Gifto demo catalog is deployed, inspected, edited, re-seeded, and removed.
+How the Gifto demo marketplace is seeded, inspected, refreshed, and removed.
 
 ## Status at a glance
 
 | Item | Value |
 | --- | --- |
 | Supabase project ref | `hqusykdyjpruysxezsrn` (`gifto`, `eu-central-1`) |
-| Remote migrations applied | `00000000000001` – `00000000000013` |
+| Remote migrations applied | `00000000000001` - `00000000000027` |
 | Demo vendors | 5 (4 `active`, 1 `pending`) |
-| Demo products | 24 (all `active`, all `is_demo = true`) |
+| Demo products | 70 (all `active`, all `is_demo = true`) |
 | Platform categories | 8 (shared, not demo-only) |
-| Demo owner accounts | 5 (`@demo.gifto.example`) |
-| Product images | 24 generated PNGs in the public `product-images` bucket |
-| Demo orders | none (intentional — see Limitations) |
+| Demo vendor accounts | 5 (`@demo.gifto.example`) |
+| Demo customer account | 1 (`layla.hassan@demo.gifto.example`) |
+| Demo orders | 40 (42 total orders including 2 earlier guest orders) |
+| Demo settlements | 4 (2 paid, 1 open, 1 voided) |
+| Demo support requests | 5 across 4 vendors (2 open, 1 in progress, 2 resolved) |
+| Merchandising | 15 tags, 6 active occasions, 3 pending tag suggestions |
+| Storage | Product images, vendor logos/covers, and occasion banners |
 
-Everything seeded by this workflow is tagged with `is_demo = true` on `vendors`
-and `products`. Public storefront rendering is unchanged; the flag exists so
-admin tooling and cleanup can identify seeded rows safely.
+Everything seeded by this workflow is tagged with `is_demo = true` on vendors
+and products, or is attached to a demo vendor and removed with it.
 
-## What the catalog contains
+## What the marketplace contains
 
 | Vendor | Slug | City | Status | Commission | Products |
 | --- | --- | --- | --- | --- | --- |
-| Nile Blossoms | `nile-blossoms` | Alexandria | active | 12% | 6 |
-| Cairo Cocoa & Confections | `cairo-cocoa` | Cairo | active | 15% | 6 |
-| Legacy Engraving Studio | `legacy-engraving` | Luxor | active | 10% | 6 |
+| Nile Blossoms | `nile-blossoms` | Alexandria | active | 12% | 29 |
+| Cairo Cocoa & Confections | `cairo-cocoa` | Cairo | active | 15% | 8 |
+| Legacy Engraving Studio | `legacy-engraving` | Luxor | active | 10% | 27 |
 | Alexandria Toy Corner | `alex-toy-corner` | Alexandria | active | 12% | 6 |
 | Delta Dried Flowers | `delta-dried-flowers` | Damietta | pending | 10% | 0 |
 
-- Prices are stored in **piastres** (`price_minor = EGP × 100`); seeded prices
-  range from EGP 190 to EGP 1,450.
-- Stock ranges from 8 to 50 units per product.
-- `delta-dried-flowers` is deliberately submitted as `pending` with no products
-  so the platform-admin vendor review queue has a realistic item to action.
+- Prices are stored in piastres (`price_minor = EGP x 100`).
+- All 70 products are `active`; one Cairo Cocoa product has deliberately zero
+  stock so the storefront shows a sold-out state.
+- `delta-dried-flowers` is submitted as `pending` with no products so the
+  platform-admin vendor review queue has a realistic item to action.
+- There is one additional non-demo pending vendor (`abdelrahman-osama`) created
+  during manual testing. Cleanup preserves it.
 - The eight categories come from `supabase/seed.sql` and are shared platform
   data, not demo-flagged. Cleanup never removes them.
-- Each product has one generated 800×800 gradient placeholder at
-  `product-images/{vendor_id}/{product_id}/hero-1.png`. Replace these with real
-  photos through the vendor UI whenever you want better visuals.
+- Product images live in the public `product-images` bucket, vendor logos and
+  covers in `vendor-media`, and occasion banners in `occasion-images`.
 
-## Demo owner accounts
+## Accounts and credentials
 
-One owner account exists per vendor, using the reserved `.example` TLD so no
-real mail can ever be delivered:
+Vendor owner accounts:
 
 - `nile-blossoms@demo.gifto.example`
 - `cairo-cocoa@demo.gifto.example`
@@ -51,161 +54,218 @@ real mail can ever be delivered:
 - `alex-toy-corner@demo.gifto.example`
 - `delta-dried-flowers@demo.gifto.example`
 
-### Getting a password
+Demo customer:
 
-Passwords are never stored in the repository, printed by the seeder, or
-recorded in documentation. To sign in, rotate and reveal fresh credentials in
-your own terminal:
+- `layla.hassan@demo.gifto.example` (8 signed-in orders in her history)
 
-```bash
+Platform admin:
+
+- `admin@gifto.example` (not a demo-domain account; cleanup preserves it)
+
+Passwords are never printed by seeders or stored in documentation. They live in
+the git-ignored `.demo-catalog/credentials.json` under `platform-admin`,
+`demo-customer`, and one key per vendor. To rotate and reveal vendor owner
+passwords in your terminal:
+
+```powershell
 npm run demo:passwords
 ```
 
-The script prints one email + password per account and invalidates the previous
-password on every run. Treat that output as a secret: do not paste it into
-issues, docs, chat, or commit it. If an output is ever exposed, simply run the
-script again — the old passwords stop working immediately.
+Treat that output as a secret. If it is exposed, run the command again; the old
+passwords stop working immediately.
 
-## Where to look in the app
+## Seeding and refreshing
 
-- `/shops` — storefront directory; shows the 4 `active` demo vendors.
-- `/admin` — vendor approval queue; `Delta Dried Flowers` appears as `pending`.
-- `/vendor` — vendor dashboard for the signed-in owner (products, images,
-  inventory). This is the supported path for editing demo products; the admin
-  UI intentionally has no product CRUD.
+All demo seed scripts share the same safety gate:
 
-A platform-admin account is **not** seeded. If one is needed, follow the
-guard-free bootstrap procedure in
-`docs/LAUNCH_READINESS_PLAN_REVIEW.md` §5 and keep the credentials out of the
-repository.
+- `DEMO_SEED_ENV=local|preview`
+- `DEMO_SEED_ALLOWED_PROJECT_REFS=<project-ref>` for hosted targets
+- `DEMO_SEED_CONFIRM="SEED <script>@1"` for `--apply`
+- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and
+  `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`
+- production environments are refused
 
-## Editing demo data
+Each script supports `--verify` (read-only) and `--apply`. Run `--verify` first.
+The examples below target the hosted demo project from PowerShell.
 
-- Sign in as a vendor owner and use `/vendor` to add, edit, archive products,
-  upload images, and adjust stock. Changes persist normally.
-- Re-running the seeder is safe and idempotent. It refreshes descriptive fields
-  (name, description, city, coverage, contact, price, stock, category) but
-  **never changes vendor status or commission** — the
-  `vendors_guard_finance_fields` trigger rejects those updates even for the
-  service role. Change status/commission through the platform-admin UI.
-- The seeder refuses to touch a vendor or product whose slug already exists
-  without `is_demo = true`, so a real row can never be overwritten by accident.
-
-## Re-seeding
-
-```bash
-npm run seed:demo
+```powershell
+$env:DEMO_SEED_ENV="preview"
+$env:DEMO_SEED_ALLOWED_PROJECT_REFS="hqusykdyjpruysxezsrn"
 ```
 
-Behavior:
+### 1. Catalog and artwork
 
-- Creates missing categories, vendors, products, owner accounts, memberships,
-  and images.
-- Updates existing **demo** rows' descriptive fields in place.
-- Re-uploads placeholder images with `upsert` and does not duplicate
-  `product_images` rows.
-- Leaves non-demo data untouched.
-- Prints counts only; it does not print credentials.
+The catalogue was generated from DummyJSON product data. To rebuild or refresh:
 
-Preflight checks fail fast if the `is_demo` column is missing. If the
-`product-images` bucket is missing, it warns and seeds the catalog without
-images (re-run after the bucket exists).
+```powershell
+npm run demo:catalog:dj:build
+npm run demo:catalog:dj:reports
+npm run demo:catalog:dj:validate
+$env:DEMO_CATALOG_ENV="preview"
+$env:DEMO_CATALOG_ALLOWED_PROJECT_REFS="hqusykdyjpruysxezsrn"
+$env:DEMO_CATALOG_CONFIRM="IMPORT gifto-demo-catalog-dummyjson@2"
+npm run demo:catalog:dj:import -- --apply
+```
 
-## Verifying the deployment
+Generated demo artwork is local-only and can be regenerated with:
 
-Read-only checks (run in the SQL editor or through the Supabase MCP server):
+```powershell
+npm run demo:seed:art
+```
+
+### 2. Vendor branding and profiles
+
+```powershell
+$env:DEMO_SEED_CONFIRM="SEED vendor-profiles@1"
+npm run demo:seed:profiles -- --apply
+npm run demo:seed:profiles -- --verify
+```
+
+Uploads logos and covers, sets descriptions, addresses, delivery coverage,
+working hours, and prep-time ranges.
+
+### 3. Merchandising
+
+```powershell
+$env:DEMO_SEED_CONFIRM="SEED merchandising@1"
+npm run demo:seed:merchandising -- --apply
+npm run demo:seed:merchandising -- --verify
+```
+
+Creates 15 tags, assigns up to 10 per product, configures 6 active occasions
+with 10 curated picks and matching rules each, uploads banners, and files 3
+pending tag suggestions from vendors.
+
+### 4. Orders, commissions, and settlements
+
+```powershell
+$env:DEMO_SEED_CONFIRM="SEED orders@1"
+npm run demo:seed:orders -- --apply
+npm run demo:seed:orders -- --verify
+```
+
+This creates the demo customer, 40 backdated orders, all order/suborder status
+transitions, two returns, one partially completed multi-vendor order, inventory
+movements, commission entries, and four settlements. Order dates span roughly
+81 days ago to 3 days ago.
+
+Order mix:
+
+- Customer orders: 8 (indexes `[2, 7, 12, 17, 21, 25, 31, 37]`)
+- Guest orders: 32
+- Parent statuses: 20 delivered, 2 returned, 4 cancelled, 1
+  `partially_completed`, 5 shipped, 5 confirmed, 3 placed
+- Multi-vendor: order 20 (`nile-blossoms` + `alex-toy-corner`, delivered) and
+  order 27 (`cairo-cocoa` delivered + `alex-toy-corner` cancelled)
+- Settlements: Nile paid, Legacy paid, Cairo open, Alex voided. All use the note
+  prefix `DEMO-SEED:`.
+
+Rerunning is idempotent while the demo orders are intact because placement uses
+deterministic idempotency keys. If someone has manually advanced a seeded order,
+the seeder may refuse to rewrite it; clean up and reapply instead.
+
+### 5. Support requests
+
+```powershell
+$env:DEMO_SEED_CONFIRM="SEED support@1"
+npm run demo:seed:support -- --apply
+npm run demo:seed:support -- --verify
+```
+
+Creates 5 backdated requests across Nile Blossoms, Cairo Cocoa, Legacy
+Engraving, and Alexandria Toy Corner. Subjects are the idempotency marker; an
+admin editing a subject or body will make `--verify` fail.
+
+## Demo markers and safety rules
+
+- Vendors/products: `is_demo = true`.
+- Auth users: email ends in `@demo.gifto.example`.
+- Orders: `contact_email` ends in `@demo.gifto.example`; public references still
+  match the production `GFT-XXXXXXXXXXXX` format.
+- Settlements: note starts with `DEMO-SEED:`.
+- Tags and occasions: identified by the canonical slug lists in the seed
+  scripts, not by a `is_demo` column.
+- `orders.status` is normally derived, but the parent sync trigger never sets
+  `shipped`. The order seeder sets the 5 shipped parent orders explicitly after
+  their suborders reach shipped.
+- Supabase `upsert(..., { onConflict: "slug" })` is unsafe for tags/occasions
+  because slug triggers rename candidates before conflict resolution. The
+  merchandising seeder selects by slug and updates by id instead.
+- The `set_updated_at` triggers set `updated_at = now()` on update. `created_at`
+  and lifecycle timestamps (`confirmed_at`, `shipped_at`, `delivered_at`,
+  `earned_at`, etc.) are backdated; `updated_at` remains the seeding time.
+
+## Verifying the hosted deployment
+
+Read-only SQL:
 
 ```sql
 select
-  (select count(*) from categories)                                        as categories,
-  (select count(*) from vendors where is_demo)                             as demo_vendors,
-  (select count(*) from vendors where is_demo and status = 'active')       as active_demo_vendors,
-  (select count(*) from vendors where is_demo and status = 'pending')      as pending_demo_vendors,
-  (select count(*) from products where is_demo)                            as demo_products,
-  (select count(*) from vendors where not is_demo)                         as non_demo_vendors,
-  (select count(*) from products where not is_demo)                        as non_demo_products,
-  (select count(*) from product_images)                                    as product_images,
-  (select count(*) from auth.users
-     where email like '%@demo.gifto.example')                              as demo_accounts,
-  (select count(*) from storage.objects
-     where bucket_id = 'product-images')                                   as stored_images;
+  (select count(*) from vendors where is_demo)                          as demo_vendors,
+  (select count(*) from vendors where is_demo and status = 'active')    as active_demo_vendors,
+  (select count(*) from vendors where is_demo and status = 'pending')   as pending_demo_vendors,
+  (select count(*) from products where is_demo)                         as demo_products,
+  (select count(*) from products where is_demo and status = 'active')   as active_demo_products,
+  (select count(*) from tags)                                           as tags,
+  (select count(*) from occasions where is_active)                      as active_occasions,
+  (select count(*) from tag_suggestions where status = 'pending')       as pending_suggestions,
+  (select count(*) from orders where contact_email like '%@demo.gifto.example') as demo_orders,
+  (select count(*) from settlements where note like 'DEMO-SEED:%')     as demo_settlements,
+  (select count(*) from support_requests)                               as support_requests,
+  (select count(*) from auth.users where email like '%@demo.gifto.example') as demo_accounts;
 ```
 
-Expected: `8, 5, 4, 1, 24, 0, 0, 24, 5, 24`.
+Expected on the current hosted project: `5, 4, 1, 70, 70, 15, 6, 3, 40, 4, 5, 6`.
 
 Public visibility check (anon key, no service role):
 
-```bash
-curl "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/public_vendors?select=slug"
+```powershell
+curl "$env:NEXT_PUBLIC_SUPABASE_URL/rest/v1/public_vendors?select=slug" `
+  -H "apikey: $env:NEXT_PUBLIC_SUPABASE_ANON_KEY"
 ```
 
-Expected: the four active slugs only — `delta-dried-flowers` must not appear.
-
-Image check: open any public URL of the form
-`{SUPABASE_URL}/storage/v1/object/public/product-images/{vendor_id}/{product_id}/hero-1.png`.
-It should return `200 image/png`.
+Expected: the four active demo slugs only. `delta-dried-flowers` and the
+non-demo pending vendor must not appear.
 
 ## Cleanup
 
-```bash
+Cleanup removes every row and storage object attached to the demo catalog and
+vendors, including orders and financial history. It is deliberately destructive.
+
+```powershell
+$env:DEMO_SEED_ENV="preview"
+$env:DEMO_SEED_ALLOWED_PROJECT_REFS="hqusykdyjpruysxezsrn"
+node scripts/cleanup-demo.mjs --dry-run
+$env:DEMO_SEED_CONFIRM="CLEANUP demo@1"
 npm run cleanup:demo
+node scripts/cleanup-demo.mjs --verify
 ```
 
-Removes, in order:
+It removes, in order:
 
-1. Every object under demo vendor folders in the `product-images` bucket.
-2. Every vendor with `is_demo = true` (products, images, memberships and
-   vendor-scoped rows cascade).
-3. Every auth user whose email ends in `@demo.gifto.example`.
+1. Product images for demo vendors, vendor logos/covers, and occasion banners.
+2. Settlement lines and settlements for demo vendors.
+3. Commission entries for demo vendors.
+4. Every order that contains a demo-vendor suborder (including the 2 earlier
+   guest orders).
+5. Demo support requests and tag suggestions.
+6. Seeded occasions and their picks, rules, and redirects.
+7. Demo vendors and products, which cascades memberships, status history,
+   product images, product tags, and inventory movements.
+8. Seed tags that are no longer referenced by any product or occasion.
+9. Auth users whose email ends in `@demo.gifto.example`.
 
-It does **not** remove categories, real vendors/products, orders, commissions,
-or inventory ledger rows. Run it deliberately — it is destructive to all demo
-data and is not part of normal deployment.
-
-## Deployment mechanics and future migrations
-
-Migrations `00000000000008` (security hardening), `00000000000009`
-(product-image bucket and policies), `00000000000010` (`is_demo` columns),
-`00000000000011` (guest checkout), `00000000000012` (order-table least-privilege
-grants), and `00000000000013` (failed COD delivery) are applied and recorded in
-`supabase_migrations.schema_migrations`. The remote history is now `1`-`13`.
-The local migration files remain the source of truth; the newest history rows
-were normalized to the local version names after applying the SQL because the
-MCP migration tool timestamps versions differently.
-
-For future migrations, either:
-
-- **Supabase CLI:** `npx supabase login`, then `npx supabase db push`
-  (interactive; requires the database password), or
-- **Supabase MCP / Management API:** the same OAuth session can run DDL and
-  record migration history without a database password.
-
-The Supabase MCP server is configured in the global opencode config
-(`~/.config/opencode/opencode.json` or `opencode.jsonc`) and authenticated with
-`opencode mcp auth supabase`. Restart opencode after editing MCP config so the
-server's tools load.
-
-Environment variables used by the scripts (names only — values live in
-`.env.local`, which is git-ignored):
-
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY` (only for public visibility checks)
+It does not remove platform categories, the platform admin account,
+non-demo vendors/products, or orders that have no demo-vendor suborders.
 
 ## Limitations and follow-ups
 
-- **No demo orders.** The checkout RPCs (`place_order_with_idempotency` for
-  signed-in customers, `place_guest_order` for guests) and the database triggers
-  are the only writers of order, inventory, and commission ledger rows;
-  fabricating orders directly would create financial history that never
-  happened. Create orders through the real checkout flow if you need them.
-- **Placeholder art.** The gradient PNGs are generated locally (no external
-  fetches) and are meant to be replaced with real photography.
-- **Five owner accounts, not four.** The pending vendor needs an owner to be
-  reviewable and editable after approval; this is the only deviation from the
-  originally discussed four.
-- **`.example` addresses cannot receive mail.** Password reset emails will not
+- `.example` addresses cannot receive mail. Password reset emails will not
   arrive; use `npm run demo:passwords` instead.
-- **Demo accounts are real auth users** in the production project. They can sign
-  in and edit only their own demo shops. Rotate or delete them via
-  `cleanup:demo` when the demo is no longer needed.
+- The two earlier guest orders pre-date the demo order seed. They use the demo
+  vendors, so cleanup removes them to satisfy the vendor foreign keys.
+- Support requests are backdated by `created_at`; `updated_at` reflects the seed
+  run because of the shared update trigger.
+- Demo accounts are real auth users in the hosted project. They can sign in and
+  edit only their own demo shops. Delete them with the cleanup command when the
+  demo is no longer needed.

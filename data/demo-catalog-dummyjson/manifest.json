@@ -1,0 +1,98 @@
+{
+  "datasetId": "gifto-demo-catalog-dummyjson",
+  "version": 2,
+  "generatedAt": "2026-11-19T11:11:01.289Z",
+  "productCount": 46,
+  "targetDistribution": {
+    "Fragrance": 5,
+    "Skin care": 3,
+    "Beauty": 5,
+    "Bags": 5,
+    "Jewellery": 3,
+    "Watches": 6,
+    "Sunglasses": 4,
+    "Home & living": 4,
+    "Kitchen & dining": 6,
+    "Gourmet gifts": 1,
+    "Coffee gifts": 1,
+    "Executive gifts": 3
+  },
+  "actualDistribution": {
+    "Fragrance": 5,
+    "Skin care": 3,
+    "Beauty": 5,
+    "Bags": 5,
+    "Jewellery": 3,
+    "Watches": 6,
+    "Sunglasses": 4,
+    "Home & living": 4,
+    "Kitchen & dining": 6,
+    "Gourmet gifts": 1,
+    "Coffee gifts": 1,
+    "Executive gifts": 3
+  },
+  "vendorDistribution": {
+    "nile-blossoms": 23,
+    "legacy-engraving": 21,
+    "cairo-cocoa": 2
+  },
+  "categoryDistribution": {
+    "personalized-gifts": 31,
+    "gift-boxes": 11,
+    "chocolates-sweets": 1,
+    "corporate-gifts": 3
+  },
+  "categoryMapping": {
+    "status": "mapped-existing-categories",
+    "note": "Mapped to the closest existing Gifto categories without adding taxonomy. The original 40 products keep 31 in personalized-gifts and 9 in gift-boxes; the six extension SKUs use underused existing categories: three executive watches in corporate-gifts, honey in chocolates-sweets, and coffee plus the table lamp in gift-boxes.",
+    "groupMapping": {
+      "Fragrance": "personalized-gifts",
+      "Skin care": "personalized-gifts",
+      "Beauty": "personalized-gifts",
+      "Bags": "personalized-gifts",
+      "Jewellery": "personalized-gifts",
+      "Watches": "personalized-gifts",
+      "Sunglasses": "personalized-gifts",
+      "Home & living": "gift-boxes",
+      "Kitchen & dining": "gift-boxes",
+      "Gourmet gifts": "chocolates-sweets",
+      "Coffee gifts": "gift-boxes",
+      "Executive gifts": "corporate-gifts"
+    }
+  },
+  "source": {
+    "provider": "DummyJSON",
+    "api": "https://dummyjson.com/products?limit=0",
+    "docs": "https://dummyjson.com/docs/products",
+    "snapshot": "source/dummyjson-products.json",
+    "snapshotCapturedAt": "2026-11-18T16:50:42.198Z",
+    "totalProducts": 194,
+    "selectedProducts": 46,
+    "excludedProducts": 148,
+    "license": "DummyJSON sample data; repository is MIT-licensed but image-specific rights are not separately stated."
+  },
+  "imageSummary": {
+    "count": 46,
+    "format": "WebP",
+    "width": 1000,
+    "height": 1000,
+    "localOnly": true,
+    "thirdPartyAssets": 46,
+    "totalBytes": 2869026
+  },
+  "reports": {
+    "contactSheet": "contact-sheet.jpg",
+    "exclusions": "exclusions.md",
+    "exclusionsJson": "exclusions.json"
+  },
+  "importer": {
+    "slugPrefix": "demo-catalog-dj-",
+    "demoFlag": true,
+    "categorySlugs": [
+      "personalized-gifts",
+      "gift-boxes",
+      "chocolates-sweets",
+      "corporate-gifts"
+    ]
+  }
+}

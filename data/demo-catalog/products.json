@@ -1,0 +1,1454 @@
+{
+  "datasetId": "gifto-demo-catalog",
+  "version": 1,
+  "generatedAt": "2026-11-18T16:05:54.465Z",
+  "currency": "EGP",
+  "priceNote": "Illustrative demo prices only; not vendor quotations or verified Egyptian market prices.",
+  "imagePolicy": "All product images are original local demo artwork; third-party product images are not used.",
+  "importer": {
+    "slugPrefix": "demo-catalog-",
+    "demoFlag": true
+  },
+  "products": [
+    {
+      "demoId": "gdc-001",
+      "slug": "demo-catalog-amber-rose-and-eucalyptus-bouquet",
+      "name": "Amber Rose & Eucalyptus Bouquet",
+      "description": "A hand-tied bouquet of amber roses, eucalyptus and dried grasses, wrapped in warm kraft paper for a soft, lasting gift.",
+      "priceEgp": 780,
+      "stock": 18,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Flowers",
+      "categorySlug": "flowers",
+      "vendorSlug": "nile-blossoms",
+      "image": {
+        "path": "images/gdc-001.jpg",
+        "alt": "Stylised studio illustration of Amber Rose & Eucalyptus Bouquet for the Gifto demo catalogue.",
+        "motif": "bouquet",
+        "variant": 0,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-002",
+      "slug": "demo-catalog-apricot-peony-posy",
+      "name": "Apricot Peony Posy",
+      "description": "A compact posy of apricot peonies and cream filler flowers, tied by hand for birthdays, thank-yous and new beginnings.",
+      "priceEgp": 850,
+      "stock": 14,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Flowers",
+      "categorySlug": "flowers",
+      "vendorSlug": "nile-blossoms",
+      "image": {
+        "path": "images/gdc-002.jpg",
+        "alt": "Stylised studio illustration of Apricot Peony Posy for the Gifto demo catalogue.",
+        "motif": "bouquet",
+        "variant": 1,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-003",
+      "slug": "demo-catalog-ivory-calla-lily-vase",
+      "name": "Ivory Calla Lily Vase",
+      "description": "Sculptural ivory calla lilies arranged in a low ceramic vase, ready to place on a console or dining table.",
+      "priceEgp": 920,
+      "stock": 12,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Flowers",
+      "categorySlug": "flowers",
+      "vendorSlug": "nile-blossoms",
+      "image": {
+        "path": "images/gdc-003.jpg",
+        "alt": "Stylised studio illustration of Ivory Calla Lily Vase for the Gifto demo catalogue.",
+        "motif": "bouquet",
+        "variant": 2,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-004",
+      "slug": "demo-catalog-golden-sunflower-market-wrap",
+      "name": "Golden Sunflower Market Wrap",
+      "description": "A generous market bunch of golden sunflowers with seasonal greenery, wrapped in recycled paper and tied with twine.",
+      "priceEgp": 540,
+      "stock": 26,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Flowers",
+      "categorySlug": "flowers",
+      "vendorSlug": "nile-blossoms",
+      "image": {
+        "path": "images/gdc-004.jpg",
+        "alt": "Stylised studio illustration of Golden Sunflower Market Wrap for the Gifto demo catalogue.",
+        "motif": "bouquet",
+        "variant": 3,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-005",
+      "slug": "demo-catalog-terracotta-rose-bowl",
+      "name": "Terracotta Rose Bowl",
+      "description": "Garden roses in peach and terracotta tones, arranged in a reusable stoneware bowl with moss and trailing greenery.",
+      "priceEgp": 740,
+      "stock": 15,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Flowers",
+      "categorySlug": "flowers",
+      "vendorSlug": "nile-blossoms",
+      "image": {
+        "path": "images/gdc-005.jpg",
+        "alt": "Stylised studio illustration of Terracotta Rose Bowl for the Gifto demo catalogue.",
+        "motif": "bouquet",
+        "variant": 4,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-006",
+      "slug": "demo-catalog-gardenia-and-jasmine-hand-tied",
+      "name": "Gardenia & Jasmine Hand-Tied",
+      "description": "Fragrant gardenias and jasmine stems gathered into a delicate hand-tied bouquet with soft white ribbon.",
+      "priceEgp": 620,
+      "stock": 20,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Flowers",
+      "categorySlug": "flowers",
+      "vendorSlug": "nile-blossoms",
+      "image": {
+        "path": "images/gdc-006.jpg",
+        "alt": "Stylised studio illustration of Gardenia & Jasmine Hand-Tied for the Gifto demo catalogue.",
+        "motif": "bouquet",
+        "variant": 5,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-007",
+      "slug": "demo-catalog-coral-tulip-medley",
+      "name": "Coral Tulip Medley",
+      "description": "A bright mix of coral and cream tulips with sculptural foliage, wrapped simply so the flowers stay the focus.",
+      "priceEgp": 560,
+      "stock": 24,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Flowers",
+      "categorySlug": "flowers",
+      "vendorSlug": "nile-blossoms",
+      "image": {
+        "path": "images/gdc-007.jpg",
+        "alt": "Stylised studio illustration of Coral Tulip Medley for the Gifto demo catalogue.",
+        "motif": "bouquet",
+        "variant": 6,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-008",
+      "slug": "demo-catalog-midnight-orchid-arrangement",
+      "name": "Midnight Orchid Arrangement",
+      "description": "Deep plum orchids and dark foliage arranged in a tall ceramic vessel for an elegant, dramatic gift.",
+      "priceEgp": 1150,
+      "stock": 10,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Flowers",
+      "categorySlug": "flowers",
+      "vendorSlug": "nile-blossoms",
+      "image": {
+        "path": "images/gdc-008.jpg",
+        "alt": "Stylised studio illustration of Midnight Orchid Arrangement for the Gifto demo catalogue.",
+        "motif": "bouquet",
+        "variant": 7,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-009",
+      "slug": "demo-catalog-pistachio-and-rose-chocolate-box",
+      "name": "Pistachio & Rose Chocolate Box",
+      "description": "Pistachio pralines and rose-cream bonbons arranged in a slim gift box with a dusty-pink sleeve.",
+      "priceEgp": 420,
+      "stock": 30,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Chocolates & Sweets",
+      "categorySlug": "chocolates-sweets",
+      "vendorSlug": "cairo-cocoa",
+      "image": {
+        "path": "images/gdc-009.jpg",
+        "alt": "Stylised studio illustration of Pistachio & Rose Chocolate Box for the Gifto demo catalogue.",
+        "motif": "chocolate",
+        "variant": 0,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-010",
+      "slug": "demo-catalog-sea-salt-caramel-truffles",
+      "name": "Sea Salt Caramel Truffles",
+      "description": "A box of smooth caramel truffles finished with sea salt and dark chocolate curls, made for sharing.",
+      "priceEgp": 360,
+      "stock": 40,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Chocolates & Sweets",
+      "categorySlug": "chocolates-sweets",
+      "vendorSlug": "cairo-cocoa",
+      "image": {
+        "path": "images/gdc-010.jpg",
+        "alt": "Stylised studio illustration of Sea Salt Caramel Truffles for the Gifto demo catalogue.",
+        "motif": "chocolate",
+        "variant": 1,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-011",
+      "slug": "demo-catalog-dark-chocolate-date-bites",
+      "name": "Dark Chocolate Date Bites",
+      "description": "Soft medjool dates filled with almond butter and coated in dark chocolate, packed in a reusable tin.",
+      "priceEgp": 310,
+      "stock": 36,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Chocolates & Sweets",
+      "categorySlug": "chocolates-sweets",
+      "vendorSlug": "cairo-cocoa",
+      "image": {
+        "path": "images/gdc-011.jpg",
+        "alt": "Stylised studio illustration of Dark Chocolate Date Bites for the Gifto demo catalogue.",
+        "motif": "chocolate",
+        "variant": 2,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-012",
+      "slug": "demo-catalog-hazelnut-praline-selection",
+      "name": "Hazelnut Praline Selection",
+      "description": "Crunchy hazelnut pralines and silky gianduja squares in an assortment box tied with a copper ribbon.",
+      "priceEgp": 480,
+      "stock": 24,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Chocolates & Sweets",
+      "categorySlug": "chocolates-sweets",
+      "vendorSlug": "cairo-cocoa",
+      "image": {
+        "path": "images/gdc-012.jpg",
+        "alt": "Stylised studio illustration of Hazelnut Praline Selection for the Gifto demo catalogue.",
+        "motif": "chocolate",
+        "variant": 3,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-013",
+      "slug": "demo-catalog-milk-chocolate-covered-dates",
+      "name": "Milk Chocolate Covered Dates",
+      "description": "Plump dates dipped in milk chocolate and finished with a little orange zest, a familiar Egyptian flavour in a giftable box.",
+      "priceEgp": 330,
+      "stock": 32,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Chocolates & Sweets",
+      "categorySlug": "chocolates-sweets",
+      "vendorSlug": "cairo-cocoa",
+      "image": {
+        "path": "images/gdc-013.jpg",
+        "alt": "Stylised studio illustration of Milk Chocolate Covered Dates for the Gifto demo catalogue.",
+        "motif": "chocolate",
+        "variant": 4,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-014",
+      "slug": "demo-catalog-orange-blossom-chocolate-bark",
+      "name": "Orange Blossom Chocolate Bark",
+      "description": "Thin shards of dark chocolate studded with orange blossom, pistachio and toasted sesame in a kraft pouch.",
+      "priceEgp": 280,
+      "stock": 45,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Chocolates & Sweets",
+      "categorySlug": "chocolates-sweets",
+      "vendorSlug": "cairo-cocoa",
+      "image": {
+        "path": "images/gdc-014.jpg",
+        "alt": "Stylised studio illustration of Orange Blossom Chocolate Bark for the Gifto demo catalogue.",
+        "motif": "chocolate",
+        "variant": 5,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-015",
+      "slug": "demo-catalog-mini-macaron-gift-box-12",
+      "name": "Mini Macaron Gift Box (12)",
+      "description": "Twelve bite-size macarons in pistachio, rose, chocolate and vanilla, arranged in a windowed gift box.",
+      "priceEgp": 390,
+      "stock": 25,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Chocolates & Sweets",
+      "categorySlug": "chocolates-sweets",
+      "vendorSlug": "cairo-cocoa",
+      "image": {
+        "path": "images/gdc-015.jpg",
+        "alt": "Stylised studio illustration of Mini Macaron Gift Box (12) for the Gifto demo catalogue.",
+        "motif": "chocolate",
+        "variant": 6,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-016",
+      "slug": "demo-catalog-saffron-and-almond-chocolate-bar",
+      "name": "Saffron & Almond Chocolate Bar",
+      "description": "A thick dark chocolate bar with toasted almonds and a warm saffron finish, wrapped in gold foil.",
+      "priceEgp": 240,
+      "stock": 50,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Chocolates & Sweets",
+      "categorySlug": "chocolates-sweets",
+      "vendorSlug": "cairo-cocoa",
+      "image": {
+        "path": "images/gdc-016.jpg",
+        "alt": "Stylised studio illustration of Saffron & Almond Chocolate Bar for the Gifto demo catalogue.",
+        "motif": "chocolate",
+        "variant": 7,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-017",
+      "slug": "demo-catalog-chocolate-dipped-strawberries-9",
+      "name": "Chocolate-Dipped Strawberries (9)",
+      "description": "Nine fresh strawberries dipped in dark and white chocolate, packed in a chilled gift box for same-day gifting.",
+      "priceEgp": 450,
+      "stock": 18,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Chocolates & Sweets",
+      "categorySlug": "chocolates-sweets",
+      "vendorSlug": "cairo-cocoa",
+      "image": {
+        "path": "images/gdc-017.jpg",
+        "alt": "Stylised studio illustration of Chocolate-Dipped Strawberries (9) for the Gifto demo catalogue.",
+        "motif": "chocolate",
+        "variant": 8,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-018",
+      "slug": "demo-catalog-celebration-chocolate-stack",
+      "name": "Celebration Chocolate Stack",
+      "description": "A three-tier stack of truffles, pralines and chocolate-covered nuts, tied with ribbon for a centrepiece gift.",
+      "priceEgp": 950,
+      "stock": 12,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Chocolates & Sweets",
+      "categorySlug": "chocolates-sweets",
+      "vendorSlug": "cairo-cocoa",
+      "image": {
+        "path": "images/gdc-018.jpg",
+        "alt": "Stylised studio illustration of Celebration Chocolate Stack for the Gifto demo catalogue.",
+        "motif": "chocolate",
+        "variant": 9,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-019",
+      "slug": "demo-catalog-family-tree-photo-frame",
+      "name": "Family Tree Photo Frame",
+      "description": "A multi-opening oak frame for family photos, with a clean engraved border and a stand for shelf display.",
+      "priceEgp": 390,
+      "stock": 20,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Personalized Gifts",
+      "categorySlug": "personalized-gifts",
+      "vendorSlug": "legacy-engraving",
+      "image": {
+        "path": "images/gdc-019.jpg",
+        "alt": "Stylised studio illustration of Family Tree Photo Frame for the Gifto demo catalogue.",
+        "motif": "keepsake",
+        "variant": 0,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "dummyjson-candidate",
+        "dataset": "DummyJSON",
+        "productId": 44,
+        "title": "Family Tree Photo Frame",
+        "category": "home-decoration",
+        "url": "https://dummyjson.com/products/44",
+        "license": "MIT (DummyJSON repository)",
+        "imageUsage": "Candidate metadata only; no DummyJSON image was downloaded or used."
+      }
+    },
+    {
+      "demoId": "gdc-020",
+      "slug": "demo-catalog-initial-stamped-travel-journal",
+      "name": "Initial-Stamped Travel Journal",
+      "description": "A refillable leather journal with a single initial stamped on the cover, a ribbon marker and a pocket for tickets.",
+      "priceEgp": 460,
+      "stock": 18,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Personalized Gifts",
+      "categorySlug": "personalized-gifts",
+      "vendorSlug": "legacy-engraving",
+      "image": {
+        "path": "images/gdc-020.jpg",
+        "alt": "Stylised studio illustration of Initial-Stamped Travel Journal for the Gifto demo catalogue.",
+        "motif": "keepsake",
+        "variant": 1,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-021",
+      "slug": "demo-catalog-personalized-star-map-print",
+      "name": "Personalized Star Map Print",
+      "description": "A framed star map for a meaningful date and place, printed on textured paper with a short dedication beneath.",
+      "priceEgp": 520,
+      "stock": 15,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Personalized Gifts",
+      "categorySlug": "personalized-gifts",
+      "vendorSlug": "legacy-engraving",
+      "image": {
+        "path": "images/gdc-021.jpg",
+        "alt": "Stylised studio illustration of Personalized Star Map Print for the Gifto demo catalogue.",
+        "motif": "keepsake",
+        "variant": 2,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-022",
+      "slug": "demo-catalog-custom-name-necklace-card",
+      "name": "Custom Name Necklace Card",
+      "description": "A delicate name necklace mounted on a printed card, ready to give for birthdays, graduations and new chapters.",
+      "priceEgp": 580,
+      "stock": 14,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Personalized Gifts",
+      "categorySlug": "personalized-gifts",
+      "vendorSlug": "legacy-engraving",
+      "image": {
+        "path": "images/gdc-022.jpg",
+        "alt": "Stylised studio illustration of Custom Name Necklace Card for the Gifto demo catalogue.",
+        "motif": "jewelry",
+        "variant": 1,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-023",
+      "slug": "demo-catalog-engraved-brass-keyring",
+      "name": "Engraved Brass Keyring",
+      "description": "A solid brass keyring with a short engraved message or set of initials, presented in a cotton pouch.",
+      "priceEgp": 220,
+      "stock": 40,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Personalized Gifts",
+      "categorySlug": "personalized-gifts",
+      "vendorSlug": "legacy-engraving",
+      "image": {
+        "path": "images/gdc-023.jpg",
+        "alt": "Stylised studio illustration of Engraved Brass Keyring for the Gifto demo catalogue.",
+        "motif": "keepsake",
+        "variant": 3,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-024",
+      "slug": "demo-catalog-walnut-recipe-box",
+      "name": "Walnut Recipe Box",
+      "description": "A walnut recipe box with tabbed cards and a personalised lid, made for family recipes and kitchen keepsakes.",
+      "priceEgp": 650,
+      "stock": 12,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Personalized Gifts",
+      "categorySlug": "personalized-gifts",
+      "vendorSlug": "legacy-engraving",
+      "image": {
+        "path": "images/gdc-024.jpg",
+        "alt": "Stylised studio illustration of Walnut Recipe Box for the Gifto demo catalogue.",
+        "motif": "keepsake",
+        "variant": 4,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-025",
+      "slug": "demo-catalog-monogrammed-card-case",
+      "name": "Monogrammed Card Case",
+      "description": "A slim leather card case with a blind-debossed monogram, packed in a small gift box.",
+      "priceEgp": 340,
+      "stock": 28,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Personalized Gifts",
+      "categorySlug": "personalized-gifts",
+      "vendorSlug": "legacy-engraving",
+      "image": {
+        "path": "images/gdc-025.jpg",
+        "alt": "Stylised studio illustration of Monogrammed Card Case for the Gifto demo catalogue.",
+        "motif": "keepsake",
+        "variant": 5,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-026",
+      "slug": "demo-catalog-our-story-photo-album",
+      "name": "Our Story Photo Album",
+      "description": "A linen-covered photo album with a personalised cover title and thick pages for marking anniversaries and family milestones.",
+      "priceEgp": 720,
+      "stock": 10,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Personalized Gifts",
+      "categorySlug": "personalized-gifts",
+      "vendorSlug": "legacy-engraving",
+      "image": {
+        "path": "images/gdc-026.jpg",
+        "alt": "Stylised studio illustration of Our Story Photo Album for the Gifto demo catalogue.",
+        "motif": "keepsake",
+        "variant": 6,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-027",
+      "slug": "demo-catalog-golden-celebration-gift-box",
+      "name": "Golden Celebration Gift Box",
+      "description": "A ready-wrapped celebration box with chocolate, a small candle and a handwritten-style card, finished with gold ribbon.",
+      "priceEgp": 780,
+      "stock": 16,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Gift Boxes",
+      "categorySlug": "gift-boxes",
+      "vendorSlug": "cairo-cocoa",
+      "image": {
+        "path": "images/gdc-027.jpg",
+        "alt": "Stylised studio illustration of Golden Celebration Gift Box for the Gifto demo catalogue.",
+        "motif": "giftbox",
+        "variant": 0,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-028",
+      "slug": "demo-catalog-coffee-and-date-hamper",
+      "name": "Coffee & Date Hamper",
+      "description": "A morning-gift hamper with ground coffee, stuffed dates and a small ceramic cup, packed in a reusable tray.",
+      "priceEgp": 640,
+      "stock": 20,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Gift Boxes",
+      "categorySlug": "gift-boxes",
+      "vendorSlug": "cairo-cocoa",
+      "image": {
+        "path": "images/gdc-028.jpg",
+        "alt": "Stylised studio illustration of Coffee & Date Hamper for the Gifto demo catalogue.",
+        "motif": "giftbox",
+        "variant": 1,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-029",
+      "slug": "demo-catalog-petit-four-tea-box",
+      "name": "Petit Four Tea Box",
+      "description": "A tea-time box of petit fours, shortbread and a pouch of loose-leaf tea, arranged in a compartmented gift tray.",
+      "priceEgp": 520,
+      "stock": 22,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Gift Boxes",
+      "categorySlug": "gift-boxes",
+      "vendorSlug": "cairo-cocoa",
+      "image": {
+        "path": "images/gdc-029.jpg",
+        "alt": "Stylised studio illustration of Petit Four Tea Box for the Gifto demo catalogue.",
+        "motif": "giftbox",
+        "variant": 2,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-030",
+      "slug": "demo-catalog-ramadan-sharing-box",
+      "name": "Ramadan Sharing Box",
+      "description": "A generous sharing box of dates, nuts, halva bites and chocolate, designed for iftar tables and family visits.",
+      "priceEgp": 890,
+      "stock": 14,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Gift Boxes",
+      "categorySlug": "gift-boxes",
+      "vendorSlug": "cairo-cocoa",
+      "image": {
+        "path": "images/gdc-030.jpg",
+        "alt": "Stylised studio illustration of Ramadan Sharing Box for the Gifto demo catalogue.",
+        "motif": "giftbox",
+        "variant": 3,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-031",
+      "slug": "demo-catalog-keepsake-and-candle-gift-set",
+      "name": "Keepsake & Candle Gift Set",
+      "description": "A small engraved keepsake dish paired with a cedar-scented candle, boxed with tissue and a ribbon.",
+      "priceEgp": 850,
+      "stock": 12,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Gift Boxes",
+      "categorySlug": "gift-boxes",
+      "vendorSlug": "legacy-engraving",
+      "image": {
+        "path": "images/gdc-031.jpg",
+        "alt": "Stylised studio illustration of Keepsake & Candle Gift Set for the Gifto demo catalogue.",
+        "motif": "giftbox",
+        "variant": 4,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-032",
+      "slug": "demo-catalog-new-home-wrapped-gift-box",
+      "name": "New Home Wrapped Gift Box",
+      "description": "A housewarming box with a ceramic vase, tea towel and a small brass keyring, wrapped in warm neutral paper.",
+      "priceEgp": 690,
+      "stock": 18,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Gift Boxes",
+      "categorySlug": "gift-boxes",
+      "vendorSlug": "legacy-engraving",
+      "image": {
+        "path": "images/gdc-032.jpg",
+        "alt": "Stylised studio illustration of New Home Wrapped Gift Box for the Gifto demo catalogue.",
+        "motif": "giftbox",
+        "variant": 5,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-033",
+      "slug": "demo-catalog-botanical-bath-and-bloom-box",
+      "name": "Botanical Bath & Bloom Box",
+      "description": "A calm-at-home box with botanical bath salts, a beeswax candle and a small dried-flower posy.",
+      "priceEgp": 760,
+      "stock": 15,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Gift Boxes",
+      "categorySlug": "gift-boxes",
+      "vendorSlug": "legacy-engraving",
+      "image": {
+        "path": "images/gdc-033.jpg",
+        "alt": "Stylised studio illustration of Botanical Bath & Bloom Box for the Gifto demo catalogue.",
+        "motif": "giftbox",
+        "variant": 6,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-034",
+      "slug": "demo-catalog-thank-you-kraft-gift-box",
+      "name": "Thank You Kraft Gift Box",
+      "description": "A simple kraft gift box filled with chocolate bites and a blank thank-you card, ready to personalise by hand.",
+      "priceEgp": 430,
+      "stock": 30,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Gift Boxes",
+      "categorySlug": "gift-boxes",
+      "vendorSlug": "legacy-engraving",
+      "image": {
+        "path": "images/gdc-034.jpg",
+        "alt": "Stylised studio illustration of Thank You Kraft Gift Box for the Gifto demo catalogue.",
+        "motif": "giftbox",
+        "variant": 7,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-035",
+      "slug": "demo-catalog-amber-oud-eau-de-parfum-50-ml",
+      "name": "Amber Oud Eau de Parfum 50 ml",
+      "description": "A warm amber and oud fragrance with a soft woody finish, presented in a simple glass bottle with a gold cap.",
+      "priceEgp": 1250,
+      "stock": 12,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Perfumes & Accessories",
+      "categorySlug": "personalized-gifts",
+      "vendorSlug": "legacy-engraving",
+      "image": {
+        "path": "images/gdc-035.jpg",
+        "alt": "Stylised studio illustration of Amber Oud Eau de Parfum 50 ml for the Gifto demo catalogue.",
+        "motif": "perfume",
+        "variant": 0,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-036",
+      "slug": "demo-catalog-jasmine-musk-eau-de-parfum-50-ml",
+      "name": "Jasmine Musk Eau de Parfum 50 ml",
+      "description": "A light jasmine and white musk fragrance with a clean floral trail, suited to everyday gifting.",
+      "priceEgp": 1150,
+      "stock": 14,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Perfumes & Accessories",
+      "categorySlug": "personalized-gifts",
+      "vendorSlug": "legacy-engraving",
+      "image": {
+        "path": "images/gdc-036.jpg",
+        "alt": "Stylised studio illustration of Jasmine Musk Eau de Parfum 50 ml for the Gifto demo catalogue.",
+        "motif": "perfume",
+        "variant": 1,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-037",
+      "slug": "demo-catalog-citrus-neroli-eau-de-toilette-75-ml",
+      "name": "Citrus Neroli Eau de Toilette 75 ml",
+      "description": "A bright citrus and neroli scent with a soft green finish, bottled in a tall clear flacon.",
+      "priceEgp": 980,
+      "stock": 16,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Perfumes & Accessories",
+      "categorySlug": "personalized-gifts",
+      "vendorSlug": "legacy-engraving",
+      "image": {
+        "path": "images/gdc-037.jpg",
+        "alt": "Stylised studio illustration of Citrus Neroli Eau de Toilette 75 ml for the Gifto demo catalogue.",
+        "motif": "perfume",
+        "variant": 2,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-038",
+      "slug": "demo-catalog-crystal-drop-earrings",
+      "name": "Crystal Drop Earrings",
+      "description": "Faceted green crystal drops on slim gold-tone hooks, presented on a small jewellery card.",
+      "priceEgp": 420,
+      "stock": 22,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Perfumes & Accessories",
+      "categorySlug": "personalized-gifts",
+      "vendorSlug": "legacy-engraving",
+      "image": {
+        "path": "images/gdc-038.jpg",
+        "alt": "Stylised studio illustration of Crystal Drop Earrings for the Gifto demo catalogue.",
+        "motif": "jewelry",
+        "variant": 0,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "dummyjson-candidate",
+        "dataset": "DummyJSON",
+        "productId": 182,
+        "title": "Green Crystal Earring",
+        "category": "womens-jewellery",
+        "url": "https://dummyjson.com/products/182",
+        "license": "MIT (DummyJSON repository)",
+        "imageUsage": "Candidate metadata only; no DummyJSON image was downloaded or used."
+      }
+    },
+    {
+      "demoId": "gdc-039",
+      "slug": "demo-catalog-woven-leather-mini-bag",
+      "name": "Woven Leather Mini Bag",
+      "description": "A compact woven leather bag with a short handle and a removable crossbody strap, wrapped in a cotton dust bag.",
+      "priceEgp": 890,
+      "stock": 10,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Perfumes & Accessories",
+      "categorySlug": "personalized-gifts",
+      "vendorSlug": "legacy-engraving",
+      "image": {
+        "path": "images/gdc-039.jpg",
+        "alt": "Stylised studio illustration of Woven Leather Mini Bag for the Gifto demo catalogue.",
+        "motif": "bag",
+        "variant": 0,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "dummyjson-candidate",
+        "dataset": "DummyJSON",
+        "productId": 172,
+        "title": "Blue Women's Handbag",
+        "category": "womens-bags",
+        "url": "https://dummyjson.com/products/172",
+        "license": "MIT (DummyJSON repository)",
+        "imageUsage": "Candidate metadata only; no DummyJSON image was downloaded or used."
+      }
+    },
+    {
+      "demoId": "gdc-040",
+      "slug": "demo-catalog-tortoise-shell-sunglasses",
+      "name": "Tortoise-Shell Sunglasses",
+      "description": "Classic tortoise-shell frames with UV-protective lenses, packed in a soft folding case.",
+      "priceEgp": 540,
+      "stock": 20,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Perfumes & Accessories",
+      "categorySlug": "personalized-gifts",
+      "vendorSlug": "legacy-engraving",
+      "image": {
+        "path": "images/gdc-040.jpg",
+        "alt": "Stylised studio illustration of Tortoise-Shell Sunglasses for the Gifto demo catalogue.",
+        "motif": "sunglasses",
+        "variant": 0,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "dummyjson-candidate",
+        "dataset": "DummyJSON",
+        "productId": 155,
+        "title": "Classic Sun Glasses",
+        "category": "sunglasses",
+        "url": "https://dummyjson.com/products/155",
+        "license": "MIT (DummyJSON repository)",
+        "imageUsage": "Candidate metadata only; no DummyJSON image was downloaded or used."
+      }
+    },
+    {
+      "demoId": "gdc-041",
+      "slug": "demo-catalog-cuddle-bear-with-bow",
+      "name": "Cuddle Bear with Bow",
+      "description": "A soft caramel bear with a stitched paw pad and a removable linen bow, sized for a first birthday or nursery gift.",
+      "priceEgp": 480,
+      "stock": 20,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Toys & Cute Gifts",
+      "categorySlug": "toys-kids",
+      "vendorSlug": "alex-toy-corner",
+      "image": {
+        "path": "images/gdc-041.jpg",
+        "alt": "Stylised studio illustration of Cuddle Bear with Bow for the Gifto demo catalogue.",
+        "motif": "toy",
+        "variant": 0,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-042",
+      "slug": "demo-catalog-sleepy-sloth-plush",
+      "name": "Sleepy Sloth Plush",
+      "description": "A long-limbed sloth plush in soft grey fleece, designed for hugging and quiet-time play.",
+      "priceEgp": 360,
+      "stock": 30,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Toys & Cute Gifts",
+      "categorySlug": "toys-kids",
+      "vendorSlug": "alex-toy-corner",
+      "image": {
+        "path": "images/gdc-042.jpg",
+        "alt": "Stylised studio illustration of Sleepy Sloth Plush for the Gifto demo catalogue.",
+        "motif": "toy",
+        "variant": 1,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-043",
+      "slug": "demo-catalog-wooden-rainbow-stacker",
+      "name": "Wooden Rainbow Stacker",
+      "description": "A pastel wooden stacking toy with graduated arches, sanded smooth for small hands and open-ended play.",
+      "priceEgp": 420,
+      "stock": 22,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Toys & Cute Gifts",
+      "categorySlug": "toys-kids",
+      "vendorSlug": "alex-toy-corner",
+      "image": {
+        "path": "images/gdc-043.jpg",
+        "alt": "Stylised studio illustration of Wooden Rainbow Stacker for the Gifto demo catalogue.",
+        "motif": "toy",
+        "variant": 2,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-044",
+      "slug": "demo-catalog-space-explorer-play-set",
+      "name": "Space Explorer Play Set",
+      "description": "A small wooden rocket, astronaut figure and planet puzzle in a carry box for imaginative play.",
+      "priceEgp": 650,
+      "stock": 14,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Toys & Cute Gifts",
+      "categorySlug": "toys-kids",
+      "vendorSlug": "alex-toy-corner",
+      "image": {
+        "path": "images/gdc-044.jpg",
+        "alt": "Stylised studio illustration of Space Explorer Play Set for the Gifto demo catalogue.",
+        "motif": "toy",
+        "variant": 3,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-045",
+      "slug": "demo-catalog-bunny-night-light",
+      "name": "Bunny Night-Light",
+      "description": "A soft bunny-shaped night-light with a warm low glow and a simple tap control, boxed for gifting.",
+      "priceEgp": 390,
+      "stock": 18,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Toys & Cute Gifts",
+      "categorySlug": "toys-kids",
+      "vendorSlug": "alex-toy-corner",
+      "image": {
+        "path": "images/gdc-045.jpg",
+        "alt": "Stylised studio illustration of Bunny Night-Light for the Gifto demo catalogue.",
+        "motif": "toy",
+        "variant": 4,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-046",
+      "slug": "demo-catalog-puzzle-cube-gift-box",
+      "name": "Puzzle Cube Gift Box",
+      "description": "A colourful twist puzzle packed in a small gift box with a card of beginner patterns.",
+      "priceEgp": 280,
+      "stock": 35,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Toys & Cute Gifts",
+      "categorySlug": "toys-kids",
+      "vendorSlug": "alex-toy-corner",
+      "image": {
+        "path": "images/gdc-046.jpg",
+        "alt": "Stylised studio illustration of Puzzle Cube Gift Box for the Gifto demo catalogue.",
+        "motif": "toy",
+        "variant": 5,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-047",
+      "slug": "demo-catalog-cedar-and-fig-candle",
+      "name": "Cedar & Fig Candle",
+      "description": "A soy-wax candle in a reusable amber glass, scented with cedar, fig leaf and a little warm spice.",
+      "priceEgp": 380,
+      "stock": 24,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Home & Lifestyle",
+      "categorySlug": "gift-boxes",
+      "vendorSlug": "nile-blossoms",
+      "image": {
+        "path": "images/gdc-047.jpg",
+        "alt": "Stylised studio illustration of Cedar & Fig Candle for the Gifto demo catalogue.",
+        "motif": "home",
+        "variant": 0,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "gifto-original",
+        "dataset": "Gifto demo catalogue brief",
+        "license": "Original demo content",
+        "note": "Product name and description written for this demo catalogue; no brand or vendor claim."
+      }
+    },
+    {
+      "demoId": "gdc-048",
+      "slug": "demo-catalog-ceramic-bud-vase-duo",
+      "name": "Ceramic Bud Vase Duo",
+      "description": "Two small matte ceramic vases in sand and cream, boxed as a pair for a windowsill or bedside table.",
+      "priceEgp": 450,
+      "stock": 18,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Home & Lifestyle",
+      "categorySlug": "gift-boxes",
+      "vendorSlug": "nile-blossoms",
+      "image": {
+        "path": "images/gdc-048.jpg",
+        "alt": "Stylised studio illustration of Ceramic Bud Vase Duo for the Gifto demo catalogue.",
+        "motif": "home",
+        "variant": 1,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "dummyjson-candidate",
+        "dataset": "DummyJSON",
+        "productId": 46,
+        "title": "Plant Pot",
+        "category": "home-decoration",
+        "url": "https://dummyjson.com/products/46",
+        "license": "MIT (DummyJSON repository)",
+        "imageUsage": "Candidate metadata only; no DummyJSON image was downloaded or used."
+      }
+    },
+    {
+      "demoId": "gdc-049",
+      "slug": "demo-catalog-ribbed-ceramic-table-lamp",
+      "name": "Ribbed Ceramic Table Lamp",
+      "description": "A compact ribbed ceramic lamp with a linen shade, sized for a bedside table or reading corner.",
+      "priceEgp": 780,
+      "stock": 12,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Home & Lifestyle",
+      "categorySlug": "gift-boxes",
+      "vendorSlug": "nile-blossoms",
+      "image": {
+        "path": "images/gdc-049.jpg",
+        "alt": "Stylised studio illustration of Ribbed Ceramic Table Lamp for the Gifto demo catalogue.",
+        "motif": "home",
+        "variant": 2,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "dummyjson-candidate",
+        "dataset": "DummyJSON",
+        "productId": 47,
+        "title": "Table Lamp",
+        "category": "home-decoration",
+        "url": "https://dummyjson.com/products/47",
+        "license": "MIT (DummyJSON repository)",
+        "imageUsage": "Candidate metadata only; no DummyJSON image was downloaded or used."
+      }
+    },
+    {
+      "demoId": "gdc-050",
+      "slug": "demo-catalog-faux-olive-tree-in-pot",
+      "name": "Faux Olive Tree in Pot",
+      "description": "A softly leafed faux olive tree in a weighted stone pot, ready to style a hallway or bright corner.",
+      "priceEgp": 560,
+      "stock": 16,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Home & Lifestyle",
+      "categorySlug": "gift-boxes",
+      "vendorSlug": "nile-blossoms",
+      "image": {
+        "path": "images/gdc-050.jpg",
+        "alt": "Stylised studio illustration of Faux Olive Tree in Pot for the Gifto demo catalogue.",
+        "motif": "home",
+        "variant": 3,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "dummyjson-candidate",
+        "dataset": "DummyJSON",
+        "productId": 45,
+        "title": "House Showpiece Plant",
+        "category": "home-decoration",
+        "url": "https://dummyjson.com/products/45",
+        "license": "MIT (DummyJSON repository)",
+        "imageUsage": "Candidate metadata only; no DummyJSON image was downloaded or used."
+      }
+    },
+    {
+      "demoId": "gdc-051",
+      "slug": "demo-catalog-mug-tree-and-tea-set",
+      "name": "Mug Tree & Tea Set",
+      "description": "A wooden mug tree paired with two stoneware cups and a small tin of tea, boxed as a housewarming set.",
+      "priceEgp": 340,
+      "stock": 25,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Home & Lifestyle",
+      "categorySlug": "gift-boxes",
+      "vendorSlug": "nile-blossoms",
+      "image": {
+        "path": "images/gdc-051.jpg",
+        "alt": "Stylised studio illustration of Mug Tree & Tea Set for the Gifto demo catalogue.",
+        "motif": "home",
+        "variant": 4,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "dummyjson-candidate",
+        "dataset": "DummyJSON",
+        "productId": 67,
+        "title": "Mug Tree Stand",
+        "category": "kitchen-accessories",
+        "url": "https://dummyjson.com/products/67",
+        "license": "MIT (DummyJSON repository)",
+        "imageUsage": "Candidate metadata only; no DummyJSON image was downloaded or used."
+      }
+    },
+    {
+      "demoId": "gdc-052",
+      "slug": "demo-catalog-marble-effect-serving-tray",
+      "name": "Marble Effect Serving Tray",
+      "description": "A lightweight marble-effect tray with brass handles, useful for coffee, candles or a small arrangement.",
+      "priceEgp": 490,
+      "stock": 20,
+      "status": "active",
+      "isDemo": true,
+      "collection": "Home & Lifestyle",
+      "categorySlug": "gift-boxes",
+      "vendorSlug": "nile-blossoms",
+      "image": {
+        "path": "images/gdc-052.jpg",
+        "alt": "Stylised studio illustration of Marble Effect Serving Tray for the Gifto demo catalogue.",
+        "motif": "home",
+        "variant": 5,
+        "source": "Gifto original generated artwork",
+        "license": "Original artwork generated for this repository; no third-party image assets."
+      },
+      "source": {
+        "type": "dummyjson-candidate",
+        "dataset": "DummyJSON",
+        "productId": 75,
+        "title": "Tray",
+        "category": "kitchen-accessories",
+        "url": "https://dummyjson.com/products/75",
+        "license": "MIT (DummyJSON repository)",
+        "imageUsage": "Candidate metadata only; no DummyJSON image was downloaded or used."
+      }
+    }
+  ]
+}

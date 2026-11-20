@@ -40,6 +40,12 @@ yarn-error.log*
 .env*
 !.env.example
 
+# demo catalogue owner credentials and local reports
+.demo-catalog/
+
+# local DeepSeek Harness tooling
+/deepseek-harnessed/
+
 # vercel
 .vercel
 

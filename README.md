@@ -65,6 +65,21 @@ Unit tests live next to the modules they cover (`src/lib/*.test.ts`) and run in 
 plain Node environment via Vitest — no browser, no database. The RLS suites below
 cover the database side.
 
+## Demo marketplace data
+
+This branch contains the demo-only catalogue and marketplace seed assets. It is
+kept off `main` and must not be merged there.
+
+The hosted project is populated with a realistic gift marketplace: 5 demo
+vendors, 70 products, 15 tags, 6 occasions, 40 backdated orders, commissions,
+settlements, and vendor support requests.
+
+See `docs/DEMO_DATA_GUIDE.md` for the data inventory, credentials, seed/verify
+commands, safety markers, expected counts, and cleanup. Seeding is split into
+`demo:seed:profiles`, `demo:seed:merchandising`, `demo:seed:orders`, and
+`demo:seed:support`; each supports `--verify` and requires an explicit
+`DEMO_SEED_CONFIRM` for `--apply`. Cleanup is `cleanup:demo` and is destructive.
+
 ## Database / Migrations
 
 All schema changes live in version-controlled SQL under `supabase/migrations/`.
