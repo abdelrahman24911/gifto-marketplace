@@ -211,7 +211,7 @@ P0-02 CI is not blamed for it; it must be fixed before CI can ever be green.
 `{ children: ReactNode }`; `npm run typecheck` passes. See "P0-02 notes"
 below.
 
-## UX Batch 1 — Accessibility + gift-shopper features (2026-11-20)
+## UX Batch 1 — Accessibility + gift-shopper features (2026-11-20/21)
 
 Baseline UI/UX rating 6.5/10 (up from ~5.5 at audit). This batch is worked
 in the discovery loop ahead of remaining P2 backend work, on branch
@@ -248,3 +248,91 @@ file and the comment at the top of `globals.css` are the record.
   (`shops/[slug]/[productSlug]`) and checkout, mirroring the existing
   search skeleton. Cart already had a loading state; admin/vendor already
   had `loading.tsx`.
+- Toast wiring added later in this batch: order placed (flash, survives
+  the navigation to the order page), reorder result (added / reduced /
+  skipped, named), cart gift draft changes need no toast (the form
+  itself is the feedback).
+
+### Gift-shopper data (commit 2, migration 47)
+
+- New tables `wishlists` (unique `(user_id, product_id)`, owner-only RLS)
+  and `saved_addresses` (label/recipient/phone/address/city/governorate/
+  notes, `is_default`, one default per customer via partial unique
+  index). `orders` gains `gift_wrap` (free, no commission effect),
+  `gift_message` (≤500), `preferred_delivery_date` (tomorrow..+14 days),
+  `delivery_time_note` (≤200). Both price-check checkout RPCs accept
+  the four fields as optional parameters, so existing 11-argument
+  callers keep working. Rollback steps are in the migration header.
+- Gift wrap is FREE by design — no owner decision for a wrap charge
+  exists; if a fee is ever decided it must be priced by the database
+  like all other money fields.
+
+### Wishlist (commit 3)
+
+- Save from product cards (quick-add and plain), product pages, and a
+  `/wishlist` page (image/name/vendor/price, sold-out state, add to
+  cart, remove with toast). Guests keep a localStorage wishlist;
+  signed-in customers sync to the database (failed server writes roll
+  the local change back). Header link with count badge, account links.
+  This completes the owner's "finish wishlist UI" step.
+
+### Gift wrap / message / delivery preference at checkout (commit 4, migration 48)
+
+- Checkout gains a "Make it a gift" section (wrap checkbox, message,
+  preferred delivery day, free-text time note) and a saved-address
+  picker for signed-in customers (default address pre-fills delivery
+  fields); the cart page shares the same gift draft through a
+  `useSyncExternalStore` gift-options store (localStorage), so cart
+  and checkout stay in step without hydration mismatches.
+- Gift details show on the signed-in and guest order pages, the vendor
+  order desk (vendors must see wrap/message/day to fulfil) and the
+  admin order detail. Migration 48 adds the four fields to
+  `get_guest_order` (RLS TEST 9).
+
+### Address book (commit 5)
+
+- `/account/addresses`: list (default first), add, set-as-default,
+  delete with confirm. First address saved becomes the default;
+  deleting the default promotes the oldest remaining address. Actions
+  are owner-scoped twice (requireUser + `user_id` filters, RLS second
+  boundary). Client/server validation mirrors migration 47's checks.
+  Linked from the account page and the header account menu. Editing
+  an address is deliberately not included — addresses are snapshots,
+  so a customer adds a new one and deletes the stale one.
+
+### Reorder (commit 6, migration 49)
+
+- "Order these again" on the signed-in order detail page and the guest
+  order page. Lines resolve server-side against LIVE prices and stock
+  (uncached `loadLiveProductsByIds`): only still-listed, in-stock
+  lines from shops still accepting orders are re-added, quantities
+  clamp to live stock and the per-line maximum, duplicates merge, and
+  removed products are skipped by name. The customer is told what was
+  skipped or reduced in a toast, then lands on the cart to review
+  before paying. Migration 49 adds `product_id` to
+  `get_guest_order`'s item shape (RLS TEST 10); the id is already
+  public on product pages.
+
+### Still OPEN after this batch
+
+- **No courier slot system.** The preferred delivery day is a
+  *preference* the shop sees; shops still arrange delivery by phone
+  per the existing model (migration 29 coverage). A real slot system
+  needs a courier decision — recorded in the migration 47 header.
+- Reviews, vendor/admin mobile polish, and any further UX work are
+  not in this batch. The owner's WhatsApp plan (2026-11-21) sequences
+  R-01, R-03, R-05, R-02, R-04/R-06 next, then remaining UX (reviews,
+  vendor/admin mobile) and re-audit v4 — reorder and delivery
+  preference in this batch overlap that plan's "remaining UX" list;
+  the parent orchestrator should reconcile.
+- Pre-existing, untouched by this batch: no SMTP provider chosen (no
+  email actually leaves the app), monitoring wired but not live (no
+  DSN), hosted state UNVERIFIED.
+
+### Progress note
+
+- UX Batch 1 is complete: accessibility, wishlist, gift wrap/message,
+  delivery preference, address book, reorder — all six items built,
+  tested and committed (see commits below). Vitest 466 (was 435 at
+  base), RLS suites 16 (was 15), migrations 49 (was 46). UI/UX rating
+  is not re-scored here — that is the re-audit's job (v4).
