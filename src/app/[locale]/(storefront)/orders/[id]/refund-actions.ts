@@ -154,3 +154,55 @@ export async function escalateGuestRefundCase(
     attempt,
   };
 }
+
+// N-03 (D-09): the guest who opened a case can cancel it while it is
+// still open. The token is verified by the service-role RPC; the RPC
+// enforces guest-only and opener-only.
+export async function cancelGuestRefundCase(
+  prev: GuestRefundState,
+  formData: FormData,
+): Promise<GuestRefundState> {
+  const attempt = (prev?.attempt ?? 0) + 1;
+  const orderId = String(formData.get("order_id") ?? "").trim();
+  const caseId = String(formData.get("case_id") ?? "").trim();
+
+  if (!UUID_PATTERN.test(orderId) || !UUID_PATTERN.test(caseId)) {
+    return { error: "That refund case could not be found.", attempt };
+  }
+
+  const cookieStore = await cookies();
+  const token = cookieStore.get(guestCookieName(orderId))?.value;
+  if (!isValidGuestToken(token)) {
+    return { error: "This order link is not valid in this browser.", attempt };
+  }
+
+  // P1-12: IP + per-case buckets, fail-closed.
+  const quota = await checkAuthQuota("refundCase", {
+    accountKey: caseId,
+  });
+  if (quota.limited) {
+    return { error: quota.message ?? "Please wait and try again.", attempt };
+  }
+
+  const service = createServiceClient();
+  const { error } = await service.rpc("cancel_guest_refund_case", {
+    p_order_id: orderId,
+    p_token_hash: sha256Hex(token),
+    p_case_id: caseId,
+  });
+
+  if (error) {
+    return {
+      error:
+        error.code === "23514" || error.code === "42501" || error.code === "22023"
+          ? error.message
+          : "The refund request could not be cancelled. Refresh the page and try again.",
+      attempt,
+    };
+  }
+
+  revalidatePath(`/orders/${orderId}`);
+  revalidatePath("/admin/refunds");
+
+  return { success: "Refund request cancelled.", attempt };
+}

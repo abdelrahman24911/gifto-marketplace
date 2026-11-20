@@ -30,6 +30,7 @@
  *       settlements.clawback_minor, record_clawback_direct_repayment).
  * N-02: pending commission adjustments for pre-delivery refunds
  *       (pending_commission_adjustments).
+ * N-03: cancel_refund_case / cancel_guest_refund_case (D-09).
  *
  * Regenerate from the live database once the Gifto project exists:
  *   supabase gen types typescript --project-id <ref> > src/lib/supabase/database.types.ts
@@ -1889,6 +1890,14 @@ export type Database = {
       };
       record_clawback_direct_repayment: {
         Args: { p_clawback_id: string; p_reference: string };
+        Returns: undefined;
+      };
+      cancel_refund_case: {
+        Args: { p_case_id: string };
+        Returns: undefined;
+      };
+      cancel_guest_refund_case: {
+        Args: { p_order_id: string; p_token_hash: string; p_case_id: string };
         Returns: undefined;
       };
       acknowledge_refund_case: {

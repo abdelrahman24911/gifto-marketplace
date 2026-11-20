@@ -2241,6 +2241,347 @@ begin
   raise notice 'TEST 14e PASSED: scope trigger rejects a pending adjustment with the wrong rate';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST 15: cancel_refund_case RPC + UI backing (N-03, D-09)
+-- ---------------------------------------------------------------------------
+-- D-09 decides the customer may cancel their own open refund case.
+-- Fresh shipped/delivered suborders for vendor G (product stock 10).
+reset role;
+insert into public.orders (
+  id, user_id, status, subtotal_minor, total_minor, recipient_name,
+  contact_phone, address_line, city, governorate
+) values
+  ('62200000-0000-0000-0000-000000000031',
+   '12200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+   '12 Road 9, Maadi', 'Maadi', 'Cairo'),
+  ('62200000-0000-0000-0000-000000000032',
+   '12200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+   '12 Road 9, Maadi', 'Maadi', 'Cairo');
+
+insert into public.order_vendors (
+  id, order_id, vendor_id, status, subtotal_minor, commission_rate, delivered_at
+) values
+  ('72200000-0000-0000-0000-000000000031',
+   '62200000-0000-0000-0000-000000000031',
+   '42200000-0000-0000-0000-000000000007',
+   'shipped', 10000, 0.1000, null),
+  ('72200000-0000-0000-0000-000000000032',
+   '62200000-0000-0000-0000-000000000032',
+   '42200000-0000-0000-0000-000000000007',
+   'delivered', 10000, 0.1000, now());
+
+insert into public.order_items (
+  order_vendor_id, product_id, product_name, product_slug,
+  unit_price_minor, quantity, line_total_minor
+) values
+  ('72200000-0000-0000-0000-000000000031', '52200000-0000-0000-0000-000000000007', 'Pending Gift', 'pending-gift', 10000, 1, 10000),
+  ('72200000-0000-0000-0000-000000000032', '52200000-0000-0000-0000-000000000007', 'Pending Gift', 'pending-gift', 10000, 1, 10000);
+
+insert into public.commission_entries (
+  id, order_vendor_id, vendor_id, rate, base_minor, amount_minor, earned_at
+) values (
+  '82200000-0000-0000-0000-000000000032',
+  '72200000-0000-0000-0000-000000000032',
+  '42200000-0000-0000-0000-000000000007',
+  0.1000, 10000, 1000, now()
+);
+
+-- 15a: the opener cancels their own open case. No money, stock, or
+-- settlement effect; the case records who cancelled and when.
+set role authenticated;
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_stock_before int;
+begin
+  insert into refund_test_ids
+  select 'cancel_a', public.open_refund_case(
+    '72200000-0000-0000-0000-000000000031', 'Opened by mistake', 1000);
+
+  -- Stock before the cancel (TEST 14b's suborder cancellation already
+  -- restocked one unit of this product to 11; the refund-case cancel
+  -- itself must not move it).
+  v_stock_before := (select stock from public.products
+                      where id = '52200000-0000-0000-0000-000000000007');
+
+  perform public.cancel_refund_case(
+    (select id from refund_test_ids where name = 'cancel_a'));
+
+  if not exists (
+    select 1 from public.refund_cases
+     where id = (select id from refund_test_ids where name = 'cancel_a')
+       and status = 'cancelled'
+       and resolved_by = '12200000-0000-0000-0000-000000000001'
+       and resolved_at is not null
+       and refund_amount_minor = 0
+  ) then
+    raise exception 'TEST 15 FAILED: opener cancel did not record cancelled with resolver and timestamp';
+  end if;
+
+  if exists (select 1 from public.commission_entries
+              where order_vendor_id = '72200000-0000-0000-0000-000000000031') then
+    raise exception 'TEST 15 FAILED: cancelled case earned commission';
+  end if;
+  if exists (select 1 from public.commission_adjustments
+              where refund_case_id = (select id from refund_test_ids where name = 'cancel_a')) then
+    raise exception 'TEST 15 FAILED: cancelled case recorded a commission adjustment';
+  end if;
+  if exists (select 1 from public.pending_commission_adjustments
+              where refund_case_id = (select id from refund_test_ids where name = 'cancel_a')) then
+    raise exception 'TEST 15 FAILED: cancelled case recorded a pending adjustment';
+  end if;
+  if (select stock from public.products
+       where id = '52200000-0000-0000-0000-000000000007') <> v_stock_before then
+    raise exception 'TEST 15 FAILED: cancel changed stock (was %, now %)', v_stock_before, (select stock from public.products where id = '52200000-0000-0000-0000-000000000007');
+  end if;
+  raise notice 'TEST 15a PASSED: opener cancels an open case with no money or stock effect';
+end $$;
+
+-- 15b: the cancelled case frees the one-open-case slot; nobody else can
+-- cancel the fresh case — not another customer, not an admin.
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  insert into refund_test_ids
+  select 'cancel_b', public.open_refund_case(
+    '72200000-0000-0000-0000-000000000031', 'Trying again after cancelling', 1000);
+  raise notice 'TEST 15b0 PASSED: cancelled case frees the open-case slot';
+end $$;
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000002';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000002"}';
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  begin
+    perform public.cancel_refund_case(
+      (select id from refund_test_ids where name = 'cancel_b'));
+  exception when insufficient_privilege then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 15 FAILED: another customer cancelled the case';
+  end if;
+  raise notice 'TEST 15b1 PASSED: another customer cannot cancel the case';
+end $$;
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  begin
+    perform public.cancel_refund_case(
+      (select id from refund_test_ids where name = 'cancel_b'));
+  exception when insufficient_privilege then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 15 FAILED: an admin cancelled the case as a substitute for reject';
+  end if;
+  raise notice 'TEST 15b2 PASSED: an admin cannot cancel as a substitute for reject';
+end $$;
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000001"}';
+do $$
+begin
+  perform public.cancel_refund_case(
+    (select id from refund_test_ids where name = 'cancel_b'));
+
+  if (select status from public.refund_cases
+       where id = (select id from refund_test_ids where name = 'cancel_b')) <> 'cancelled' then
+    raise exception 'TEST 15 FAILED: opener could not cancel the fresh case';
+  end if;
+  raise notice 'TEST 15b3 PASSED: opener cancels the fresh case';
+end $$;
+
+-- 15c: the resolve-vs-cancel race, both orders, sequentially. Cancel
+-- first: a later resolve is rejected and the case stays cancelled.
+-- Resolve first: a later cancel is rejected and the case stays approved.
+-- (The shared FOR UPDATE lock is the serialisation mechanism; a live
+-- two-session run is not part of this suite.)
+do $$
+begin
+  insert into refund_test_ids
+  select 'cancel_c', public.open_refund_case(
+    '72200000-0000-0000-0000-000000000032', 'Gift arrived scratched', 4000);
+end $$;
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  begin
+    perform public.resolve_refund_case(
+      (select id from refund_test_ids where name = 'cancel_a'), true, 1000, 'Too late');
+  exception when check_violation then
+    if sqlerrm like '%already resolved%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 15 FAILED: resolve of a cancelled case raised the wrong error: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 15 FAILED: resolve succeeded on a cancelled case';
+  end if;
+
+  if (select status from public.refund_cases
+       where id = (select id from refund_test_ids where name = 'cancel_a')) <> 'cancelled' then
+    raise exception 'TEST 15 FAILED: failed resolve changed the cancelled case';
+  end if;
+  raise notice 'TEST 15c1 PASSED: cancel wins the race; a later resolve is rejected';
+
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'cancel_c'), true, 4000, 'Return approved');
+
+  if not exists (
+    select 1 from public.commission_adjustments
+     where refund_case_id = (select id from refund_test_ids where name = 'cancel_c')
+       and amount_minor = -400
+  ) then
+    raise exception 'TEST 15 FAILED: approval did not record the -400 adjustment';
+  end if;
+end $$;
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  begin
+    perform public.cancel_refund_case(
+      (select id from refund_test_ids where name = 'cancel_c'));
+  exception when check_violation then
+    if sqlerrm like '%no longer open%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 15 FAILED: cancel of an approved case raised the wrong error: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 15 FAILED: cancel succeeded on an approved case';
+  end if;
+
+  if (select status from public.refund_cases
+       where id = (select id from refund_test_ids where name = 'cancel_c')) <> 'approved' then
+    raise exception 'TEST 15 FAILED: failed cancel changed the approved case';
+  end if;
+
+  raise notice 'TEST 15c2 PASSED: resolve wins the race; a later cancel is rejected';
+end $$;
+
+-- The buyer cannot read commission_adjustments (RLS: vendor/admin only),
+-- so the failed cancel's money effect is verified as an admin.
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+do $$
+begin
+  if (select count(*) from public.commission_adjustments
+       where refund_case_id = (select id from refund_test_ids where name = 'cancel_c')) <> 1 then
+    raise exception 'TEST 15 FAILED: failed cancel changed the commission adjustment';
+  end if;
+  if (select coalesce(sum(amount_minor), 0) from public.commission_adjustments
+       where refund_case_id = (select id from refund_test_ids where name = 'cancel_c')) <> -400 then
+    raise exception 'TEST 15 FAILED: failed cancel changed the adjustment amount';
+  end if;
+  raise notice 'TEST 15c3 PASSED: failed cancel left the -400 adjustment untouched';
+end $$;
+
+-- 15d: guest cancel. The signed-in RPC cannot touch a guest case; the
+-- guest RPC needs the right token; a correct cancel records resolved_at
+-- with resolved_by NULL (the CHECK's guest-cancelled branch).
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  begin
+    perform public.cancel_refund_case(
+      (select id from refund_test_ids where name = 'case_guest_window'));
+  exception when insufficient_privilege then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 15 FAILED: signed-in cancel touched a guest case';
+  end if;
+  raise notice 'TEST 15d0 PASSED: signed-in cancel cannot touch a guest case';
+end $$;
+
+-- The temp id table belongs to the authenticated role; stash the guest
+-- case id in a session setting before switching to service_role.
+reset role;
+do $$
+begin
+  perform set_config('gifto_test.guest_cancel_case',
+    (select id::text from refund_test_ids where name = 'case_guest_window'), false);
+end $$;
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_hash text := encode(digest('guest-window-7', 'sha256'), 'hex');
+  v_case uuid := current_setting('gifto_test.guest_cancel_case')::uuid;
+  v_blocked boolean := false;
+begin
+  begin
+    perform public.cancel_guest_refund_case(
+      '62200000-0000-0000-0000-000000000007',
+      encode(digest('wrong-token', 'sha256'), 'hex'),
+      v_case);
+  exception when insufficient_privilege then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 15 FAILED: guest cancel accepted a wrong token';
+  end if;
+
+  perform public.cancel_guest_refund_case(
+    '62200000-0000-0000-0000-000000000007',
+    v_hash,
+    v_case);
+
+  if not exists (
+    select 1 from public.refund_cases
+     where id = v_case
+       and status = 'cancelled'
+       and resolved_by is null
+       and resolved_at is not null
+       and refund_amount_minor = 0
+  ) then
+    raise exception 'TEST 15 FAILED: guest cancel did not record cancelled with no resolver';
+  end if;
+
+  if exists (select 1 from public.commission_adjustments
+              where refund_case_id = v_case) then
+    raise exception 'TEST 15 FAILED: guest cancel recorded a commission adjustment';
+  end if;
+
+  -- A cancelled case cannot be cancelled again.
+  begin
+    perform public.cancel_guest_refund_case(
+      '62200000-0000-0000-0000-000000000007',
+      v_hash,
+      v_case);
+    raise exception 'TEST 15 FAILED: guest cancel succeeded twice';
+  exception when check_violation then
+    if sqlerrm not like '%no longer open%' then
+      raise exception 'TEST 15 FAILED: second guest cancel raised the wrong error: %', sqlerrm;
+    end if;
+  end;
+  raise notice 'TEST 15d PASSED: guest cancels with a valid token; resolved_by stays null';
+end $$;
+
 reset role;
 
 rollback;

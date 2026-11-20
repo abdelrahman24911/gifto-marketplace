@@ -24,11 +24,15 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { EscalateRefundForm } from "@/components/escalate-refund-form";
+import { CancelRefundForm } from "@/components/cancel-refund-form";
 
 import { GuestRefundRequestForm } from "./refund-request-form";
 import { GuestCancelOrderButton } from "./cancel-order-form";
 import { ClaimOrderButton } from "./claim-order-button";
-import { escalateGuestRefundCase } from "./refund-actions";
+import {
+  cancelGuestRefundCase,
+  escalateGuestRefundCase,
+} from "./refund-actions";
 
 import type {
   OrderStatus,
@@ -412,6 +416,25 @@ export default async function GuestOrderPage({
                     refundCase.escalation_count > 0 ? (
                       <p className="mt-1 text-xs font-medium text-zinc-700">
                         {t("escalated")}
+                      </p>
+                    ) : null}
+                    {refundCase.status === "open" ? (
+                      <CancelRefundForm
+                        caseId={refundCase.id}
+                        orderId={order.id}
+                        action={cancelGuestRefundCase}
+                      />
+                    ) : null}
+                    {refundCase.status === "cancelled" &&
+                    refundCase.resolved_at ? (
+                      <p className="mt-1 text-xs text-zinc-600">
+                        {t("cancelledOn", {
+                          date: new Date(
+                            refundCase.resolved_at,
+                          ).toLocaleDateString(dateLocale, {
+                            dateStyle: "medium",
+                          }),
+                        })}
                       </p>
                     ) : null}
                     {refundCase.status === "rejected" &&

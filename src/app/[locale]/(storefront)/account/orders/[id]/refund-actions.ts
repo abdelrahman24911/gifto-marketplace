@@ -133,3 +133,48 @@ export async function escalateRefundCase(
     attempt,
   };
 }
+
+// N-03 (D-09): the customer who opened a case can cancel it while it is
+// still open. The RPC enforces opener-only; an admin cannot cancel as a
+// substitute for reject.
+export async function cancelRefundCase(
+  prev: OpenRefundState,
+  formData: FormData,
+): Promise<OpenRefundState> {
+  const attempt = (prev?.attempt ?? 0) + 1;
+  const orderId = String(formData.get("order_id") ?? "").trim();
+  const caseId = String(formData.get("case_id") ?? "").trim();
+
+  if (!UUID_PATTERN.test(orderId) || !UUID_PATTERN.test(caseId)) {
+    return { error: "That refund case could not be found.", attempt };
+  }
+
+  const { supabase, user } = await requireUser({ verifyWithAuthServer: true });
+
+  // P1-12: IP + per-case-and-account buckets, fail-closed.
+  const quota = await checkAuthQuota("refundCase", {
+    accountKey: `${caseId}:${user.id}`,
+  });
+  if (quota.limited) {
+    return { error: quota.message ?? "Please wait and try again.", attempt };
+  }
+
+  const { error } = await supabase.rpc("cancel_refund_case", {
+    p_case_id: caseId,
+  });
+
+  if (error) {
+    return {
+      error:
+        error.code === "23514" || error.code === "42501" || error.code === "22023"
+          ? error.message
+          : "The refund request could not be cancelled. Refresh the page and try again.",
+      attempt,
+    };
+  }
+
+  revalidatePath(`/account/orders/${orderId}`);
+  revalidatePath("/admin/refunds");
+
+  return { success: "Refund request cancelled.", attempt };
+}

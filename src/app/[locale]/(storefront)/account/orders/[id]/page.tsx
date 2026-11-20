@@ -20,10 +20,11 @@ import {
   type RefundReturnPath,
 } from "@/lib/refunds";
 import { EscalateRefundForm } from "@/components/escalate-refund-form";
+import { CancelRefundForm } from "@/components/cancel-refund-form";
 
 import { CancelOrderButton } from "./cancel-order-button";
 import { RefundRequestForm } from "./refund-request-form";
-import { escalateRefundCase } from "./refund-actions";
+import { cancelRefundCase, escalateRefundCase } from "./refund-actions";
 
 import type {
   OrderStatus,
@@ -364,6 +365,25 @@ export default async function AccountOrderPage({
                       refundCase.escalation_count > 0 ? (
                         <p className="mt-1 text-xs font-medium text-zinc-700">
                           {t("escalated")}
+                        </p>
+                      ) : null}
+                      {refundCase.status === "open" ? (
+                        <CancelRefundForm
+                          caseId={refundCase.id}
+                          orderId={order.id}
+                          action={cancelRefundCase}
+                        />
+                      ) : null}
+                      {refundCase.status === "cancelled" &&
+                      refundCase.resolved_at ? (
+                        <p className="mt-1 text-xs text-zinc-600">
+                          {t("cancelledOn", {
+                            date: new Date(
+                              refundCase.resolved_at,
+                            ).toLocaleDateString(dateLocale, {
+                              dateStyle: "medium",
+                            }),
+                          })}
                         </p>
                       ) : null}
                       {refundCase.status === "rejected" &&

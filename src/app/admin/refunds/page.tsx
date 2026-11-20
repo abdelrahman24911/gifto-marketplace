@@ -48,6 +48,7 @@ type RefundQueueRow = {
   resolution_note: string | null;
   created_at: string;
   resolved_at: string | null;
+  resolved_by: string | null;
   return_path: RefundReturnPath | null;
   received_at: string | null;
   receipt_note: string | null;
@@ -107,7 +108,7 @@ export default async function AdminRefundsPage({
   let listQuery = supabase
     .from("refund_cases")
     .select(
-      "id, order_id, order_vendor_id, vendor_id, source, status, reason, requested_amount_minor, refund_amount_minor, resolution_note, created_at, resolved_at, return_path, received_at, receipt_note, acknowledged_at, restocked_at, escalation_count, escalated_at, escalation_note, first_resolved_at, order:orders(public_reference, recipient_name, contact_phone), order_vendor:order_vendors(status, subtotal_minor, vendor:vendors(name, slug))",
+      "id, order_id, order_vendor_id, vendor_id, source, status, reason, requested_amount_minor, refund_amount_minor, resolution_note, created_at, resolved_at, resolved_by, return_path, received_at, receipt_note, acknowledged_at, restocked_at, escalation_count, escalated_at, escalation_note, first_resolved_at, order:orders(public_reference, recipient_name, contact_phone), order_vendor:order_vendors(status, subtotal_minor, vendor:vendors(name, slug))",
       { count: "exact" },
     );
 
@@ -269,6 +270,35 @@ export default async function AdminRefundsPage({
   const pendingByCase = new Map(
     ((casePendingData ?? []) as unknown as CasePendingRow[]).map((row) => [
       row.refund_case_id,
+      row,
+    ]),
+  );
+
+  // N-03: who cancelled a case and when. A guest cancellation has no
+  // resolver profile (resolved_by stays null by design), so it reads as
+  // "the guest".
+  type ResolverRow = {
+    id: string;
+    full_name: string | null;
+    email: string;
+  };
+  const resolverIds = Array.from(
+    new Set(
+      cases
+        .filter((refundCase) => refundCase.status === "cancelled")
+        .map((refundCase) => refundCase.resolved_by)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+  const { data: resolverData } = resolverIds.length
+    ? await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", resolverIds)
+    : { data: [] };
+  const resolvers = new Map(
+    ((resolverData ?? []) as unknown as ResolverRow[]).map((row) => [
+      row.id,
       row,
     ]),
   );
@@ -514,6 +544,30 @@ export default async function AdminRefundsPage({
                           : ""}
                         . The first decision is on record; this second
                         decision is final.
+                      </p>
+                    ) : null}
+                    {refundCase.status === "cancelled" &&
+                    refundCase.resolved_at ? (
+                      <p className="mt-2 text-xs text-ink-mute">
+                        Cancelled by{" "}
+                        {refundCase.resolved_by
+                          ? (resolvers.get(refundCase.resolved_by)?.full_name ||
+                            resolvers.get(refundCase.resolved_by)?.email ||
+                            "the customer")
+                          : "the guest"}{" "}
+                        on{" "}
+                        {new Date(refundCase.resolved_at).toLocaleString(
+                          "en-GB",
+                          {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            timeZone: BUSINESS_TIME_ZONE,
+                          },
+                        )}
+                        . No commission, stock, or settlement effect.
                       </p>
                     ) : null}
                     {refundCase.resolution_note ? (
