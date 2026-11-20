@@ -4,9 +4,11 @@ import { useLocale, useTranslations } from "next-intl";
 
 import { ProductImage } from "@/components/product-image";
 import { QuickAddButton } from "@/components/quick-add-button";
+import { WishlistButton } from "@/components/wishlist-button";
 import { Link } from "@/i18n/navigation";
 import { formatEgp, type MoneyLocale } from "@/lib/money";
 import type { QuickAddItem } from "@/lib/quick-add";
+import type { WishlistItem } from "@/lib/wishlist";
 
 type ProductCardProps = {
   href: string;
@@ -22,6 +24,8 @@ type ProductCardProps = {
     item: QuickAddItem;
     acceptingOrders: boolean;
   };
+  /** Opt-in wishlist toggle. Quick-add cards build it from the quick-add item. */
+  wishlistItem?: WishlistItem | null;
 };
 
 const CARD_CLASS =
@@ -115,6 +119,7 @@ export function ProductCard({
   vendorName,
   categoryName,
   quickAdd,
+  wishlistItem,
 }: ProductCardProps) {
   const soldOut = stock <= 0;
 
@@ -135,11 +140,38 @@ export function ProductCard({
             categoryName={categoryName}
           />
         </Link>
-        <div className="px-4 pb-4">
-          <QuickAddButton
-            item={quickAdd.item}
-            acceptingOrders={quickAdd.acceptingOrders}
+        <div className="flex items-center gap-2 px-4 pb-4">
+          <div className="min-w-0 flex-1">
+            <QuickAddButton
+              item={quickAdd.item}
+              acceptingOrders={quickAdd.acceptingOrders}
+            />
+          </div>
+          <WishlistButton item={quickAdd.item} />
+        </div>
+      </article>
+    );
+  }
+
+  if (wishlistItem) {
+    return (
+      <article className={`${CARD_CLASS} focus-within:border-berry/30`}>
+        <Link href={href} className={`flex flex-1 flex-col ${FOCUS_CLASS}`}>
+          <CardMedia
+            name={name}
+            imagePath={imagePath}
+            imageAlt={imageAlt}
+            soldOut={soldOut}
           />
+          <CardBody
+            name={name}
+            priceMinor={priceMinor}
+            vendorName={vendorName}
+            categoryName={categoryName}
+          />
+        </Link>
+        <div className="flex justify-end px-4 pb-4">
+          <WishlistButton item={wishlistItem} />
         </div>
       </article>
     );

@@ -1,15 +1,21 @@
-import { useTranslations } from "next-intl";
+import { getTranslations } from "next-intl/server";
 
 import { CartProvider } from "@/components/cart-provider";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { WishlistProvider } from "@/components/wishlist-provider";
+import { getRequestContext } from "@/lib/auth";
 
-export default function StorefrontLayout({
+export default async function StorefrontLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const t = useTranslations("common");
+  const t = await getTranslations("common");
+  // Shares the header's request-scoped session lookup; the wishlist
+  // provider only needs to know whether there is a signed-in account to
+  // sync with (guests keep a browser-local wishlist).
+  const { user } = await getRequestContext();
 
   return (
     <>
@@ -19,12 +25,14 @@ export default function StorefrontLayout({
       >
         {t("skipToMainContent")}
       </a>
-      <CartProvider>
-        <SiteHeader />
-        <main id="main-content" tabIndex={-1} className="flex-1 outline-none">
-          {children}
-        </main>
-      </CartProvider>
+      <WishlistProvider signedIn={!!user}>
+        <CartProvider>
+          <SiteHeader />
+          <main id="main-content" tabIndex={-1} className="flex-1 outline-none">
+            {children}
+          </main>
+        </CartProvider>
+      </WishlistProvider>
       <SiteFooter />
     </>
   );

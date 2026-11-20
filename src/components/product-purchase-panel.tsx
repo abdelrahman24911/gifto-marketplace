@@ -5,6 +5,7 @@ import { useLocale, useTranslations } from "next-intl";
 
 import { useCart } from "@/components/cart-provider";
 import { MinusIcon, PlusIcon } from "@/components/icons";
+import { WishlistButton } from "@/components/wishlist-button";
 import { Link } from "@/i18n/navigation";
 import {
   buildBuyNowHref,
@@ -149,6 +150,8 @@ export function ProductPurchasePanel({
             {t("buyNow")}
           </Link>
         </div>
+
+        <WishlistButton item={item} variant="full" />
 
         <p
           aria-live="polite"

@@ -7,6 +7,7 @@ import type { AppLocale } from "@/i18n/routing";
 
 import { Pagination } from "@/components/pagination";
 import { ProductCard } from "@/components/product-card";
+import { toWishlistItem } from "@/lib/wishlist";
 import { SearchForm } from "@/components/search-form";
 import { Container, EmptyState, Eyebrow } from "@/components/ui/section";
 import { getCategories, searchProducts } from "@/lib/catalog";
@@ -230,6 +231,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                     imageAlt={product.imageAlt}
                     vendorName={product.vendorName}
                     categoryName={product.categoryName}
+                    wishlistItem={toWishlistItem(product)}
                   />
                 ))}
               </div>

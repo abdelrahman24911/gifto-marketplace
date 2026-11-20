@@ -10,6 +10,7 @@ import { MobileNav } from "@/components/mobile-nav";
 import { GuardedLink } from "@/components/navigation-guard";
 import { SearchForm } from "@/components/search-form";
 import { StoreNav } from "@/components/store-nav";
+import { WishlistLink } from "@/components/wishlist-link";
 import { Container } from "@/components/ui/section";
 import { getRequestContext } from "@/lib/auth";
 import { getCategories, getOccasions } from "@/lib/catalog";
@@ -49,6 +50,7 @@ async function HeaderActions({
     ? [
         { href: "/account", label: t("account") },
         { href: "/account/orders", label: t("myOrders") },
+        { href: "/wishlist", label: t("wishlist") },
         ...(isPlatformAdmin
           ? [{ href: "/admin", label: t("adminDashboard") }]
           : []),
@@ -98,6 +100,8 @@ async function HeaderActions({
 
       <CartLink className={cartLinkClass} />
 
+      <WishlistLink className={cartLinkClass} />
+
       <MobileNav
         nav={nav}
         account={accountLinks}
@@ -135,6 +139,8 @@ function HeaderActionsFallback({
 
       <CartLink className={cartLinkClass} />
 
+      <WishlistLink className={cartLinkClass} />
+
       <MobileNav nav={nav} account={signedOutLinks} showSignOut={false} />
     </>
   );
@@ -163,6 +169,7 @@ export async function SiteHeader() {
   const signedOutLinks: HeaderLink[] = [
     { href: "/login", label: t("signIn") },
     { href: "/signup", label: t("createAccount") },
+    { href: "/wishlist", label: t("wishlist") },
   ];
 
   return (

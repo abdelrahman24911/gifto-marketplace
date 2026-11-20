@@ -8,6 +8,7 @@ import type { AppLocale } from "@/i18n/routing";
 
 import { Pagination } from "@/components/pagination";
 import { ProductCard } from "@/components/product-card";
+import { toWishlistItem } from "@/lib/wishlist";
 import {
   Breadcrumb,
   Container,
@@ -187,6 +188,7 @@ export default async function CategoryPage({
                     imagePath={product.imagePath}
                     imageAlt={product.imageAlt}
                     vendorName={product.vendorName}
+                    wishlistItem={toWishlistItem(product)}
                   />
                 ))}
               </div>

@@ -15,6 +15,7 @@ import { OccasionFallbackArt } from "@/components/occasion-artwork";
 import { OccasionEmpty } from "@/components/occasion-empty";
 import { Pagination } from "@/components/pagination";
 import { ProductCard } from "@/components/product-card";
+import { toWishlistItem } from "@/lib/wishlist";
 import { ProductImage } from "@/components/product-image";
 import { ProductRail } from "@/components/product-rail";
 import {
@@ -310,6 +311,7 @@ export default async function OccasionPage({ params, searchParams }: Props) {
                     imagePath={product.imagePath}
                     imageAlt={product.imageAlt}
                     vendorName={product.vendorName}
+                    wishlistItem={toWishlistItem(product)}
                   />
                 ))}
               </div>

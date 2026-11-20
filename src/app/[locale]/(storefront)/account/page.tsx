@@ -32,6 +32,7 @@ const statusStyles: Record<string, string> = {
 
 export default async function AccountPage() {
   const t = await getTranslations("account");
+  const tc = await getTranslations("common");
   const { supabase, user, memberships, isPlatformAdmin } =
     await getRequestContext();
   const statusHelp: Record<string, string> = {
@@ -100,6 +101,12 @@ export default async function AccountPage() {
           className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50"
         >
           {t("yourOrders")}
+        </Link>
+        <Link
+          href="/wishlist"
+          className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50"
+        >
+          {tc("wishlist")}
         </Link>
       </nav>
 

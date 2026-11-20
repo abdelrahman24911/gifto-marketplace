@@ -12,6 +12,7 @@ import type { AppLocale } from "@/i18n/routing";
 
 import { Pagination } from "@/components/pagination";
 import { ProductCard } from "@/components/product-card";
+import { toWishlistItem } from "@/lib/wishlist";
 import { ShopCover } from "@/components/shop-cover";
 import { ShopLogo } from "@/components/shop-logo";
 import {
@@ -268,6 +269,7 @@ export default async function ShopPage({ params, searchParams }: Props) {
                     imagePath={product.imagePath}
                     imageAlt={product.imageAlt}
                     categoryName={product.categoryName}
+                  wishlistItem={toWishlistItem(product)}
                   />
                 ))}
               </div>

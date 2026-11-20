@@ -12,6 +12,7 @@ import {
   TruckIcon,
 } from "@/components/icons";
 import { ProductCard } from "@/components/product-card";
+import { toWishlistItem } from "@/lib/wishlist";
 import { ProductDetails } from "@/components/product-details";
 import { ProductGallery } from "@/components/product-gallery";
 import { ProductPurchasePanel } from "@/components/product-purchase-panel";
@@ -632,6 +633,7 @@ export default async function ProductPage({ params }: Props) {
                   imagePath={item.imagePath}
                   imageAlt={item.imageAlt}
                   categoryName={item.categoryName}
+                  wishlistItem={toWishlistItem(item)}
                 />
               ))}
             </div>

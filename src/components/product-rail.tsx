@@ -1,4 +1,5 @@
 import { ProductCard } from "@/components/product-card";
+import { toWishlistItem } from "@/lib/wishlist";
 import type { CatalogProduct } from "@/lib/catalog";
 
 export function ProductRail({ products }: { products: CatalogProduct[] }) {
@@ -17,6 +18,7 @@ export function ProductRail({ products }: { products: CatalogProduct[] }) {
           imageAlt={product.imageAlt}
           vendorName={product.vendorName}
           categoryName={product.categoryName}
+          wishlistItem={toWishlistItem(product)}
         />
       ))}
     </div>
