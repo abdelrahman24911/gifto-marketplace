@@ -18,6 +18,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { notifyOrderPlaced } from "@/lib/mail";
 import { isGovernorate } from "@/lib/governorates";
+import { validateGiftOptions } from "@/lib/gift-options";
 import {
   coverageFromJson,
   deliveryCoverageAllows,
@@ -42,6 +43,10 @@ export type CheckoutValues = {
   city: string;
   governorate: string;
   notes: string;
+  giftWrap: boolean;
+  giftMessage: string;
+  preferredDeliveryDate: string;
+  deliveryTimeNote: string;
 };
 
 export type CheckoutState =
@@ -59,6 +64,12 @@ function readValues(formData: FormData): CheckoutValues {
     city: String(formData.get("city") ?? "").trim(),
     governorate: String(formData.get("governorate") ?? "").trim(),
     notes: String(formData.get("notes") ?? "").trim(),
+    giftWrap: formData.get("gift_wrap") === "1",
+    giftMessage: String(formData.get("gift_message") ?? "").trim(),
+    preferredDeliveryDate: String(
+      formData.get("preferred_delivery_date") ?? "",
+    ).trim(),
+    deliveryTimeNote: String(formData.get("delivery_time_note") ?? "").trim(),
   };
 }
 
@@ -330,6 +341,19 @@ export async function placeOrder(
     };
   }
 
+  // UX Batch 1: gift options and the preferred delivery day. The database
+  // re-validates inside the checkout wrappers; this only gives the
+  // customer a friendly error without a wasted round-trip.
+  const giftError = validateGiftOptions({
+    giftWrap: values.giftWrap,
+    giftMessage: values.giftMessage,
+    preferredDeliveryDate: values.preferredDeliveryDate,
+    deliveryTimeNote: values.deliveryTimeNote,
+  });
+  if (giftError) {
+    return { error: giftError, values, attempt };
+  }
+
   const coverageError = await deliveryCoverageError(items, values);
   if (coverageError) {
     return { error: coverageError, values, attempt };
@@ -385,6 +409,10 @@ export async function placeOrder(
         p_idempotency_key: idempotencyKey,
         p_expected_prices: expectedPrices as unknown as Json,
         p_expected_total_minor: expectedTotalMinor,
+        p_gift_wrap: values.giftWrap,
+        p_gift_message: values.giftMessage || null,
+        p_preferred_delivery_date: values.preferredDeliveryDate || null,
+        p_delivery_time_note: values.deliveryTimeNote || null,
       },
     );
 
@@ -434,6 +462,10 @@ export async function placeOrder(
       p_guest_token_hash: sha256Hex(guestToken),
       p_expected_prices: expectedPrices as unknown as Json,
       p_expected_total_minor: expectedTotalMinor,
+      p_gift_wrap: values.giftWrap,
+      p_gift_message: values.giftMessage || null,
+      p_preferred_delivery_date: values.preferredDeliveryDate || null,
+      p_delivery_time_note: values.deliveryTimeNote || null,
     });
 
     if (error) {

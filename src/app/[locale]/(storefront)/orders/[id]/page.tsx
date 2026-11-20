@@ -106,6 +106,10 @@ type GuestOrder = {
   city: string;
   governorate: string;
   notes: string | null;
+  gift_wrap: boolean;
+  gift_message: string | null;
+  preferred_delivery_date: string | null;
+  delivery_time_note: string | null;
   created_at: string;
   vendors: GuestOrderVendor[];
 };
@@ -294,6 +298,36 @@ export default async function GuestOrderPage({
             <div className="sm:col-span-2">
               <dt className="text-zinc-500">{t("notes")}</dt>
               <dd className="text-zinc-900">{order.notes}</dd>
+            </div>
+          ) : null}
+          {order.gift_wrap ? (
+            <div>
+              <dt className="text-zinc-500">{t("giftWrap")}</dt>
+              <dd className="text-zinc-900">{t("giftWrapped")}</dd>
+            </div>
+          ) : null}
+          {order.gift_message ? (
+            <div className="sm:col-span-2">
+              <dt className="text-zinc-500">{t("giftMessage")}</dt>
+              <dd className="whitespace-pre-line text-zinc-900">
+                {order.gift_message}
+              </dd>
+            </div>
+          ) : null}
+          {order.preferred_delivery_date ? (
+            <div>
+              <dt className="text-zinc-500">{t("preferredDeliveryDate")}</dt>
+              <dd className="text-zinc-900">
+                {new Date(
+                  `${order.preferred_delivery_date}T00:00:00`,
+                ).toLocaleDateString(dateLocale, { dateStyle: "medium" })}
+              </dd>
+            </div>
+          ) : null}
+          {order.delivery_time_note ? (
+            <div>
+              <dt className="text-zinc-500">{t("deliveryTimeNote")}</dt>
+              <dd className="text-zinc-900">{order.delivery_time_note}</dd>
             </div>
           ) : null}
         </dl>

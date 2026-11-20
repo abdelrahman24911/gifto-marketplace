@@ -504,4 +504,37 @@ end $$;
 
 reset role;
 
+-- ---------------------------------------------------------------------------
+-- TEST 9: get_guest_order exposes the gift fields to the token holder
+-- ---------------------------------------------------------------------------
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_hash text := encode(digest('guest-token-gift', 'sha256'), 'hex');
+  v_oid uuid := current_setting('gifto_test.guest_gift_order_id')::uuid;
+  v_order jsonb;
+begin
+  v_order := public.get_guest_order(v_oid, v_hash);
+  if v_order is null then
+    raise exception 'TEST 9 FAILED: get_guest_order returned nothing';
+  end if;
+  if (v_order ->> 'gift_wrap')::boolean is not true
+     or v_order ->> 'gift_message' <> 'For you!'
+     or (v_order ->> 'preferred_delivery_date')::date <> current_date + 7 then
+    raise exception 'TEST 9 FAILED: guest order JSON gift fields are %',
+      v_order -> 'gift_wrap';
+  end if;
+  -- A wrong token still gets nothing, gift fields included.
+  if public.get_guest_order(
+    v_oid, encode(digest('wrong-token', 'sha256'), 'hex')
+  ) is not null then
+    raise exception 'TEST 9 FAILED: get_guest_order leaked to a wrong token';
+  end if;
+  raise notice 'TEST 9 PASSED: get_guest_order exposes gift fields to the token holder only';
+end $$;
+
+reset role;
+
 rollback;

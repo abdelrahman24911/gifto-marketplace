@@ -129,7 +129,7 @@ export default async function AccountOrderPage({
     supabase
     .from("orders")
     .select(
-      "id, status, payment_method, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, address_line, city, governorate, notes, created_at, order_vendors(id, status, subtotal_minor, vendor_id, delivered_at, courier_name, tracking_ref, handed_over_at, order_items(id, product_name, product_slug, unit_price_minor, quantity, line_total_minor))",
+      "id, status, payment_method, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, address_line, city, governorate, notes, gift_wrap, gift_message, preferred_delivery_date, delivery_time_note, created_at, order_vendors(id, status, subtotal_minor, vendor_id, delivered_at, courier_name, tracking_ref, handed_over_at, order_items(id, product_name, product_slug, unit_price_minor, quantity, line_total_minor))",
     )
     .eq("id", id)
     ,
@@ -209,6 +209,36 @@ export default async function AccountOrderPage({
             <div className="sm:col-span-2">
               <dt className="text-zinc-500">{t("notes")}</dt>
               <dd className="text-zinc-900">{order.notes}</dd>
+            </div>
+          ) : null}
+          {order.gift_wrap ? (
+            <div>
+              <dt className="text-zinc-500">{t("giftWrap")}</dt>
+              <dd className="text-zinc-900">{t("giftWrapped")}</dd>
+            </div>
+          ) : null}
+          {order.gift_message ? (
+            <div className="sm:col-span-2">
+              <dt className="text-zinc-500">{t("giftMessage")}</dt>
+              <dd className="whitespace-pre-line text-zinc-900">
+                {order.gift_message}
+              </dd>
+            </div>
+          ) : null}
+          {order.preferred_delivery_date ? (
+            <div>
+              <dt className="text-zinc-500">{t("preferredDeliveryDate")}</dt>
+              <dd className="text-zinc-900">
+                {new Date(
+                  `${order.preferred_delivery_date}T00:00:00`,
+                ).toLocaleDateString(dateLocale, { dateStyle: "medium" })}
+              </dd>
+            </div>
+          ) : null}
+          {order.delivery_time_note ? (
+            <div>
+              <dt className="text-zinc-500">{t("deliveryTimeNote")}</dt>
+              <dd className="text-zinc-900">{order.delivery_time_note}</dd>
             </div>
           ) : null}
         </dl>

@@ -14,6 +14,7 @@ import {
 } from "@/lib/buy-now";
 
 import { CheckoutForm, type CheckoutDefaults } from "./checkout-form";
+import type { SavedAddress } from "@/lib/saved-address";
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = (await getLocale()) as AppLocale;
@@ -196,6 +197,10 @@ export default async function CheckoutPage({
     city: "",
     governorate: "",
     notes: "",
+    giftWrap: false,
+    giftMessage: "",
+    preferredDeliveryDate: "",
+    deliveryTimeNote: "",
   };
 
   if (user) {
@@ -208,6 +213,63 @@ export default async function CheckoutPage({
     defaults.recipientName = profile?.full_name ?? "";
     defaults.contactPhone = profile?.phone ?? "";
     defaults.contactEmail = user.email ?? "";
+  }
+
+  // Saved addresses (migration 47). The default address pre-fills the form;
+  // the picker in the form offers the rest. A saved address never rewrites
+  // a placed order — checkout copies its fields into the order snapshot.
+  let savedAddresses: SavedAddress[] = [];
+  if (user) {
+    const { data: addressRows } = await supabase
+      .from("saved_addresses")
+      .select(
+        "id, label, recipient_name, contact_phone, address_line, city, governorate, notes, is_default",
+      )
+      .eq("user_id", user.id)
+      .order("is_default", { ascending: false })
+      .order("created_at", { ascending: false })
+      .returns<
+        {
+          id: string;
+          label: string;
+          recipient_name: string;
+          contact_phone: string;
+          address_line: string;
+          city: string;
+          governorate: string;
+          notes: string | null;
+          is_default: boolean;
+        }[]
+      >();
+
+    savedAddresses = (addressRows ?? []).map((row) => ({
+      id: row.id,
+      label: row.label,
+      recipientName: row.recipient_name,
+      contactPhone: row.contact_phone,
+      addressLine: row.address_line,
+      city: row.city,
+      governorate: row.governorate,
+      notes: row.notes,
+    }));
+
+    // The first row is the default when one exists (is_default sorts first).
+    // Without a default the profile pre-fill above stands.
+    const defaultAddress =
+      addressRows?.find((row) => row.is_default) ?? null;
+    if (defaultAddress) {
+      const match = savedAddresses.find(
+        (address) => address.id === defaultAddress.id,
+      );
+      if (match) {
+        defaults.recipientName = match.recipientName;
+        defaults.contactPhone = match.contactPhone;
+        defaults.addressLine = match.addressLine;
+        defaults.city = match.city;
+        defaults.governorate = match.governorate;
+        defaults.notes = match.notes ?? "";
+      }
+    }
   }
 
   return (
@@ -223,7 +285,11 @@ export default async function CheckoutPage({
         </p>
       ) : null}
 
-      <CheckoutForm defaults={defaults} buyNow={buyNow} />
+      <CheckoutForm
+        defaults={defaults}
+        buyNow={buyNow}
+        savedAddresses={savedAddresses}
+      />
     </div>
   );
 }

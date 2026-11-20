@@ -49,7 +49,7 @@ export default async function AdminOrderDetailPage({
     supabase
       .from("orders")
       .select(
-        "id, public_reference, user_id, status, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, contact_email, address_line, city, governorate, notes, created_at, updated_at, order_vendors(id, status, subtotal_minor, delivery_fee_minor, commission_rate, confirmed_at, shipped_at, delivered_at, cancelled_at, courier_name, tracking_ref, handed_over_at, created_at, vendor:vendors(name, slug), order_items(id, product_name, product_slug, quantity, unit_price_minor, line_total_minor), commission_entries(amount_minor, status))",
+        "id, public_reference, user_id, status, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, contact_email, address_line, city, governorate, notes, gift_wrap, gift_message, preferred_delivery_date, delivery_time_note, created_at, updated_at, order_vendors(id, status, subtotal_minor, delivery_fee_minor, commission_rate, confirmed_at, shipped_at, delivered_at, cancelled_at, courier_name, tracking_ref, handed_over_at, created_at, vendor:vendors(name, slug), order_items(id, product_name, product_slug, quantity, unit_price_minor, line_total_minor), commission_entries(amount_minor, status))",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -391,6 +391,39 @@ export default async function AdminOrderDetailPage({
                   </dt>
                   <dd className="mt-0.5 whitespace-pre-wrap rounded-lg bg-paper px-3 py-2 text-ink-soft">
                     {order.notes}
+                  </dd>
+                </div>
+              ) : null}
+              {order.gift_wrap || order.gift_message ? (
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-ink-mute">
+                    Gift
+                  </dt>
+                  <dd className="mt-0.5 text-ink">
+                    {order.gift_wrap ? "Gift wrap requested" : "No wrap"}
+                    {order.gift_message ? ` — “${order.gift_message}”` : ""}
+                  </dd>
+                </div>
+              ) : null}
+              {order.preferred_delivery_date ? (
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-ink-mute">
+                    Preferred delivery day
+                  </dt>
+                  <dd className="mt-0.5 text-ink">
+                    {order.preferred_delivery_date}
+                    {order.delivery_time_note
+                      ? ` · ${order.delivery_time_note}`
+                      : ""}
+                  </dd>
+                </div>
+              ) : order.delivery_time_note ? (
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-ink-mute">
+                    Preferred delivery time
+                  </dt>
+                  <dd className="mt-0.5 text-ink">
+                    {order.delivery_time_note}
                   </dd>
                 </div>
               ) : null}

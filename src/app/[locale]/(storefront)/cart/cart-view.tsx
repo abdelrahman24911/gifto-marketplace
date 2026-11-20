@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useSyncExternalStore } from "react";
 import { useLocale, useTranslations } from "next-intl";
 
 import { useCart } from "@/components/cart-provider";
@@ -8,6 +9,13 @@ import { useToast } from "@/components/toast-provider";
 import { ProductImage } from "@/components/product-image";
 import { Link } from "@/i18n/navigation";
 import { MAX_LINE_QUANTITY, type CartItem } from "@/lib/cart";
+import { GIFT_MESSAGE_MAX_LENGTH } from "@/lib/gift-options";
+import {
+  getGiftOptionsServerSnapshot,
+  getGiftOptionsSnapshot,
+  setGiftOptions,
+  subscribeGiftOptions,
+} from "@/lib/gift-options-store";
 import { formatEgp, type MoneyLocale } from "@/lib/money";
 
 function groupByVendor(items: CartItem[]): [string, CartItem[]][] {
@@ -30,6 +38,15 @@ export function CartView({
   const locale = useLocale() as MoneyLocale;
   const { items, subtotalMinor, ready, update, remove, clear } = useCart();
   const { notify } = useToast();
+
+  // Gift draft shared with checkout through the gift-options store
+  // (localStorage). Read with useSyncExternalStore so the server render
+  // and the hydrated render never mismatch.
+  const giftDraft = useSyncExternalStore(
+    subscribeGiftOptions,
+    getGiftOptionsSnapshot,
+    getGiftOptionsServerSnapshot,
+  );
 
   function removeItem(item: CartItem): void {
     remove(item.productId);
@@ -200,6 +217,49 @@ export function CartView({
               {t("cashOnDeliveryNote")}
             </p>
           </div>
+
+          <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-5">
+            <h2 className="text-sm font-semibold text-zinc-900">
+              {t("giftTitle")}
+            </h2>
+            <label className="mt-3 flex items-start gap-2 text-sm font-medium text-zinc-700">
+              <input
+                type="checkbox"
+                checked={giftDraft.giftWrap}
+                onChange={(event) => {
+                  const next = event.target.checked;
+                  setGiftOptions({
+                    giftWrap: next,
+                    giftMessage: next ? giftDraft.giftMessage : "",
+                  });
+                }}
+                className="mt-0.5 h-4 w-4 accent-zinc-900"
+              />
+              <span>
+                {t("giftWrap")}
+                <span className="block text-xs font-normal text-zinc-500">
+                  {t("giftNote")}
+                </span>
+              </span>
+            </label>
+            <label className="mt-3 flex flex-col gap-1 text-sm font-medium text-zinc-700">
+              {t("giftMessage")}
+              <textarea
+                rows={2}
+                maxLength={GIFT_MESSAGE_MAX_LENGTH}
+                value={giftDraft.giftMessage}
+                disabled={!giftDraft.giftWrap}
+                onChange={(event) =>
+                  setGiftOptions({
+                    giftWrap: giftDraft.giftWrap,
+                    giftMessage: event.target.value,
+                  })
+                }
+                placeholder={t("giftMessagePlaceholder")}
+                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
+              />
+            </label>
+          </section>
         </>
       )}
     </div>

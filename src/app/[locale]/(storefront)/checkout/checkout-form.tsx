@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useLocale, useTranslations } from "next-intl";
 
 import { useCart } from "@/components/cart-provider";
 import { ProductImage } from "@/components/product-image";
+import { useToast } from "@/components/toast-provider";
 import { Link, useRouter } from "@/i18n/navigation";
 import {
   selectCheckoutItems,
@@ -16,6 +17,17 @@ import {
   toOrderItems,
   type CartItem,
 } from "@/lib/cart";
+import {
+  GIFT_MESSAGE_MAX_LENGTH,
+  preferredDeliveryDateRange,
+  validateGiftOptions,
+} from "@/lib/gift-options";
+import {
+  getGiftOptionsServerSnapshot,
+  getGiftOptionsSnapshot,
+  setGiftOptions,
+  subscribeGiftOptions,
+} from "@/lib/gift-options-store";
 import { createGuestAttempt, type GuestAttempt } from "@/lib/guest-client";
 import {
   GOVERNORATES,
@@ -23,6 +35,7 @@ import {
   normalizeGovernorate,
 } from "@/lib/governorates";
 import { formatEgp, type MoneyLocale } from "@/lib/money";
+import type { SavedAddress } from "@/lib/saved-address";
 
 import { placeOrder, type CheckoutState, type CheckoutValues } from "./actions";
 
@@ -45,15 +58,18 @@ function groupByVendor(items: CartItem[]): [string, CartItem[]][] {
 export function CheckoutForm({
   defaults,
   buyNow = null,
+  savedAddresses = [],
 }: {
   defaults: CheckoutValues;
   buyNow?: BuyNowCheckout | null;
+  savedAddresses?: SavedAddress[];
 }) {
   const t = useTranslations("checkout");
   const tc = useTranslations("common");
   const locale = useLocale() as MoneyLocale;
   const router = useRouter();
   const { items, ready, clear } = useCart();
+  const { flash } = useToast();
   const [state, formAction, pending] = useActionState<CheckoutState, FormData>(
     placeOrder,
     null,
@@ -70,12 +86,56 @@ export function CheckoutForm({
   const checkoutSubtotalMinor = cartSubtotalMinor(checkoutItems);
 
   const values = state && "values" in state ? state.values : defaults;
+
+  // Gift wrap/message are order-level and shared with the cart page's
+  // "Make it a gift" draft through the gift-options store (localStorage).
+  // The store is read with useSyncExternalStore, so the server render
+  // (empty draft) and the hydrated render (stored draft) never mismatch.
+  // Unchecking gift wrap clears the message instead of submitting a
+  // stale one. The preferred day and time note are checkout-only and
+  // stay in local component state.
+  const giftDraft = useSyncExternalStore(
+    subscribeGiftOptions,
+    getGiftOptionsSnapshot,
+    getGiftOptionsServerSnapshot,
+  );
+  const giftWrap = giftDraft.giftWrap;
+  const giftMessage = giftDraft.giftMessage;
+  const [preferredDeliveryDate, setPreferredDeliveryDate] = useState(
+    defaults.preferredDeliveryDate,
+  );
+  const [deliveryTimeNote, setDeliveryTimeNote] = useState(
+    defaults.deliveryTimeNote,
+  );
+  const [pickedAddressId, setPickedAddressId] = useState<string | null>(null);
+  const dateRange = preferredDeliveryDateRange();
+
+  const pickedAddress =
+    savedAddresses.find((address) => address.id === pickedAddressId) ?? null;
+  // A picked saved address overwrites the delivery fields; everything else
+  // (email, gift options) is left as the customer entered it.
+  const fieldValues: CheckoutValues = pickedAddress
+    ? {
+        ...values,
+        recipientName: pickedAddress.recipientName,
+        contactPhone: pickedAddress.contactPhone,
+        addressLine: pickedAddress.addressLine,
+        city: pickedAddress.city,
+        governorate: pickedAddress.governorate,
+        notes: pickedAddress.notes ?? values.notes,
+      }
+    : values;
   const formKey =
-    state && "attempt" in state ? `state-${state.attempt}` : "pristine";
+    state && "attempt" in state
+      ? `state-${state.attempt}-${pickedAddressId ?? "none"}`
+      : `pristine-${pickedAddressId ?? "none"}`;
 
   useEffect(() => {
     if (state && "orderId" in state && !handled.current) {
       handled.current = true;
+
+      // The toast must survive the navigation to the order page.
+      flash(t("orderPlaced"), "success");
 
       // Buy Now must leave the existing cart exactly as it was.
       if (shouldClearCartAfterOrder(isBuyNow)) clear();
@@ -86,7 +146,7 @@ export function CheckoutForm({
           : `/account/orders/${state.orderId}`,
       );
     }
-  }, [state, clear, router, isBuyNow]);
+  }, [state, clear, router, isBuyNow, flash, t]);
 
   if (!isBuyNow && !ready) {
     return <p className="mt-6 text-sm text-zinc-500">{t("loading")}</p>;
@@ -107,6 +167,13 @@ export function CheckoutForm({
       </div>
     );
   }
+
+  const giftError = validateGiftOptions({
+    giftWrap,
+    giftMessage,
+    preferredDeliveryDate,
+    deliveryTimeNote,
+  });
 
   return (
     <div className="mt-6 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
@@ -177,6 +244,15 @@ export function CheckoutForm({
           </p>
         ) : null}
 
+        {giftError ? (
+          <p
+            role="alert"
+            className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          >
+            {giftError}
+          </p>
+        ) : null}
+
         {state && "priceChanged" in state ? (
           <div
             role="alert"
@@ -231,6 +307,27 @@ export function CheckoutForm({
           </div>
         ) : null}
 
+        {savedAddresses.length > 0 ? (
+          <label className={labelClass}>
+            {t("savedAddress")}
+            <select
+              value={pickedAddressId ?? ""}
+              onChange={(event) => {
+                const next = event.target.value;
+                setPickedAddressId(next === "" ? null : next);
+              }}
+              className={inputClass}
+            >
+              <option value="">{t("savedAddressPlaceholder")}</option>
+              {savedAddresses.map((address) => (
+                <option key={address.id} value={address.id}>
+                  {address.label} — {address.addressLine}, {address.city}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
         <label className={labelClass}>
           {t("recipientName")}
           <input
@@ -240,7 +337,7 @@ export function CheckoutForm({
             minLength={2}
             maxLength={120}
             autoComplete="name"
-            defaultValue={values.recipientName}
+            defaultValue={fieldValues.recipientName}
             placeholder={t("recipientPlaceholder")}
             className={inputClass}
           />
@@ -256,7 +353,7 @@ export function CheckoutForm({
             maxLength={30}
             inputMode="tel"
             autoComplete="tel"
-            defaultValue={values.contactPhone}
+            defaultValue={fieldValues.contactPhone}
             placeholder="01xxxxxxxxx"
             className={inputClass}
           />
@@ -270,7 +367,7 @@ export function CheckoutForm({
             maxLength={254}
             inputMode="email"
             autoComplete="email"
-            defaultValue={values.contactEmail}
+            defaultValue={fieldValues.contactEmail}
             placeholder="you@example.com"
             className={inputClass}
           />
@@ -285,7 +382,7 @@ export function CheckoutForm({
             minLength={5}
             maxLength={300}
             autoComplete="street-address"
-            defaultValue={values.addressLine}
+            defaultValue={fieldValues.addressLine}
             placeholder={t("addressPlaceholder")}
             className={inputClass}
           />
@@ -301,7 +398,7 @@ export function CheckoutForm({
               minLength={2}
               maxLength={80}
               autoComplete="address-level2"
-              defaultValue={values.city}
+              defaultValue={fieldValues.city}
               placeholder={t("cityPlaceholder")}
               className={inputClass}
             />
@@ -313,7 +410,7 @@ export function CheckoutForm({
               name="governorate"
               required
               autoComplete="address-level1"
-              defaultValue={normalizeGovernorate(values.governorate) ?? ""}
+              defaultValue={normalizeGovernorate(fieldValues.governorate) ?? ""}
               className={inputClass}
             >
               <option value="" disabled>
@@ -336,15 +433,95 @@ export function CheckoutForm({
             name="notes"
             rows={2}
             maxLength={1000}
-            defaultValue={values.notes}
+            defaultValue={fieldValues.notes}
             placeholder={t("deliveryNotesPlaceholder")}
             className={inputClass}
           />
         </label>
 
+        <fieldset className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+          <legend className="px-1 text-sm font-semibold text-zinc-900">
+            {t("giftTitle")}
+          </legend>
+          <label className="flex items-start gap-2 text-sm font-medium text-zinc-700">
+            <input
+              type="checkbox"
+              name="gift_wrap"
+              value="1"
+              checked={giftWrap}
+              onChange={(event) => {
+                const next = event.target.checked;
+                setGiftOptions({
+                  giftWrap: next,
+                  giftMessage: next ? giftMessage : "",
+                });
+              }}
+              className="mt-0.5 h-4 w-4 accent-zinc-900"
+            />
+            <span>
+              {t("giftWrap")}
+              <span className="block text-xs font-normal text-zinc-500">
+                {t("giftWrapNote")}
+              </span>
+            </span>
+          </label>
+
+          <label className="mt-3 flex flex-col gap-1 text-sm font-medium text-zinc-700">
+            {t("giftMessage")}
+            <textarea
+              name="gift_message"
+              rows={2}
+              maxLength={GIFT_MESSAGE_MAX_LENGTH}
+              value={giftMessage}
+              disabled={!giftWrap}
+              onChange={(event) =>
+                setGiftOptions({
+                  giftWrap,
+                  giftMessage: event.target.value,
+                })
+              }
+              placeholder={t("giftMessagePlaceholder")}
+              className={`${inputClass} bg-white disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400`}
+            />
+          </label>
+
+          <div className="mt-3 grid gap-4 sm:grid-cols-2">
+            <label className="flex flex-col gap-1 text-sm font-medium text-zinc-700">
+              {t("preferredDate")}
+              <input
+                type="date"
+                name="preferred_delivery_date"
+                value={preferredDeliveryDate}
+                min={dateRange.min}
+                max={dateRange.max}
+                onChange={(event) =>
+                  setPreferredDeliveryDate(event.target.value)
+                }
+                className={inputClass}
+              />
+              <span className="text-xs font-normal text-zinc-500">
+                {t("preferredDateHint")}
+              </span>
+            </label>
+
+            <label className="flex flex-col gap-1 text-sm font-medium text-zinc-700">
+              {t("timeNote")}
+              <input
+                type="text"
+                name="delivery_time_note"
+                maxLength={200}
+                value={deliveryTimeNote}
+                onChange={(event) => setDeliveryTimeNote(event.target.value)}
+                placeholder={t("timeNotePlaceholder")}
+                className={inputClass}
+              />
+            </label>
+          </div>
+        </fieldset>
+
         <button
           type="submit"
-          disabled={pending}
+          disabled={pending || giftError !== null}
           className="mt-1 rounded-md bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {pending ? t("placingOrder") : t("placeOrder")}
@@ -459,6 +636,19 @@ export function CheckoutForm({
             </dd>
           </div>
         </dl>
+
+        {giftWrap ? (
+          <p className="mt-4 rounded-md border border-berry-tint bg-berry-soft px-3 py-2 text-xs text-berry-deep">
+            {t("giftWrapSummary")}
+            {preferredDeliveryDate
+              ? ` ${t("preferredDateSummary", { date: preferredDeliveryDate })}`
+              : null}
+          </p>
+        ) : preferredDeliveryDate ? (
+          <p className="mt-4 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+            {t("preferredDateSummary", { date: preferredDeliveryDate })}
+          </p>
+        ) : null}
 
         <p className="mt-4 text-xs text-zinc-500">
           {t("summaryNote")}
