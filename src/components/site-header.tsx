@@ -1,9 +1,11 @@
 import { Suspense } from "react";
+import { getTranslations } from "next-intl/server";
 
 import { AccountMenu } from "@/components/account-menu";
 import { AnnouncementBar } from "@/components/announcement-bar";
 import { CartLink } from "@/components/cart-link";
 import { GiftoMark, UserIcon } from "@/components/icons";
+import { LocaleSwitcher } from "@/components/locale-switcher";
 import { MobileNav } from "@/components/mobile-nav";
 import { GuardedLink } from "@/components/navigation-guard";
 import { SearchForm } from "@/components/search-form";
@@ -16,10 +18,7 @@ import { buildStoreNav, type StoreNavItem } from "@/lib/site-navigation";
 const cartLinkClass =
   "inline-flex h-10 items-center gap-1.5 rounded-full px-3 text-sm font-medium text-ink-soft transition-colors hover:bg-berry-soft hover:text-berry-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry";
 
-const signedOutLinks = [
-  { href: "/login", label: "Sign in" },
-  { href: "/signup", label: "Create account" },
-];
+type HeaderLink = { href: string; label: string };
 
 /**
  * Account-dependent controls. Reads the verified session on every request so
@@ -28,7 +27,14 @@ const signedOutLinks = [
  * never this header. Rendered inside <Suspense> so the rest of the header and
  * the page shell stream without waiting for the session lookup.
  */
-async function HeaderActions({ nav }: { nav: StoreNavItem[] }) {
+async function HeaderActions({
+  nav,
+  signedOutLinks,
+}: {
+  nav: StoreNavItem[];
+  signedOutLinks: HeaderLink[];
+}) {
+  const t = await getTranslations("common");
   const { user, memberships, isPlatformAdmin } = await getRequestContext();
 
   let hasActiveVendor = false;
@@ -41,19 +47,21 @@ async function HeaderActions({ nav }: { nav: StoreNavItem[] }) {
 
   const accountLinks = user
     ? [
-        { href: "/account", label: "Account" },
-        { href: "/account/orders", label: "My orders" },
-        ...(isPlatformAdmin ? [{ href: "/admin", label: "Admin dashboard" }] : []),
+        { href: "/account", label: t("account") },
+        { href: "/account/orders", label: t("myOrders") },
+        ...(isPlatformAdmin
+          ? [{ href: "/admin", label: t("adminDashboard") }]
+          : []),
         ...(hasActiveVendor && !isPlatformAdmin
           ? [
               {
                 href: activeVendorId
                   ? `/vendor/overview?vendor=${activeVendorId}`
                   : "/vendor/overview",
-                label: "Vendor dashboard",
+                label: t("vendorDashboard"),
               },
-              { href: "/vendor/orders", label: "Vendor orders" },
-              { href: "/vendor/products", label: "Vendor products" },
+              { href: "/vendor/orders", label: t("vendorOrders") },
+              { href: "/vendor/products", label: t("vendorProducts") },
             ]
           : []),
         ...(hasActiveVendor && isPlatformAdmin
@@ -62,7 +70,7 @@ async function HeaderActions({ nav }: { nav: StoreNavItem[] }) {
                 href: activeVendorId
                   ? `/vendor/overview?vendor=${activeVendorId}`
                   : "/vendor/overview",
-                label: "Vendor dashboard",
+                label: t("vendorDashboard"),
               },
             ]
           : []),
@@ -83,7 +91,9 @@ async function HeaderActions({ nav }: { nav: StoreNavItem[] }) {
         className="inline-flex h-10 w-10 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-berry-soft hover:text-berry-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry lg:hidden"
       >
         <UserIcon className="h-5 w-5" />
-        <span className="sr-only">{user ? "Account" : "Sign in"}</span>
+        <span className="sr-only">
+          {user ? t("account") : t("signIn")}
+        </span>
       </GuardedLink>
 
       <CartLink className={cartLinkClass} />
@@ -98,7 +108,13 @@ async function HeaderActions({ nav }: { nav: StoreNavItem[] }) {
 }
 
 /** Same footprint as the real controls, so nothing shifts when they stream in. */
-function HeaderActionsFallback({ nav }: { nav: StoreNavItem[] }) {
+function HeaderActionsFallback({
+  nav,
+  signedOutLinks,
+}: {
+  nav: StoreNavItem[];
+  signedOutLinks: HeaderLink[];
+}) {
   return (
     <>
       <span
@@ -114,7 +130,7 @@ function HeaderActionsFallback({ nav }: { nav: StoreNavItem[] }) {
         className="inline-flex h-10 w-10 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-berry-soft hover:text-berry-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry lg:hidden"
       >
         <UserIcon className="h-5 w-5" />
-        <span className="sr-only">Sign in</span>
+        <span className="sr-only">{signedOutLinks[0]?.label}</span>
       </GuardedLink>
 
       <CartLink className={cartLinkClass} />
@@ -129,11 +145,25 @@ function HeaderActionsFallback({ nav }: { nav: StoreNavItem[] }) {
  * the account controls stream separately because they depend on the session.
  */
 export async function SiteHeader() {
+  const t = await getTranslations("common");
   const [categories, occasions] = await Promise.all([
     getCategories(),
     getOccasions(),
   ]);
-  const nav = buildStoreNav({ categories, occasions });
+  const nav = buildStoreNav({
+    categories,
+    occasions,
+    labels: {
+      home: t("home"),
+      occasions: t("occasions"),
+      categories: t("categories"),
+      shops: t("shops"),
+    },
+  });
+  const signedOutLinks: HeaderLink[] = [
+    { href: "/login", label: t("signIn") },
+    { href: "/signup", label: t("createAccount") },
+  ];
 
   return (
     <>
@@ -155,10 +185,18 @@ export async function SiteHeader() {
             <StoreNav nav={nav} />
 
             <div className="ml-auto flex items-center gap-1 sm:gap-2">
+              <LocaleSwitcher className="hidden sm:inline-flex" />
               <SearchForm className="hidden w-52 transition-[width] duration-300 focus-within:w-72 lg:flex" />
 
-              <Suspense fallback={<HeaderActionsFallback nav={nav} />}>
-                <HeaderActions nav={nav} />
+              <Suspense
+                fallback={
+                  <HeaderActionsFallback
+                    nav={nav}
+                    signedOutLinks={signedOutLinks}
+                  />
+                }
+              >
+                <HeaderActions nav={nav} signedOutLinks={signedOutLinks} />
               </Suspense>
             </div>
           </div>

@@ -19,18 +19,23 @@ type NamedSlug = {
  * Builds the storefront navigation from the same cached catalogue reads used
  * elsewhere. Empty arrays are intentional: the dropdown still offers a link to
  * the full directory, so navigation never dead-ends during an outage.
+ *
+ * Top-level labels come from the caller (translated in the header); category
+ * and occasion names are catalogue data and render as stored.
  */
 export function buildStoreNav({
   categories,
   occasions,
+  labels,
 }: {
   categories: readonly NamedSlug[];
   occasions: readonly NamedSlug[];
+  labels: { home: string; occasions: string; categories: string; shops: string };
 }): StoreNavItem[] {
   return [
-    { label: "Home", href: "/" },
+    { label: labels.home, href: "/" },
     {
-      label: "Occasions",
+      label: labels.occasions,
       href: "/occasions",
       items: occasions.map((occasion) => ({
         label: occasionDisplayName(occasion.slug, occasion.name),
@@ -38,13 +43,13 @@ export function buildStoreNav({
       })),
     },
     {
-      label: "Categories",
+      label: labels.categories,
       href: "/categories",
       items: categories.map((category) => ({
         label: category.name,
         href: `/categories/${category.slug}`,
       })),
     },
-    { label: "Shops", href: "/shops" },
+    { label: labels.shops, href: "/shops" },
   ];
 }

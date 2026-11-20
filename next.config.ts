@@ -1,4 +1,8 @@
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
+
+// next-intl request config (locale + messages per request, P1-10).
+const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 // Optimized images may only come from this project's PUBLIC storage objects.
 // Derived from the environment (never hardcoded); no host is allowed if the
@@ -123,4 +127,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

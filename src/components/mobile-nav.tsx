@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { ChevronDownIcon, CloseIcon, MenuIcon } from "@/components/icons";
+import { LocaleSwitcher } from "@/components/locale-switcher";
 import { GuardedLink } from "@/components/navigation-guard";
 import { SearchForm } from "@/components/search-form";
 import { SignOutButton } from "@/components/sign-out-button";
@@ -20,6 +22,7 @@ export function MobileNav({
   showSignOut?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const t = useTranslations("common");
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
@@ -58,7 +61,7 @@ export function MobileNav({
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-controls="mobile-menu"
-        aria-label="Open menu"
+        aria-label={t("openMenu")}
         className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-line text-ink transition-colors hover:border-berry/40 hover:text-berry focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
       >
         <MenuIcon className="h-5 w-5" />
@@ -83,12 +86,12 @@ export function MobileNav({
               id="mobile-menu-title"
               className="font-display text-2xl leading-tight text-ink"
             >
-              Menu
+              {t("menu")}
             </h2>
             <button
               type="button"
               onClick={close}
-              aria-label="Close menu"
+              aria-label={t("closeMenu")}
               className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-line text-ink transition-colors hover:border-berry/40 hover:text-berry focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
             >
               <CloseIcon className="h-5 w-5" />
@@ -117,7 +120,7 @@ export function MobileNav({
                         onClick={close}
                         className="rounded-xl px-3 py-2 text-sm font-medium text-berry transition-colors hover:bg-berry-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
                       >
-                        View all {item.label.toLowerCase()}
+                        {t("viewAll", { label: item.label.toLowerCase() })}
                       </GuardedLink>
                       {item.items.length > 0 ? (
                         item.items.map((link) => (
@@ -132,7 +135,7 @@ export function MobileNav({
                         ))
                       ) : (
                         <p className="px-3 py-2 text-sm text-ink-mute">
-                          Nothing published yet.
+                          {t("nothingPublishedYet")}
                         </p>
                       )}
                     </div>
@@ -154,9 +157,10 @@ export function MobileNav({
           </nav>
 
           <nav
-            aria-label="Account"
+            aria-label={t("account")}
             className="mt-6 flex flex-wrap items-center gap-2 border-t border-line pt-4"
           >
+            <LocaleSwitcher />
             {account.map((link) => (
               <GuardedLink
                 key={link.href}
@@ -169,6 +173,8 @@ export function MobileNav({
             ))}
             {showSignOut ? (
               <SignOutButton
+                label={t("signOut")}
+                busyLabel={t("signingOut")}
                 className="rounded-full px-4 py-2 text-sm font-medium text-ink-mute transition-colors hover:text-berry focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
                 onDone={close}
               />

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 
 import { CategoryGlyph } from "@/components/category-glyph";
 import { ArrowRightIcon } from "@/components/icons";
@@ -45,7 +45,7 @@ export function CategoryTile({
         <span className="flex h-11 w-11 items-center justify-center rounded-full border border-berry/15 bg-paper/75 text-berry shadow-[0_8px_18px_-14px_oklch(0.33_0.13_12/0.7)] transition-transform duration-300 group-hover:-rotate-6 motion-reduce:transition-none motion-reduce:group-hover:rotate-0">
           <CategoryGlyph slug={category.slug} />
         </span>
-        <ArrowRightIcon className="mt-2 h-5 w-5 shrink-0 text-berry/80 transition-transform duration-300 group-hover:translate-x-1 motion-reduce:transition-none" />
+        <ArrowRightIcon className="mt-2 h-5 w-5 shrink-0 text-berry/80 transition-transform duration-300 group-hover:translate-x-1 motion-reduce:transition-none rtl:-scale-x-100" />
       </span>
 
       {previews.length > 0 ? (

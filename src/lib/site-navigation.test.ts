@@ -10,6 +10,7 @@ describe("buildStoreNav", () => {
         { name: "Gift Boxes", slug: "gift-boxes" },
       ],
       occasions: [{ name: "Graduation", slug: "graduation" }],
+      labels: { home: "Home", occasions: "Occasions", categories: "Categories", shops: "Shops" },
     });
 
     expect(nav.map((item) => item.label)).toEqual([
@@ -32,6 +33,7 @@ describe("buildStoreNav", () => {
     const nav = buildStoreNav({
       categories: [],
       occasions: [{ name: "Ramdan Night", slug: "ramdan-night" }],
+      labels: { home: "Home", occasions: "Occasions", categories: "Categories", shops: "Shops" },
     });
 
     expect(nav[1].items).toEqual([
@@ -40,7 +42,7 @@ describe("buildStoreNav", () => {
   });
 
   it("still offers the directory link when a listing read is empty", () => {
-    const nav = buildStoreNav({ categories: [], occasions: [] });
+    const nav = buildStoreNav({ categories: [], occasions: [], labels: { home: "Home", occasions: "Occasions", categories: "Categories", shops: "Shops" }, });
 
     expect(nav[1]).toMatchObject({ href: "/occasions", items: [] });
     expect(nav[2]).toMatchObject({ href: "/categories", items: [] });

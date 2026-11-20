@@ -41,6 +41,17 @@ export const WORKING_DAY_LABELS: Record<WorkingDay, string> = {
   sat: "Saturday",
 };
 
+/** Arabic day names for the storefront's Arabic slice (P1-10, H-15). */
+export const WORKING_DAY_LABELS_AR: Record<WorkingDay, string> = {
+  sun: "الأحد",
+  mon: "الاثنين",
+  tue: "الثلاثاء",
+  wed: "الأربعاء",
+  thu: "الخميس",
+  fri: "الجمعة",
+  sat: "السبت",
+};
+
 export type WorkingHours = Partial<
   Record<WorkingDay, { open: string; close: string }>
 >;
@@ -128,14 +139,17 @@ export function validateWorkingHours(hours: WorkingHours): string | null {
 
 export function formatWorkingHours(
   hours: WorkingHours,
+  locale: "en" | "ar" = "en",
 ): Array<{ day: WorkingDay; label: string; value: string }> {
+  const labels =
+    locale === "ar" ? WORKING_DAY_LABELS_AR : WORKING_DAY_LABELS;
   return WORKING_DAYS.flatMap((day) => {
     const slot = hours[day];
     if (!slot) return [];
     return [
       {
         day,
-        label: WORKING_DAY_LABELS[day],
+        label: labels[day],
         value: `${slot.open}–${slot.close}`,
       },
     ];
@@ -145,22 +159,45 @@ export function formatWorkingHours(
 export function formatPrepTime(
   minDays: number | null,
   maxDays: number | null,
+  locale: "en" | "ar" = "en",
 ): string | null {
   if (minDays === null && maxDays === null) return null;
 
   if (minDays !== null && maxDays !== null) {
     if (minDays === maxDays) {
-      return minDays === 0 ? "Same day" : formatDays(minDays);
+      return minDays === 0
+        ? locale === "ar"
+          ? "نفس اليوم"
+          : "Same day"
+        : formatDays(minDays, locale);
     }
-    if (minDays === 0) return `Up to ${formatDays(maxDays)}`;
-    return `${minDays}–${formatDays(maxDays)}`;
+    if (minDays === 0)
+      return locale === "ar"
+        ? `حتى ${formatDays(maxDays, locale)}`
+        : `Up to ${formatDays(maxDays, locale)}`;
+    return `${formatCount(minDays, locale)}–${formatDays(maxDays, locale)}`;
   }
 
   const value = minDays ?? maxDays;
-  return value === 0 ? "Same day" : formatDays(value ?? 0);
+  return value === 0
+    ? locale === "ar"
+      ? "نفس اليوم"
+      : "Same day"
+    : formatDays(value ?? 0, locale);
 }
 
-function formatDays(days: number): string {
+/** Arabic-Indic digits for Arabic phrases, Western digits otherwise. */
+function formatCount(n: number, locale: "en" | "ar"): string {
+  return locale === "ar"
+    ? new Intl.NumberFormat("ar-EG").format(n)
+    : String(n);
+}
+
+function formatDays(days: number, locale: "en" | "ar" = "en"): string {
+  if (locale === "ar") {
+    if (days === 1) return "يوم واحد";
+    return `${formatCount(days, locale)} أيام`;
+  }
   return `${days} ${days === 1 ? "day" : "days"}`;
 }
 

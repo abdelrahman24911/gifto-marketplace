@@ -1,8 +1,10 @@
+import { getTranslations } from "next-intl/server";
+
 import { GiftFinder } from "@/components/gift-finder";
 import { Container, SectionError, SectionHeading } from "@/components/ui/section";
 import type { GiftFinderPage } from "@/lib/gift-finder";
 
-export function GiftFinderSection({
+export async function GiftFinderSection({
   page,
   occasions,
 }: {
@@ -10,6 +12,10 @@ export function GiftFinderSection({
   page: GiftFinderPage | null;
   occasions: { name: string; slug: string }[];
 }) {
+  const t = await getTranslations("home");
+  const tg = await getTranslations("giftFinder");
+  const tc = await getTranslations("common");
+
   return (
     <section
       id="gift-finder"
@@ -17,15 +23,15 @@ export function GiftFinderSection({
     >
       <Container>
         <SectionHeading
-          eyebrow="A little help"
-          title="Gift Finder"
-          description="Answer three quick questions and see real gifts that fit the moment, the person, and your budget."
+          eyebrow={t("giftFinderEyebrow")}
+          title={tg("title")}
+          description={t("giftFinderDescription")}
         />
         {page ? (
           <GiftFinder initialPage={page} occasions={occasions} />
         ) : (
-          <SectionError title="We couldn't load Gift Finder">
-            Refresh the page to try again.
+          <SectionError title={tc("sectionLoadError")}>
+            {tc("refreshToRetry")}
           </SectionError>
         )}
       </Container>

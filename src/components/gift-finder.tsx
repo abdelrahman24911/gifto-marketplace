@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 
 import { ChevronDownIcon, SparkleIcon } from "@/components/icons";
 import { GuardedLink } from "@/components/navigation-guard";
@@ -41,6 +42,10 @@ export function GiftFinder({
   initialPage: GiftFinderPage;
   occasions: { name: string; slug: string }[];
 }) {
+  const t = useTranslations("giftFinder");
+  const th = useTranslations("home");
+  const tc = useTranslations("common");
+  const locale = useLocale();
   const [selection, setSelection] =
     useState<GiftFinderSelection>(DEFAULT_SELECTION);
   const [page, setPage] = useState<GiftFinderPage | null>(initialPage);
@@ -51,6 +56,49 @@ export function GiftFinder({
   const requestIdRef = useRef(0);
   const controllerRef = useRef<AbortController | null>(null);
   const focusSummaryRef = useRef(false);
+
+  // Budget bands are stored as minor amounts; labels are built from the
+  // numbers so the currency and digits follow the current locale.
+  const numberFormat = new Intl.NumberFormat(locale === "ar" ? "ar-EG" : "en", {
+    maximumFractionDigits: 0,
+  });
+  const wholePounds = (minor: number) => numberFormat.format(minor / 100);
+  const formatCount = (n: number) => numberFormat.format(n);
+
+  function recipientLabel(id: GiftFinderRecipientId): string {
+    switch (id) {
+      case "any":
+        return t("any");
+      case "her":
+        return t("recipientHer");
+      case "him":
+        return t("recipientHim");
+      case "kids":
+        return t("recipientKids");
+      case "home":
+        return t("recipientHome");
+      case "couples":
+        return t("recipientCouples");
+    }
+  }
+
+  function budgetLabel(option: {
+    id: GiftFinderBudgetId;
+    minMinor: number | null;
+    maxMinor: number | null;
+  }): string {
+    if (option.id === "any") return t("anyBudget");
+    if (option.minMinor === 0 && option.maxMinor !== null) {
+      return t("budgetUnder", { max: wholePounds(option.maxMinor) });
+    }
+    if (option.maxMinor === null) {
+      return t("budgetPlus", { min: wholePounds(option.minMinor ?? 0) });
+    }
+    return t("budgetRange", {
+      min: wholePounds(option.minMinor ?? 0),
+      max: wholePounds(option.maxMinor),
+    });
+  }
 
   useEffect(() => {
     return () => {
@@ -161,28 +209,26 @@ export function GiftFinder({
         <div>
           <p className="inline-flex items-center gap-2 rounded-full bg-berry-soft px-3 py-1.5 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-berry-deep">
             <SparkleIcon className="h-3.5 w-3.5" />
-            Three quick choices
+            {t("quickChoices")}
           </p>
           <h3 className="mt-5 font-display text-3xl leading-tight text-ink sm:text-4xl">
-            A thoughtful gift, without the endless scroll.
+            {t("introTitle")}
           </h3>
           <p className="mt-4 max-w-md text-sm leading-relaxed text-ink-soft">
-            Tell us who it&apos;s for, the moment, and what you&apos;d like to
-            spend. We&apos;ll narrow the real Gifto catalogue to gifts that fit.
+            {t("introBody")}
           </p>
           <p className="mt-6 text-xs leading-relaxed text-ink-mute">
-            Matches update as you choose. These are real products from real
-            shops — never generated suggestions.
+            {t("introNote")}
           </p>
         </div>
 
         <form
-          aria-label="Gift Finder filters"
+          aria-label={t("filtersLabel")}
           onSubmit={(event) => event.preventDefault()}
         >
           <div className="grid gap-4 sm:grid-cols-3">
             <label className={labelClass} htmlFor={`${formId}-recipient`}>
-              Who is it for?
+              {t("recipient")}
               <span className="relative">
                 <select
                   id={`${formId}-recipient`}
@@ -197,7 +243,7 @@ export function GiftFinder({
                 >
                   {GIFT_FINDER_RECIPIENTS.map((option) => (
                     <option key={option.id} value={option.id}>
-                      {option.label}
+                      {recipientLabel(option.id)}
                     </option>
                   ))}
                 </select>
@@ -206,7 +252,7 @@ export function GiftFinder({
             </label>
 
             <label className={labelClass} htmlFor={`${formId}-occasion`}>
-              What&apos;s the moment?
+              {t("momentLabel")}
               <span className="relative">
                 <select
                   id={`${formId}-occasion`}
@@ -217,7 +263,7 @@ export function GiftFinder({
                   }
                   className={selectClass}
                 >
-                  <option value="">Any occasion</option>
+                  <option value="">{t("anyOccasion")}</option>
                   {occasions.map((occasion) => (
                     <option key={occasion.slug} value={occasion.slug}>
                       {occasion.name}
@@ -229,7 +275,7 @@ export function GiftFinder({
             </label>
 
             <label className={labelClass} htmlFor={`${formId}-budget`}>
-              What&apos;s your budget?
+              {t("budget")}
               <span className="relative">
                 <select
                   id={`${formId}-budget`}
@@ -242,7 +288,7 @@ export function GiftFinder({
                 >
                   {GIFT_FINDER_BUDGET_OPTIONS.map((option) => (
                     <option key={option.id} value={option.id}>
-                      {option.label}
+                      {budgetLabel(option)}
                     </option>
                   ))}
                 </select>
@@ -252,16 +298,14 @@ export function GiftFinder({
           </div>
 
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-            <p className="text-xs text-ink-mute">
-              No account needed to browse.
-            </p>
+            <p className="text-xs text-ink-mute">{t("noAccountNote")}</p>
             <button
               type="button"
               onClick={reset}
               disabled={!hasFilters}
               className="rounded-full border border-line px-4 py-2 text-sm font-medium text-ink-soft transition-colors hover:border-berry/40 hover:text-berry disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
             >
-              Clear choices
+              {t("clearChoices")}
             </button>
           </div>
         </form>
@@ -279,25 +323,19 @@ export function GiftFinder({
             aria-live="polite"
             className="font-display text-2xl text-ink focus:outline-none"
           >
-            {loading
-              ? "Updating matches…"
-              : total === 1
-                ? "1 gift"
-                : `${total} gifts`}{" "}
+            {loading ? t("updatingMatches") : t("giftCount", { count: total })}{" "}
             <span className="ml-2 font-sans text-sm font-normal text-ink-mute">
               {loading
-                ? "checking the catalogue"
+                ? t("checkingCatalogue")
                 : hasFilters
-                  ? "match your choices"
-                  : "ready to explore"}
+                  ? t("matchYourChoices")
+                  : t("readyToExplore")}
               {!loading && page?.hasMore
-                ? ` · showing ${showing} of ${total}`
+                ? ` · ${t("showingOf", { showing: formatCount(showing), total: formatCount(total) })}`
                 : ""}
             </span>
           </p>
-          <p className="text-xs text-ink-mute">
-            Prices and stock are confirmed at checkout.
-          </p>
+          <p className="text-xs text-ink-mute">{t("pricesConfirmedNote")}</p>
         </div>
 
         {error ? (
@@ -306,22 +344,20 @@ export function GiftFinder({
             className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-berry/25 bg-berry-soft/60 px-4 py-3 text-sm text-berry-deep"
           >
             <span>
-              {error.append
-                ? "We couldn't load more gifts. Your current results are unchanged."
-                : "We couldn't update the matches. Try again."}
+              {error.append ? t("loadMoreError") : t("updateError")}
             </span>
             <button
               type="button"
               onClick={retry}
               className="rounded-full border border-berry/30 px-4 py-1.5 text-sm font-semibold transition-colors hover:bg-paper focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
             >
-              Try again
+              {tc("tryAgain")}
             </button>
           </div>
         ) : null}
 
         {!page && loading ? (
-          <p className="mt-5 text-sm text-ink-mute">Finding gifts…</p>
+          <p className="mt-5 text-sm text-ink-mute">{t("findingGifts")}</p>
         ) : null}
 
         {page && total > 0 ? (
@@ -368,7 +404,7 @@ export function GiftFinder({
                   disabled={loading}
                   className="inline-flex h-11 items-center rounded-full border border-line-strong bg-paper px-5 text-sm font-semibold text-ink transition-colors hover:border-berry/40 hover:text-berry disabled:cursor-wait disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
                 >
-                  {loading ? "Loading more…" : "Show more gifts"}
+                  {loading ? t("loadingMore") : t("showMoreGifts")}
                 </button>
               </div>
             ) : null}
@@ -380,20 +416,20 @@ export function GiftFinder({
             <EmptyState
               title={
                 page.occasionUnsupported
-                  ? "Gift Finder doesn't cover this moment yet"
-                  : "No gifts match those choices yet"
+                  ? t("unsupportedOccasionTitle")
+                  : t("noResultsTitle")
               }
             >
               {page.occasionUnsupported
-                ? "Try another occasion, or browse the full collection below."
-                : "Try a wider budget or another recipient — or browse all gifts."}
+                ? t("unsupportedOccasionBody")
+                : t("noResultsBody")}
             </EmptyState>
             <div className="mt-4 text-center">
               <GuardedLink
                 href="/search"
                 className="text-sm font-medium text-berry transition-colors hover:text-berry-deep"
               >
-                Browse all gifts
+                {th("browseAllGifts")}
               </GuardedLink>
             </div>
           </div>

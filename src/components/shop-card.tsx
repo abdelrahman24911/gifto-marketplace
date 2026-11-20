@@ -1,8 +1,9 @@
-import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 
 import { ArrowRightIcon } from "@/components/icons";
 import { ProductImage } from "@/components/product-image";
 import { ShopLogo } from "@/components/shop-logo";
+import { Link } from "@/i18n/navigation";
 import type { CatalogImagePreview } from "@/lib/catalog";
 
 type Shop = {
@@ -15,13 +16,14 @@ type Shop = {
   logoPath: string | null;
 };
 
-export function ShopCard({
+export async function ShopCard({
   shop,
   previews = [],
 }: {
   shop: Shop;
   previews?: CatalogImagePreview[];
 }) {
+  const t = await getTranslations("product");
   const location = [shop.city, shop.governorate].filter(Boolean).join(", ");
   const previewColumns =
     previews.length === 1
@@ -70,8 +72,8 @@ export function ShopCard({
       ) : null}
 
       <span className="mt-auto inline-flex items-center gap-1.5 pt-1 text-sm font-medium text-berry">
-        Visit shop
-        <ArrowRightIcon className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
+        {t("visitShop")}
+        <ArrowRightIcon className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1 motion-reduce:transition-none rtl:-scale-x-100" />
       </span>
     </Link>
   );

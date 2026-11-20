@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { ArrowRightIcon, ChevronDownIcon } from "@/components/icons";
 import { GuardedLink } from "@/components/navigation-guard";
@@ -19,6 +20,7 @@ export function NavDropdown({
   columns?: 1 | 2;
   active?: boolean;
 }) {
+  const t = useTranslations("common");
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -71,7 +73,7 @@ export function NavDropdown({
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         aria-controls={panelId}
-        aria-label={`${open ? "Close" : "Open"} ${label} menu`}
+        aria-label={`${open ? t("closeMenu") : t("openMenu")} ${label}`}
         className={`inline-flex h-8 w-7 items-center justify-center rounded-full transition-colors ${
           active
             ? "text-berry-deep hover:bg-berry-tint"
@@ -88,7 +90,7 @@ export function NavDropdown({
       {open ? (
         <div
           id={panelId}
-          className={`absolute left-0 top-full z-50 mt-2 overflow-hidden rounded-2xl border border-line bg-paper shadow-[0_24px_60px_-34px_oklch(0.28_0.03_40/0.45)] ${
+          className={`absolute start-0 top-full z-50 mt-2 overflow-hidden rounded-2xl border border-line bg-paper shadow-[0_24px_60px_-34px_oklch(0.28_0.03_40/0.45)] ${
             columns === 2 ? "w-[23rem]" : "w-64"
           }`}
         >
@@ -110,7 +112,7 @@ export function NavDropdown({
               ))
             ) : (
               <p className="col-span-full px-3 py-2 text-sm text-ink-mute">
-                Nothing published yet.
+                {t("nothingPublishedYet")}
               </p>
             )}
           </div>
@@ -119,7 +121,7 @@ export function NavDropdown({
             onClick={() => setOpen(false)}
             className="flex items-center justify-between gap-3 border-t border-line bg-paper-soft/70 px-4 py-3 text-sm font-medium text-berry transition-colors hover:bg-berry-soft hover:text-berry-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
           >
-            View all {label.toLowerCase()}
+            {t("viewAll", { label: label.toLowerCase() })}
             <ArrowRightIcon className="h-4 w-4" />
           </GuardedLink>
         </div>

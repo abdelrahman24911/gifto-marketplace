@@ -1,17 +1,18 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 
 import { useCart } from "@/components/cart-provider";
 import { MinusIcon, PlusIcon } from "@/components/icons";
+import { Link } from "@/i18n/navigation";
 import {
   buildBuyNowHref,
   clampPurchaseQuantity,
   maxPurchasableQuantity,
 } from "@/lib/buy-now";
 import type { CartItem } from "@/lib/cart";
-import { formatEgp } from "@/lib/money";
+import { formatEgp, type MoneyLocale } from "@/lib/money";
 
 type PurchaseItem = Omit<CartItem, "quantity">;
 
@@ -22,6 +23,9 @@ export function ProductPurchasePanel({
   item: PurchaseItem;
   acceptingOrders: boolean;
 }) {
+  const t = useTranslations("product");
+  const tc = useTranslations("common");
+  const locale = useLocale() as MoneyLocale;
   const { add, items } = useCart();
   const [quantity, setQuantity] = useState(1);
   const [addedQuantity, setAddedQuantity] = useState<number | null>(null);
@@ -48,18 +52,18 @@ export function ProductPurchasePanel({
     return (
       <div className="rounded-2xl border border-line bg-paper-deep/65 p-4">
         <p className="text-sm font-medium text-ink">
-          {soldOut ? "This gift is sold out." : `${item.vendorName} has paused new orders.`}
+          {soldOut
+            ? t("soldOutMessage")
+            : t("pausedMessage", { shop: item.vendorName })}
         </p>
         <p className="mt-1 text-sm text-ink-soft">
-          {soldOut
-            ? "It may come back — browse the shop for other gifts in the meantime."
-            : "You can still browse the shop; checkout will reopen when orders resume."}
+          {soldOut ? t("soldOutBody") : t("pausedBody")}
         </p>
         <Link
           href={`/shops/${item.vendorSlug}`}
           className="mt-3 inline-block text-sm font-medium text-berry hover:text-berry-deep"
         >
-          Visit {item.vendorName}
+          {t("visitShopName", { shop: item.vendorName })}
         </Link>
       </div>
     );
@@ -67,11 +71,11 @@ export function ProductPurchasePanel({
 
   const status =
     addedQuantity !== null
-      ? `Added ${addedQuantity} to your cart.`
+      ? t("addedToCart", { count: addedQuantity })
       : inCart
         ? atCartLimit
-          ? `Maximum quantity (${maxQuantity}) in your cart.`
-          : `${inCart.quantity} in your cart.`
+          ? t("maxInCart", { max: maxQuantity })
+          : t("inYourCart", { count: inCart.quantity })
         : "";
 
   return (
@@ -82,7 +86,7 @@ export function ProductPurchasePanel({
             htmlFor={`quantity-${item.productId}`}
             className="text-sm font-medium text-ink"
           >
-            Quantity
+            {t("quantity")}
           </label>
 
           <div className="inline-flex items-center rounded-full border border-line bg-paper p-1">
@@ -91,7 +95,7 @@ export function ProductPurchasePanel({
               onClick={() => changeQuantity(quantity - 1)}
               disabled={quantity <= 1}
               className="inline-flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-berry-soft hover:text-berry-deep disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
-              aria-label="Decrease quantity"
+              aria-label={t("decreaseQuantity")}
             >
               <MinusIcon className="h-4 w-4" />
             </button>
@@ -116,13 +120,15 @@ export function ProductPurchasePanel({
               onClick={() => changeQuantity(quantity + 1)}
               disabled={quantity >= maxQuantity}
               className="inline-flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-berry-soft hover:text-berry-deep disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
-              aria-label="Increase quantity"
+              aria-label={t("increaseQuantity")}
             >
               <PlusIcon className="h-4 w-4" />
             </button>
           </div>
 
-          <span className="text-xs text-ink-mute">Up to {maxQuantity}</span>
+          <span className="text-xs text-ink-mute">
+            {t("upTo", { count: maxQuantity })}
+          </span>
         </div>
 
         <div className="grid gap-2.5 sm:grid-cols-2">
@@ -132,7 +138,7 @@ export function ProductPurchasePanel({
             disabled={atCartLimit}
             className="inline-flex min-h-12 items-center justify-center rounded-full border border-berry/25 bg-paper px-5 py-3 text-sm font-semibold text-berry-deep transition-colors hover:border-berry/45 hover:bg-berry-soft disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
           >
-            Add to cart
+            {t("addToCart")}
           </button>
 
           <Link
@@ -140,7 +146,7 @@ export function ProductPurchasePanel({
             prefetch={false}
             className="inline-flex min-h-12 items-center justify-center rounded-full bg-berry px-5 py-3 text-sm font-semibold text-paper shadow-[0_14px_30px_-18px_oklch(0.33_0.13_12/0.8)] transition-colors hover:bg-berry-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
           >
-            Buy now
+            {t("buyNow")}
           </Link>
         </div>
 
@@ -154,14 +160,13 @@ export function ProductPurchasePanel({
               href="/cart"
               className="font-medium text-berry hover:text-berry-deep"
             >
-              View cart
+              {tc("viewCart")}
             </Link>
           ) : null}
         </p>
 
         <p className="text-xs leading-relaxed text-ink-mute">
-          Buy now checks out only this gift and keeps everything already in your
-          cart.
+          {t("buyNowNote")}
         </p>
       </div>
 
@@ -172,7 +177,7 @@ export function ProductPurchasePanel({
               {quantity} × {item.name}
             </p>
             <p className="font-display text-lg leading-tight text-ink">
-              {formatEgp(item.priceMinor * quantity)}
+              {formatEgp(item.priceMinor * quantity, locale)}
             </p>
           </div>
           <Link
@@ -180,7 +185,7 @@ export function ProductPurchasePanel({
             prefetch={false}
             className="inline-flex shrink-0 items-center justify-center rounded-full bg-berry px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-berry-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
           >
-            Buy now
+            {t("buyNow")}
           </Link>
         </div>
       </div>

@@ -1,3 +1,5 @@
+import { getTranslations } from "next-intl/server";
+
 import {
   ArrowRightIcon,
   BanknoteIcon,
@@ -8,13 +10,13 @@ import {
 import { GuardedLink } from "@/components/navigation-guard";
 import { Container, Eyebrow } from "@/components/ui/section";
 
-const TRUST = [
-  { icon: ShieldIcon, label: "Every shop reviewed by Gifto" },
-  { icon: BanknoteIcon, label: "Cash on delivery" },
-  { icon: TruckIcon, label: "Free delivery at launch" },
-];
-
-function HeroArt() {
+function HeroArt({
+  wrappedWithCare,
+  madeForGiving,
+}: {
+  wrappedWithCare: string;
+  madeForGiving: string;
+}) {
   return (
     <div
       aria-hidden
@@ -292,16 +294,24 @@ function HeroArt() {
 
       <span className="absolute left-0 top-[21%] hidden -rotate-3 items-center gap-1.5 rounded-full border border-line bg-paper/95 px-3 py-1.5 text-xs font-medium text-ink-soft shadow-[0_12px_24px_-20px_oklch(0.33_0.13_12/0.55)] sm:flex">
         <SparkleIcon className="h-3.5 w-3.5 text-gold" />
-        Wrapped with care
+        {wrappedWithCare}
       </span>
       <span className="absolute bottom-[15%] right-0 rotate-2 rounded-full border border-line bg-paper/95 px-3 py-1.5 text-xs font-medium text-ink-soft shadow-[0_12px_24px_-20px_oklch(0.33_0.13_12/0.55)]">
-        Made for giving
+        {madeForGiving}
       </span>
     </div>
   );
 }
 
-export function HomeHero() {
+export async function HomeHero() {
+  const t = await getTranslations("home");
+  const ta = await getTranslations("announcement");
+  const trust = [
+    { icon: ShieldIcon, label: ta("reviewedShops") },
+    { icon: BanknoteIcon, label: ta("cashOnDelivery") },
+    { icon: TruckIcon, label: ta("freeDelivery") },
+  ];
+
   return (
     <section className="relative overflow-hidden border-b border-line">
       <div
@@ -315,14 +325,13 @@ export function HomeHero() {
 
       <Container className="relative grid items-center gap-10 py-12 sm:py-16 lg:grid-cols-[1.02fr_0.98fr] lg:gap-8 lg:py-20">
         <div className="gifto-rise">
-          <Eyebrow>Gifts in Egypt</Eyebrow>
+          <Eyebrow>{t("heroEyebrowText")}</Eyebrow>
           <h1 className="mt-4 font-display text-[clamp(2.65rem,6vw,4.4rem)] leading-[1.02] tracking-[-0.025em] text-ink">
-            Gifts in Egypt,{" "}
-            <span className="text-berry">wrapped properly.</span>
+            {t("heroTitleA")}{" "}
+            <span className="text-berry">{t("heroTitleB")}</span>
           </h1>
           <p className="mt-6 max-w-xl text-base leading-relaxed text-ink-soft sm:text-lg">
-            Thoughtful gifts from independent Egyptian shops — for the moments
-            worth celebrating. Browse real gifts, then pay cash on delivery.
+            {t("heroSubtitleText")}
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -330,19 +339,19 @@ export function HomeHero() {
               href="/search"
               className="group inline-flex h-12 items-center gap-2 rounded-full bg-berry px-6 text-sm font-semibold text-paper transition-colors hover:bg-berry-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
             >
-              Shop gifts
-              <ArrowRightIcon className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1 motion-reduce:transition-none" />
+              {t("shopGifts")}
+              <ArrowRightIcon className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1 motion-reduce:transition-none rtl:-scale-x-100" />
             </GuardedLink>
             <GuardedLink
               href="/#gift-finder"
               className="inline-flex h-12 items-center rounded-full border border-line-strong bg-paper/60 px-6 text-sm font-semibold text-ink transition-colors hover:border-berry/40 hover:text-berry focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
             >
-              Find a gift
+              {t("findGift")}
             </GuardedLink>
           </div>
 
           <ul className="mt-9 flex flex-wrap gap-x-5 gap-y-2.5 border-t border-line pt-5 text-xs text-ink-soft">
-            {TRUST.map((item) => (
+            {trust.map((item) => (
               <li key={item.label} className="flex items-center gap-1.5">
                 <item.icon className="h-4 w-4 text-berry/80" />
                 {item.label}
@@ -352,7 +361,7 @@ export function HomeHero() {
         </div>
 
         <div className="relative">
-          <HeroArt />
+          <HeroArt wrappedWithCare={t("wrappedWithCare")} madeForGiving={t("madeForGiving")} />
         </div>
       </Container>
     </section>

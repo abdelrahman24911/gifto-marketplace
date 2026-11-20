@@ -114,14 +114,20 @@ export function SectionError({
   );
 }
 
-/** Text breadcrumb. The final item is the current page (not a link). */
+/**
+ * Text breadcrumb. The final item is the current page (not a link).
+ * `ariaLabel` is translated by storefront callers; admin/policy callers
+ * keep the English default (no intl provider outside `[locale]`).
+ */
 export function Breadcrumb({
   items,
+  ariaLabel = "Breadcrumb",
 }: {
   items: { href?: string; label: string }[];
+  ariaLabel?: string;
 }) {
   return (
-    <nav aria-label="Breadcrumb" className="text-sm text-ink-mute">
+    <nav aria-label={ariaLabel} className="text-sm text-ink-mute">
       <ol className="flex flex-wrap items-center gap-2">
         {items.map((item, index) => (
           <li key={`${item.label}-${index}`} className="flex items-center gap-2">

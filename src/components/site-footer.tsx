@@ -1,3 +1,5 @@
+import { getTranslations } from "next-intl/server";
+
 import { GiftoMark } from "@/components/icons";
 import { GuardedLink } from "@/components/navigation-guard";
 import { Container } from "@/components/ui/section";
@@ -8,57 +10,10 @@ type FooterLink = {
 };
 
 type FooterColumn = {
+  id: string;
   title: string;
   links: FooterLink[];
 };
-
-const COLUMNS: FooterColumn[] = [
-  {
-    title: "Shop",
-    links: [
-      { href: "/occasions", label: "Shop by occasion" },
-      { href: "/categories", label: "Shop by category" },
-      { href: "/shops", label: "All shops" },
-      { href: "/search", label: "Search gifts" },
-      { href: "/#fresh-picks", label: "Fresh Picks" },
-      { href: "/#gift-finder", label: "Gift Finder" },
-    ],
-  },
-  {
-    title: "Explore",
-    links: [
-      { href: "/#how-it-works", label: "How Gifto works" },
-      { href: "/occasions", label: "Gift occasions" },
-      { href: "/categories", label: "Gift categories" },
-      { href: "/shops", label: "Meet the shops" },
-      { href: "/#gift-finder", label: "Find a gift" },
-    ],
-  },
-  {
-    title: "Support",
-    links: [
-      { href: "/help", label: "Help centre" },
-      { href: "/delivery-returns", label: "Delivery & returns" },
-      { href: "/contact", label: "Contact us" },
-    ],
-  },
-  {
-    title: "Sellers",
-    links: [
-      { href: "/login", label: "Seller sign in" },
-      { href: "/help#selling-on-gifto", label: "Seller guide" },
-      { href: "/contact#seller-enquiries", label: "Become a seller" },
-    ],
-  },
-  {
-    title: "Legal",
-    links: [
-      { href: "/privacy", label: "Privacy policy" },
-      { href: "/terms", label: "Terms of use" },
-      { href: "/refund-policy", label: "Refund policy" },
-    ],
-  },
-];
 
 function FooterLinkItem({ link }: { link: FooterLink }) {
   return (
@@ -71,7 +26,63 @@ function FooterLinkItem({ link }: { link: FooterLink }) {
   );
 }
 
-export function SiteFooter() {
+export async function SiteFooter() {
+  const t = await getTranslations("footer");
+  const ta = await getTranslations("announcement");
+
+  const columns: FooterColumn[] = [
+    {
+      id: "shop",
+      title: t("shop"),
+      links: [
+        { href: "/occasions", label: t("shopByOccasion") },
+        { href: "/categories", label: t("shopByCategory") },
+        { href: "/shops", label: t("allShops") },
+        { href: "/search", label: t("searchGifts") },
+        { href: "/#fresh-picks", label: t("freshPicks") },
+        { href: "/#gift-finder", label: t("giftFinder") },
+      ],
+    },
+    {
+      id: "explore",
+      title: t("explore"),
+      links: [
+        { href: "/#how-it-works", label: t("howItWorks") },
+        { href: "/occasions", label: t("giftOccasions") },
+        { href: "/categories", label: t("giftCategories") },
+        { href: "/shops", label: t("meetShops") },
+        { href: "/#gift-finder", label: t("findGift") },
+      ],
+    },
+    {
+      id: "support",
+      title: t("support"),
+      links: [
+        { href: "/help", label: t("helpCentre") },
+        { href: "/delivery-returns", label: t("deliveryReturns") },
+        { href: "/contact", label: t("contactUs") },
+      ],
+    },
+    {
+      id: "sellers",
+      title: t("sellers"),
+      links: [
+        { href: "/login", label: t("sellerSignIn") },
+        { href: "/help#selling-on-gifto", label: t("sellerGuide") },
+        { href: "/contact#seller-enquiries", label: t("becomeSeller") },
+      ],
+    },
+    {
+      id: "legal",
+      title: t("legal"),
+      links: [
+        { href: "/privacy", label: t("privacyPolicy") },
+        { href: "/terms", label: t("termsOfUse") },
+        { href: "/refund-policy", label: t("refundPolicy") },
+      ],
+    },
+  ];
+
   return (
     <footer className="mt-20 border-t border-line bg-paper-deep">
       <Container className="py-14">
@@ -87,21 +98,20 @@ export function SiteFooter() {
               </span>
             </GuardedLink>
             <p className="mt-4 max-w-xs font-display text-2xl leading-tight text-ink">
-              Gifts in Egypt,
+              {t("taglineA")}
               <br />
-              wrapped properly.
+              {t("taglineB")}
             </p>
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-ink-soft">
-              A curated marketplace of independent gift shops. Each shop wraps,
-              packs, and delivers its own gifts — with cash on delivery.
+              {t("about")}
             </p>
             <p className="mt-5 inline-flex items-center gap-2 rounded-full border border-line-strong/70 bg-paper px-3 py-1.5 text-xs font-medium text-ink-soft">
               <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-berry" />
-              Every shop reviewed by Gifto
+              {ta("reviewedShops")}
             </p>
           </div>
 
-          {COLUMNS.map((column) => (
+          {columns.map((column) => (
             <div key={column.title}>
               <p className="text-[0.7rem] font-semibold uppercase tracking-[0.22em] text-berry">
                 {column.title}
@@ -113,9 +123,9 @@ export function SiteFooter() {
                   </li>
                 ))}
               </ul>
-              {column.title === "Sellers" ? (
+              {column.id === "sellers" ? (
                 <p className="mt-4 max-w-[13rem] text-xs leading-relaxed text-ink-mute">
-                  New shops join by invitation. Existing sellers sign in above.
+                  {t("sellersNote")}
                 </p>
               ) : null}
             </div>
@@ -123,8 +133,8 @@ export function SiteFooter() {
         </div>
 
         <div className="mt-12 flex flex-col gap-2 border-t border-line pt-6 text-xs text-ink-mute sm:flex-row sm:items-center sm:justify-between">
-          <p>© {new Date().getFullYear()} Gifto. Cash on delivery only.</p>
-          <p>Prices and stock are confirmed by each shop at checkout.</p>
+          <p>{t("copyright", { year: new Date().getFullYear() })}</p>
+          <p>{t("pricesNote")}</p>
         </div>
       </Container>
     </footer>

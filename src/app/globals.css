@@ -64,6 +64,19 @@ body {
   font-family: var(--font-sans);
 }
 
+/*
+ * Arabic slice (P1-10, H-15): in RTL the Latin faces have no Arabic glyphs,
+ * so the body and display faces switch to IBM Plex Sans Arabic. Latin
+ * characters inside Arabic text still fall back through the stack.
+ */
+html[dir="rtl"] body {
+  font-family: var(--font-arabic-sans), var(--font-sans);
+}
+
+html[dir="rtl"] .font-display {
+  font-family: var(--font-arabic-sans), var(--font-display);
+}
+
 ::selection {
   background: var(--color-berry-tint);
   color: var(--color-berry-deep);

@@ -13,7 +13,13 @@ type ProductTab = {
   content: ReactNode;
 };
 
-export function ProductDetails({ tabs }: { tabs: ProductTab[] }) {
+export function ProductDetails({
+  tabs,
+  ariaLabel,
+}: {
+  tabs: ProductTab[];
+  ariaLabel: string;
+}) {
   const baseId = useId();
   const [activeId, setActiveId] = useState(tabs[0]?.id ?? "");
 
@@ -60,7 +66,7 @@ export function ProductDetails({ tabs }: { tabs: ProductTab[] }) {
     <section className="rounded-3xl border border-line bg-paper-soft p-5 sm:p-7">
       <div
         role="tablist"
-        aria-label="Product information"
+        aria-label={ariaLabel}
         className="inline-flex flex-wrap gap-1 rounded-full border border-line bg-paper p-1"
       >
         {tabs.map((tab) => {

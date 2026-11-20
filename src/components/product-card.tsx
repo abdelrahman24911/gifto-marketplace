@@ -1,8 +1,11 @@
-import Link from "next/link";
+"use client";
+
+import { useLocale, useTranslations } from "next-intl";
 
 import { ProductImage } from "@/components/product-image";
 import { QuickAddButton } from "@/components/quick-add-button";
-import { formatEgp } from "@/lib/money";
+import { Link } from "@/i18n/navigation";
+import { formatEgp, type MoneyLocale } from "@/lib/money";
 import type { QuickAddItem } from "@/lib/quick-add";
 
 type ProductCardProps = {
@@ -37,6 +40,8 @@ function CardMedia({
   imageAlt: string | null;
   soldOut: boolean;
 }) {
+  const t = useTranslations("product");
+
   return (
     <div className="relative overflow-hidden bg-gradient-to-br from-berry-soft via-paper-deep to-gold-soft">
       {!imagePath ? (
@@ -57,7 +62,7 @@ function CardMedia({
       />
       {soldOut ? (
         <span className="absolute left-3 top-3 z-20 rounded-full bg-paper/95 px-2.5 py-1 text-[0.7rem] font-medium uppercase tracking-[0.14em] text-ink-soft">
-          Sold out
+          {t("soldOut")}
         </span>
       ) : null}
     </div>
@@ -75,6 +80,8 @@ function CardBody({
   vendorName?: string | null;
   categoryName?: string | null;
 }) {
+  const locale = useLocale() as MoneyLocale;
+
   return (
     <div className="flex flex-1 flex-col gap-1 p-4">
       {categoryName ? (
@@ -90,7 +97,9 @@ function CardBody({
       ) : null}
 
       <div className="mt-auto pt-3">
-        <p className="font-display text-lg text-ink">{formatEgp(priceMinor)}</p>
+        <p className="font-display text-lg text-ink">
+          {formatEgp(priceMinor, locale)}
+        </p>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { useCart } from "@/components/cart-provider";
 import { CheckIcon, PlusIcon } from "@/components/icons";
@@ -16,6 +17,7 @@ export function QuickAddButton({
   acceptingOrders: boolean;
   className?: string;
 }) {
+  const t = useTranslations("product");
   const { add, items } = useCart();
   const [added, setAdded] = useState(false);
 
@@ -34,9 +36,9 @@ export function QuickAddButton({
     return (
       <span
         className={`inline-flex h-9 w-full items-center justify-center rounded-full border border-line bg-paper-deep/60 px-3 text-xs font-medium text-ink-mute ${className}`}
-        title={`${item.vendorName} has paused new orders.`}
+        title={t("pausedMessage", { shop: item.vendorName })}
       >
-        Shop paused
+        {t("quickAddShopPaused")}
       </span>
     );
   }
@@ -46,7 +48,7 @@ export function QuickAddButton({
       <span
         className={`inline-flex h-9 w-full items-center justify-center rounded-full border border-line bg-paper-deep/60 px-3 text-xs font-medium text-ink-mute ${className}`}
       >
-        Sold out
+        {t("soldOut")}
       </span>
     );
   }
@@ -55,9 +57,9 @@ export function QuickAddButton({
     return (
       <span
         className={`inline-flex h-9 w-full items-center justify-center rounded-full border border-line bg-paper-deep/60 px-3 text-xs font-medium text-ink-mute ${className}`}
-        title={`The maximum quantity is already in your cart.`}
+        title={t("quickAddMaxInCartTitle")}
       >
-        Max in cart
+        {t("quickAddMaxInCart")}
       </span>
     );
   }
@@ -73,8 +75,8 @@ export function QuickAddButton({
         disabled={added}
         aria-label={
           added
-            ? `Added to cart: ${item.name}`
-            : `Add to cart: ${item.name}`
+            ? t("quickAddAddedLabel", { name: item.name })
+            : t("quickAddAddLabel", { name: item.name })
         }
         className={`inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-full border border-berry/25 bg-paper px-3 text-xs font-semibold text-berry-deep transition-colors hover:border-berry/45 hover:bg-berry-soft disabled:cursor-wait disabled:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry ${className}`}
       >
@@ -83,10 +85,10 @@ export function QuickAddButton({
         ) : (
           <PlusIcon className="h-3.5 w-3.5" />
         )}
-        {added ? "Added" : "Add to cart"}
+        {added ? t("quickAddAdded") : t("addToCart")}
       </button>
       <span aria-live="polite" className="sr-only">
-        {added ? `${item.name} added to your cart.` : ""}
+        {added ? t("quickAddAddedToCart", { name: item.name }) : ""}
       </span>
     </>
   );

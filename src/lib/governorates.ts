@@ -149,3 +149,17 @@ export function partitionGovernorates(values: readonly string[]): {
 
   return { canonical, unmappable };
 }
+
+/**
+ * Display name for a stored (canonical English) governorate value in the
+ * requested locale. Arabic uses the known Arabic name; anything unmapped
+ * renders as stored, never guessed.
+ */
+export function governorateDisplayName(
+  en: string | null,
+  locale: "en" | "ar",
+): string | null {
+  if (!en) return null;
+  if (locale !== "ar") return en;
+  return GOVERNORATES.find((governorate) => governorate.en === en)?.ar ?? en;
+}

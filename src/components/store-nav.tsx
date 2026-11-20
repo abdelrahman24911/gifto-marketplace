@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 
 import { GuardedLink } from "@/components/navigation-guard";
 import { NavDropdown } from "@/components/nav-dropdown";
+import { stripLocalePrefix } from "@/lib/locale-path";
 import type { StoreNavItem } from "@/lib/site-navigation";
 
 const navLinkClass =
@@ -11,6 +12,9 @@ const navLinkClass =
 
 export function StoreNav({ nav }: { nav: StoreNavItem[] }) {
   const pathname = usePathname();
+  // The browser pathname carries the locale prefix (`/ar/shops`); strip it
+  // before comparing with the unprefixed nav hrefs.
+  const barePathname = stripLocalePrefix(pathname ?? "/");
 
   return (
     <nav
@@ -20,9 +24,9 @@ export function StoreNav({ nav }: { nav: StoreNavItem[] }) {
       {nav.map((item) => {
         const active =
           item.href === "/"
-            ? pathname === "/"
-            : pathname === item.href ||
-              pathname.startsWith(`${item.href}/`);
+            ? barePathname === "/"
+            : barePathname === item.href ||
+              barePathname.startsWith(`${item.href}/`);
 
         if (item.items) {
           return (

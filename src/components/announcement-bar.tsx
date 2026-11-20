@@ -1,20 +1,15 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { PauseIcon, PlayIcon } from "@/components/icons";
 import { Container } from "@/components/ui/section";
 
-const ITEMS = [
-  "Free delivery at launch",
-  "Cash on delivery",
-  "Every shop reviewed by Gifto",
-] as const;
-
-function StaticItems() {
+function StaticItems({ items }: { items: string[] }) {
   return (
     <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center text-[0.72rem] tracking-[0.06em] sm:text-xs">
-      {ITEMS.map((item, index) => (
+      {items.map((item, index) => (
         <Fragment key={item}>
           {index > 0 ? (
             <span aria-hidden className="text-gold">
@@ -28,10 +23,10 @@ function StaticItems() {
   );
 }
 
-function MarqueeTrack() {
+function MarqueeTrack({ items }: { items: string[] }) {
   return (
     <div className="flex shrink-0 items-center gap-6 pr-6 text-[0.72rem] tracking-[0.06em] sm:text-xs">
-      {ITEMS.map((item) => (
+      {items.map((item) => (
         <Fragment key={item}>
           <span className="whitespace-nowrap">{item}</span>
           <span aria-hidden className="text-gold">
@@ -44,8 +39,11 @@ function MarqueeTrack() {
 }
 
 export function AnnouncementBar() {
+  const t = useTranslations("announcement");
   const [paused, setPaused] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
+
+  const items = [t("freeDelivery"), t("cashOnDelivery"), t("reviewedShops")];
 
   useEffect(() => {
     const query = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -65,7 +63,7 @@ export function AnnouncementBar() {
           }`}
         >
           {reducedMotion ? (
-            <StaticItems />
+            <StaticItems items={items} />
           ) : (
             <>
               <div className="relative min-w-0 flex-1 overflow-hidden">
@@ -75,20 +73,15 @@ export function AnnouncementBar() {
                     paused ? "[animation-play-state:paused]" : ""
                   }`}
                 >
-                  <MarqueeTrack />
-                  <MarqueeTrack />
+                  <MarqueeTrack items={items} />
+                  <MarqueeTrack items={items} />
                 </div>
-                <span className="sr-only">
-                  Free delivery at launch. Cash on delivery. Every shop reviewed
-                  by Gifto.
-                </span>
+                <span className="sr-only">{t("full")}</span>
               </div>
               <button
                 type="button"
                 onClick={() => setPaused((value) => !value)}
-                aria-label={
-                  paused ? "Play announcements" : "Pause announcements"
-                }
+                aria-label={paused ? t("play") : t("pause")}
                 className="ml-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-paper/20 text-paper/80 transition-colors hover:bg-paper/10 hover:text-paper focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
               >
                 {paused ? (
@@ -101,7 +94,7 @@ export function AnnouncementBar() {
           )}
         </div>
         <div className={reducedMotion ? "hidden" : "flex sm:hidden"}>
-          <StaticItems />
+          <StaticItems items={items} />
         </div>
       </Container>
     </div>

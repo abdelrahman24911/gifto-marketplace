@@ -1,10 +1,14 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import createIntlMiddleware from "next-intl/middleware";
+
+import { routing } from "./i18n/routing";
 
 /**
  * Keeps the Supabase auth cookies fresh on every request (Next 16 `proxy`
  * convention — the `middleware` file convention is deprecated) and redirects
- * anonymous visitors away from authenticated-only areas.
+ * anonymous visitors away from authenticated-only areas. Also runs the
+ * next-intl locale routing for the localised routes (P1-10, H-15).
  *
  * Route guards here are a convenience layer only. Each protected page still
  * verifies the session server-side, and all data access is enforced by Row
@@ -15,7 +19,64 @@ import { NextResponse, type NextRequest } from "next/server";
 // Auth account. Authenticated checkout still branches on the verified session
 // inside the page and Server Action.
 const PROTECTED_PREFIXES = ["/account", "/admin", "/vendor"];
+
+// Routes that live under the `[locale]` segment (storefront + auth).
+// Vendor, admin, /auth/* callbacks and API routes are NOT localised and
+// never reach the intl middleware, so their URLs are untouched.
+const LOCALIZED_PREFIXES = [
+  "/shops",
+  "/categories",
+  "/occasions",
+  "/search",
+  "/cart",
+  "/checkout",
+  "/account",
+  "/orders",
+  "/contact",
+  "/help",
+  "/terms",
+  "/privacy",
+  "/refund-policy",
+  "/delivery-returns",
+  "/login",
+  "/signup",
+  "/forgot-password",
+  "/reset-password",
+];
+
+function isLocalizedPath(pathname: string): boolean {
+  if (pathname === "/") return true;
+  if (/^\/(ar|en)(\/|$)/.test(pathname)) return true;
+  return LOCALIZED_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
+function stripLocalePrefix(pathname: string): string {
+  return pathname.replace(/^\/(ar|en)(?=\/|$)/, "") || "/";
+}
+
+function localePrefix(pathname: string): string {
+  const match = /^\/(ar|en)(?=\/|$)/.exec(pathname);
+  return match ? `/${match[1]}` : "";
+}
+
+const intlMiddleware = createIntlMiddleware(routing);
+
 export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // 1. Supabase session refresh + route guards. The guard sees the path
+  // without its locale prefix and the /login target keeps the locale so an
+  // Arabic visitor returns to the Arabic page.
+  //
+  // This runs first so that a locale rewrite/redirect below can carry the
+  // refreshed auth cookies with it. Route guards are a convenience layer
+  // only: each protected page still verifies the session server-side, and
+  // all data access is enforced by Row Level Security.
+  const barePathname = stripLocalePrefix(pathname);
+  const prefix = localePrefix(pathname);
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -51,14 +112,15 @@ export async function proxy(request: NextRequest) {
 
   // Route guards. This is convenience only: every protected page ALSO verifies
   // the session server-side, and data access is enforced by RLS regardless.
-  const { pathname } = request.nextUrl;
   const isProtected = PROTECTED_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+    (protectedPrefix) =>
+      barePathname === protectedPrefix ||
+      barePathname.startsWith(`${protectedPrefix}/`),
   );
 
   if (isProtected && !user) {
     const url = request.nextUrl.clone();
-    url.pathname = "/login";
+    url.pathname = `${prefix}/login`;
     url.search = "";
     url.searchParams.set(
       "next",
@@ -71,6 +133,51 @@ export async function proxy(request: NextRequest) {
       redirectResponse.cookies.set(cookie);
     }
     return redirectResponse;
+  }
+
+  // 2. Locale routing for localised routes only. With
+  // `localePrefix: "as-needed"` a bare storefront path is rewritten
+  // internally to `/en/…` (URL unchanged) and an Arabic path stays `/ar/…`.
+  //
+  // A rewrite or redirect response must be returned AS-IS: copying its
+  // `x-middleware-rewrite` header onto a `NextResponse.next()` response
+  // gives the server both signals at once and it answers with a 307 to the
+  // original path (self-redirect loop). Refreshed auth cookies are merged
+  // onto the intl response instead. Only when intl returns `next()` are
+  // its `x-middleware-*` headers (the `X-NEXT-INTL-LOCALE` request header
+  // the root layout reads) merged onto the Supabase response.
+  //
+  // Next re-runs the proxy for the rewritten URL, so a bare-path rewrite
+  // (`/shops` → `/en/shops`) is followed by a second invocation for
+  // `/en/shops` — and intl would redirect that back to `/shops`, an
+  // infinite loop. The second invocation is recognisable because the
+  // first run's rewrite response set the `X-NEXT-INTL-LOCALE` request
+  // header on the re-dispatched request (a browser never sends it), so
+  // skip intl there and let the rewritten page render. A direct browser
+  // request to `/en/shops` has no such header and still gets the
+  // canonical redirect to `/shops`.
+  const isInternalRewriteRedispatch =
+    request.headers.get("x-next-intl-locale") !== null &&
+    /^\/(ar|en)(\/|$)/.test(pathname);
+  if (isLocalizedPath(pathname) && !isInternalRewriteRedispatch) {
+    const intlResponse = intlMiddleware(request);
+    const isRewriteOrRedirect =
+      intlResponse.headers.has("x-middleware-rewrite") ||
+      intlResponse.headers.has("location");
+    if (isRewriteOrRedirect) {
+      for (const cookie of supabaseResponse.cookies.getAll()) {
+        intlResponse.cookies.set(cookie);
+      }
+      return intlResponse;
+    }
+    for (const [key, value] of intlResponse.headers.entries()) {
+      if (key.toLowerCase().startsWith("x-middleware-")) {
+        supabaseResponse.headers.set(key, value);
+      }
+    }
+    for (const cookie of intlResponse.cookies.getAll()) {
+      supabaseResponse.cookies.set(cookie);
+    }
   }
 
   return supabaseResponse;

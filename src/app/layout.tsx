@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
-import { Fraunces, Geist, Geist_Mono } from "next/font/google";
+import { Fraunces, Geist, Geist_Mono, IBM_Plex_Sans_Arabic } from "next/font/google";
 import type { ReactNode } from "react";
 
+import { getLocale } from "next-intl/server";
+
 import { NavigationGuardProvider } from "@/components/navigation-guard";
+import { LOCALE_DIRECTIONS, type AppLocale } from "@/i18n/routing";
 import { isIndexingEnabled } from "@/lib/indexing";
 import { SOCIAL_IMAGE } from "@/lib/metadata";
 import { getSiteUrl } from "@/lib/site-url";
@@ -25,6 +28,15 @@ const geistMono = Geist_Mono({
 const fraunces = Fraunces({
   variable: "--font-fraunces",
   subsets: ["latin"],
+});
+
+// Arabic face for the storefront's Arabic slice (P1-10, H-15). Latin text
+// keeps Geist/Fraunces; `html[dir="rtl"]` switches the body and display
+// faces to this one in globals.css.
+const plexSansArabic = IBM_Plex_Sans_Arabic({
+  variable: "--font-arabic-sans",
+  subsets: ["arabic"],
+  weight: ["400", "500", "600", "700"],
 });
 
 const title = "Gifto — Gifts in Egypt, wrapped properly";
@@ -65,12 +77,23 @@ export const metadata: Metadata = {
 // `cacheComponents`.
 export const dynamic = "force-dynamic";
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  // Resolved from the middleware's X-NEXT-INTL-LOCALE header; "en" for every
+  // route outside the [locale] segment (vendor, admin, callbacks, API).
+  let locale: AppLocale = "en";
+  try {
+    const resolved = await getLocale();
+    locale = resolved === "ar" ? "ar" : "en";
+  } catch {
+    locale = "en";
+  }
+
   return (
     <html
-      lang="en"
+      lang={locale}
+      dir={LOCALE_DIRECTIONS[locale]}
       data-scroll-behavior="smooth"
-      className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} ${plexSansArabic.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-paper text-ink">
         <NavigationGuardProvider>{children}</NavigationGuardProvider>

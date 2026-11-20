@@ -2,10 +2,12 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 
 import { ChevronDownIcon, UserIcon } from "@/components/icons";
 import { GuardedLink } from "@/components/navigation-guard";
 import { SignOutButton } from "@/components/sign-out-button";
+import { stripLocalePrefix } from "@/lib/locale-path";
 
 type AccountLink = {
   href: string;
@@ -25,6 +27,7 @@ export function AccountMenu({
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const t = useTranslations("common");
   const panelId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -56,14 +59,17 @@ export function AccountMenu({
   }, [open]);
 
   const topHref = signedIn ? "/account" : "/login";
-  const topLabel = signedIn ? "Account" : "Sign in";
+  const topLabel = signedIn ? t("account") : t("signIn");
+  // The browser pathname carries the locale prefix (`/ar/account`); strip
+  // it before comparing so the current-page state works in both locales.
+  const barePathname = stripLocalePrefix(pathname ?? "/");
 
   return (
     <div ref={containerRef} className={`relative flex items-center ${className}`}>
       <GuardedLink
         href={topHref}
         aria-current={
-          pathname === topHref || pathname.startsWith(`${topHref}/`)
+          barePathname === topHref || barePathname.startsWith(`${topHref}/`)
             ? "page"
             : undefined
         }
@@ -78,7 +84,7 @@ export function AccountMenu({
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         aria-controls={panelId}
-        aria-label={`${open ? "Close" : "Open"} account menu`}
+        aria-label={open ? t("closeAccountMenu") : t("openAccountMenu")}
         className="inline-flex h-8 w-7 items-center justify-center rounded-full text-ink-mute transition-colors hover:bg-berry-soft hover:text-berry-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
       >
         <ChevronDownIcon
@@ -91,7 +97,7 @@ export function AccountMenu({
       {open ? (
         <div
           id={panelId}
-          className="absolute right-0 top-full z-50 mt-2 w-60 overflow-hidden rounded-2xl border border-line bg-paper shadow-[0_24px_60px_-34px_oklch(0.28_0.03_40/0.45)]"
+          className="absolute end-0 top-full z-50 mt-2 w-60 overflow-hidden rounded-2xl border border-line bg-paper shadow-[0_24px_60px_-34px_oklch(0.28_0.03_40/0.45)]"
         >
           <nav aria-label="Account" className="max-h-[70vh] overflow-y-auto p-2">
             {links.map((link) => (
@@ -108,6 +114,8 @@ export function AccountMenu({
           {showSignOut ? (
             <div className="border-t border-line p-2">
               <SignOutButton
+                label={t("signOut")}
+                busyLabel={t("signingOut")}
                 className="w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-ink-mute transition-colors hover:bg-berry-soft hover:text-berry-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
                 onDone={() => setOpen(false)}
               />
