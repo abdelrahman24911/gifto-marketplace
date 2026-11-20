@@ -56,6 +56,7 @@ type DetailCommissionEntry = CommissionEntryRecord & {
 
 type OrderVendorRow = {
   id: string;
+  delivered_at: string | null;
   order: { public_reference: string | null } | { public_reference: string | null }[] | null;
   order_items: { product_name: string; quantity: number }[] | null;
 };
@@ -101,6 +102,7 @@ export default async function SettlementDetailPage({
 }) {
   const { id } = await params;
   const { supabase } = await requirePlatformAdmin();
+  const now = new Date();
 
   const { data: settlementData, error: settlementError } = await supabase
     .from("settlements")
@@ -160,7 +162,7 @@ export default async function SettlementDetailPage({
   const { data: orderVendorData } = orderVendorIds.length
     ? await supabase
         .from("order_vendors")
-        .select("id, order:orders(public_reference), order_items(product_name, quantity)")
+        .select("id, delivered_at, order:orders(public_reference), order_items(product_name, quantity)")
         .in("id", orderVendorIds)
     : { data: [] };
 
@@ -170,6 +172,44 @@ export default async function SettlementDetailPage({
       suborder,
     ]),
   );
+
+  // P0-07 (returns-before-payout rule): the payout check for this batch.
+  // The 7-day D-09 return window runs from each suborder's delivered_at; the
+  // batch is safe to pay only when every window has closed AND no refund
+  // case is open on any of its lines. A paid settlement can never be voided
+  // and a refund on its lines can never be approved afterwards, so this
+  // panel warns instead of blocking — the runbook holds the rule.
+  const RETURN_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+  const deliveredAts = [...orderVendors.values()]
+    .map((suborder) => suborder.delivered_at)
+    .filter((value): value is string => Boolean(value))
+    .map((value) => new Date(value).getTime());
+  const earliestDeliveredAt =
+    deliveredAts.length > 0 ? new Date(Math.min(...deliveredAts)) : null;
+  const latestDeliveredAt =
+    deliveredAts.length > 0 ? new Date(Math.max(...deliveredAts)) : null;
+  const returnWindowClosesAt =
+    latestDeliveredAt === null
+      ? null
+      : new Date(latestDeliveredAt.getTime() + RETURN_WINDOW_MS);
+  const returnWindowOpen =
+    returnWindowClosesAt !== null &&
+    returnWindowClosesAt.getTime() > now.getTime();
+  // A line with no delivered date cannot prove its window has closed; the
+  // runbook treats that as open.
+  const missingDeliveredAt =
+    orderVendorIds.length > 0 && deliveredAts.length < orderVendorIds.length;
+
+  const { data: openRefundCaseData } = orderVendorIds.length
+    ? await supabase
+        .from("refund_cases")
+        .select("id")
+        .eq("status", "open")
+        .in("order_vendor_id", orderVendorIds)
+    : { data: [] };
+  const openRefundCaseCount = (openRefundCaseData ?? []).length;
+  const payoutAtRisk =
+    returnWindowOpen || missingDeliveredAt || openRefundCaseCount > 0;
 
   const actorIds = Array.from(
     new Set(
@@ -373,7 +413,34 @@ export default async function SettlementDetailPage({
           </p>
           {totals.complete ? (
             <div className="mt-3">
-              <SettlementPaidButton settlementId={row.id} />
+              {payoutAtRisk ? (
+                <AdminNotice tone="warning" role="alert">
+                  <strong>Do not mark this paid yet.</strong>{" "}
+                  {openRefundCaseCount > 0
+                    ? `There ${openRefundCaseCount === 1 ? "is" : "are"} ${openRefundCaseCount} open refund case${openRefundCaseCount === 1 ? "" : "s"} on this batch — resolve ${openRefundCaseCount === 1 ? "it" : "them"} first (see /admin/refunds). `
+                    : null}
+                  {returnWindowOpen && returnWindowClosesAt !== null
+                    ? `The 7-day return window is still open — it closes ${formatDate(returnWindowClosesAt.toISOString())} (latest delivery ${latestDeliveredAt !== null ? formatDate(latestDeliveredAt.toISOString()) : "unknown"}). Wait, or exclude the affected entries and settle them in a later batch. `
+                    : null}
+                  {missingDeliveredAt
+                    ? "At least one line has no delivered date recorded, so its return window cannot be proven closed. Confirm the delivery date by hand before paying. "
+                    : null}
+                  A paid settlement can never be voided and a refund on its
+                  lines can never be approved afterwards. See
+                  docs/RUNBOOK_RETURNS_AND_SETTLEMENTS.md.
+                </AdminNotice>
+              ) : (
+                <AdminNotice tone="success" role="status">
+                  Return-window check: earliest delivery{" "}
+                  {earliestDeliveredAt !== null
+                    ? formatDate(earliestDeliveredAt.toISOString())
+                    : "unknown"}
+                  , window closed; no open refund cases on this batch.
+                </AdminNotice>
+              )}
+              <div className="mt-3">
+                <SettlementPaidButton settlementId={row.id} />
+              </div>
             </div>
           ) : (
             <p className="mt-3 text-sm text-warning">
