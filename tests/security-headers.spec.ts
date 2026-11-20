@@ -14,7 +14,12 @@ function configuredSupabaseOrigin(): string {
   return new URL(raw).origin;
 }
 
-test("public pages send the baseline security headers and report-only CSP", async ({
+function nonceFrom(csp: string): string | null {
+  const match = /'nonce-([^']+)'/.exec(csp);
+  return match ? match[1] : null;
+}
+
+test("public pages send the baseline security headers and enforced CSP with HSTS", async ({
   page,
 }) => {
   for (const path of PUBLIC_PATHS) {
@@ -22,17 +27,29 @@ test("public pages send the baseline security headers and report-only CSP", asyn
     expect(response, `${path}: response`).not.toBeNull();
 
     const headers = response!.headers();
-    const csp = headers["content-security-policy-report-only"];
+    const csp = headers["content-security-policy"];
 
-    expect.soft(headers["content-security-policy"], `${path}: enforced CSP`).toBeUndefined();
-    expect.soft(csp, `${path}: report-only CSP`).toBeTruthy();
+    // P1-11 (H-11): the CSP is enforced now, not report-only.
+    expect.soft(csp, `${path}: enforced CSP`).toBeTruthy();
+    expect
+      .soft(headers["content-security-policy-report-only"], `${path}: no report-only CSP`)
+      .toBeUndefined();
     expect.soft(csp, `${path}: default source`).toContain("default-src 'self'");
     expect.soft(csp, `${path}: base-uri`).toContain("base-uri 'self'");
     expect.soft(csp, `${path}: object-src`).toContain("object-src 'none'");
     expect.soft(csp, `${path}: frame-ancestors`).toContain("frame-ancestors 'none'");
     expect.soft(csp, `${path}: frame-src`).toContain("frame-src 'none'");
     expect.soft(csp, `${path}: form-action`).toContain("form-action 'self'");
-    expect.soft(csp, `${path}: script source`).toContain("script-src 'self' 'unsafe-inline'");
+    // Scripts run on a per-request nonce only — no 'unsafe-inline'.
+    expect.soft(csp, `${path}: script source`).toContain("script-src 'self'");
+    expect.soft(csp, `${path}: script nonce`).toMatch(/script-src[^;]*'nonce-[^']+'/);
+    expect.soft(csp, `${path}: no unsafe-inline for scripts`).not.toMatch(
+      /script-src[^;]*'unsafe-inline'/,
+    );
+    expect.soft(csp, `${path}: strict-dynamic`).toContain("'strict-dynamic'");
+    // Styles keep 'unsafe-inline' deliberately: the bar-chart and analytics
+    // bars set data-driven widths/heights via React style attributes, which
+    // cannot take a nonce.
     expect.soft(csp, `${path}: style source`).toContain("style-src 'self' 'unsafe-inline'");
     expect.soft(csp, `${path}: image source`).toContain("img-src 'self'");
     expect.soft(csp, `${path}: font source`).toContain("font-src 'self'");
@@ -40,6 +57,9 @@ test("public pages send the baseline security headers and report-only CSP", asyn
     expect.soft(csp, `${path}: no wildcard source`).not.toContain("*");
     expect.soft(csp, `${path}: no unsafe-eval`).not.toContain("unsafe-eval");
 
+    expect
+      .soft(headers["strict-transport-security"], `${path}: HSTS`)
+      .toBe("max-age=31536000; includeSubDomains");
     expect.soft(headers["x-content-type-options"], `${path}: nosniff`).toBe("nosniff");
     expect.soft(headers["x-frame-options"], `${path}: frame denial`).toBe("DENY");
     expect
@@ -52,12 +72,35 @@ test("public pages send the baseline security headers and report-only CSP", asyn
   }
 });
 
+test("CSP nonce is fresh per request and matches the inline scripts", async ({
+  page,
+}) => {
+  const first = await page.goto("/", { waitUntil: "domcontentloaded" });
+  expect(first, "first response").not.toBeNull();
+  const firstCsp = first!.headers()["content-security-policy"] ?? "";
+  const firstNonce = nonceFrom(firstCsp);
+  expect(firstNonce, "first nonce").toBeTruthy();
+
+  const second = await page.goto("/", { waitUntil: "domcontentloaded" });
+  expect(second, "second response").not.toBeNull();
+  const secondCsp = second!.headers()["content-security-policy"] ?? "";
+  const secondNonce = nonceFrom(secondCsp);
+  expect(secondNonce, "second nonce").toBeTruthy();
+  expect(secondNonce, "nonce rotates per request").not.toBe(firstNonce);
+
+  // The rendered page's Next.js inline scripts must carry the response nonce.
+  const html = await page.content();
+  expect(html, "inline script carries the nonce").toContain(
+    `nonce="${secondNonce}"`,
+  );
+});
+
 test("CSP includes the configured Supabase origin", async ({ page }) => {
   const origin = configuredSupabaseOrigin();
   const response = await page.goto("/", { waitUntil: "domcontentloaded" });
   expect(response, "CSP origin response").not.toBeNull();
 
-  const csp = response!.headers()["content-security-policy-report-only"];
+  const csp = response!.headers()["content-security-policy"];
   expect(csp, "CSP origin header").toBeTruthy();
   expect(csp, "Supabase image source").toContain(`img-src 'self' ${origin}`);
   expect(csp, "Supabase connect source").toContain(
@@ -81,5 +124,13 @@ test("order routes keep their no-referrer and no-index protections", async ({
   );
   expect(headers["x-content-type-options"], "order nosniff").toBe("nosniff");
   expect(headers["x-frame-options"], "order frame denial").toBe("DENY");
-  expect(headers["content-security-policy-report-only"], "order report-only CSP").toBeTruthy();
+  expect(headers["content-security-policy"], "order enforced CSP").toBeTruthy();
+  expect(
+    headers["content-security-policy-report-only"],
+    "order no report-only CSP",
+  ).toBeUndefined();
+  expect(
+    headers["strict-transport-security"],
+    "order HSTS",
+  ).toBe("max-age=31536000; includeSubDomains");
 });

@@ -63,8 +63,69 @@ function localePrefix(pathname: string): string {
 
 const intlMiddleware = createIntlMiddleware(routing);
 
+// P1-11 (H-11): enforced CSP with a per-request nonce.
+//
+// Next.js extracts the nonce from the `Content-Security-Policy` request
+// header during rendering and applies it to its inline scripts and bundles
+// (see the bundled Next CSP docs in node_modules/next/dist/docs). The proxy
+// therefore sets the same policy — with the same nonce — on the request
+// (`x-nonce` for app code that needs it, e.g. the product JSON-LD block)
+// and on every response it returns. A fresh nonce is generated on each
+// invocation, including the internal rewrite re-dispatch: the render always
+// uses the latest run's nonce, and the response carries that same nonce.
+//
+// Directives:
+// - script-src 'self' + nonce + 'strict-dynamic'; NO 'unsafe-inline'.
+//   Next's inline bootstrap scripts get the nonce automatically; the only
+//   app-authored inline script (product JSON-LD) reads it from `x-nonce`.
+// - style-src keeps 'self' 'unsafe-inline': the bar-chart and analytics
+//   bars set data-driven widths/heights via React `style` attributes, and
+//   style attributes cannot take a nonce. Deliberate, styles only.
+// - img-src / connect-src list the configured Supabase origin explicitly
+//   (env-derived, never hardcoded); no host is allowed if it is missing.
+// - No wildcard source anywhere. HSTS lives in next.config.ts (static).
+function supabaseOrigin(): string {
+  const raw = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!raw) return "";
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return "";
+  }
+}
+
+function contentSecurityPolicy(nonce: string): string {
+  const supabase = supabaseOrigin();
+  const supabaseSource = supabase ? ` ${supabase}` : "";
+
+  return [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "frame-src 'none'",
+    "form-action 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    "style-src 'self' 'unsafe-inline'",
+    `img-src 'self'${supabaseSource}`,
+    "font-src 'self'",
+    `connect-src 'self'${supabaseSource}`,
+  ].join("; ");
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Enforced CSP (P1-11): fresh nonce per request, set on the request so
+  // Next.js can apply it during rendering, and on every response below.
+  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  const csp = contentSecurityPolicy(nonce);
+  request.headers.set("x-nonce", nonce);
+  request.headers.set("Content-Security-Policy", csp);
+  const applyCsp = (response: NextResponse): NextResponse => {
+    response.headers.set("Content-Security-Policy", csp);
+    return response;
+  };
 
   // 1. Supabase session refresh + route guards. The guard sees the path
   // without its locale prefix and the /login target keeps the locale so an
@@ -132,7 +193,7 @@ export async function proxy(request: NextRequest) {
     for (const cookie of supabaseResponse.cookies.getAll()) {
       redirectResponse.cookies.set(cookie);
     }
-    return redirectResponse;
+    return applyCsp(redirectResponse);
   }
 
   // 2. Locale routing for localised routes only. With
@@ -168,7 +229,7 @@ export async function proxy(request: NextRequest) {
       for (const cookie of supabaseResponse.cookies.getAll()) {
         intlResponse.cookies.set(cookie);
       }
-      return intlResponse;
+      return applyCsp(intlResponse);
     }
     for (const [key, value] of intlResponse.headers.entries()) {
       if (key.toLowerCase().startsWith("x-middleware-")) {
@@ -180,7 +241,7 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  return supabaseResponse;
+  return applyCsp(supabaseResponse);
 }
 
 export const config = {

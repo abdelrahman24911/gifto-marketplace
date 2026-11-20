@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { getLocale, getTranslations } from "next-intl/server";
@@ -378,6 +379,9 @@ export default async function ProductPage({ params }: Props) {
   const moneyLocale = locale as MoneyLocale;
   const t = await getTranslations("product");
   const tc = await getTranslations("common");
+  // P1-11: the CSP nonce the proxy generated for this request; the JSON-LD
+  // block below must carry it or the enforced script-src blocks it.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   const { shop, product, images, category } = data;
 
   const relatedResult = await loadProductsByShop(shop.id, { pageSize: 12 });
@@ -453,6 +457,7 @@ export default async function ProductPage({ params }: Props) {
   return (
     <div className={purchasable ? "pb-28 lg:pb-8" : "pb-8"}>
       <script
+        nonce={nonce}
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
       />
