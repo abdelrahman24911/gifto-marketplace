@@ -96,7 +96,8 @@ export function safeCheckoutError(message: unknown): string {
   if (
     SAFE_DB_ERROR.test(trimmed) ||
     /is no longer available\.$/.test(trimmed) ||
-    /is not accepting orders right now\.$/.test(trimmed)
+    /is not accepting orders right now\.$/.test(trimmed) ||
+    /does not deliver to this address\.$/.test(trimmed)
   ) {
     return trimmed;
   }

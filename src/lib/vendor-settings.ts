@@ -220,6 +220,42 @@ export function formatCoverageList(values: string[]): string {
   return values.join(", ");
 }
 
+function normalizeCoverageValue(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+/**
+ * Mirrors the database trigger that guards checkout. Empty lists mean the shop
+ * has not configured coverage, so the address is allowed for backwards
+ * compatibility. Governorates must match exactly; areas may match the city or
+ * appear in the street address.
+ */
+export function deliveryCoverageAllows(
+  coverage: DeliveryCoverage,
+  address: { city: string; governorate: string; addressLine: string },
+): boolean {
+  const governorates = coverage.governorates
+    .map(normalizeCoverageValue)
+    .filter(Boolean);
+  const areas = coverage.areas.map(normalizeCoverageValue).filter(Boolean);
+
+  if (governorates.length === 0 && areas.length === 0) return true;
+
+  const city = normalizeCoverageValue(address.city);
+  const governorate = normalizeCoverageValue(address.governorate);
+  const addressLine = normalizeCoverageValue(address.addressLine);
+
+  if (governorates.length > 0 && !governorates.includes(governorate)) {
+    return false;
+  }
+
+  if (areas.length > 0 && !areas.includes(city)) {
+    if (!areas.some((area) => addressLine.includes(area))) return false;
+  }
+
+  return true;
+}
+
 /**
  * Parses a comma/newline separated coverage list. Duplicates are collapsed
  * case-insensitively so the same governorate cannot be stored twice.
