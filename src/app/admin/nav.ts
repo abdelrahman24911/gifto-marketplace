@@ -25,6 +25,11 @@ export const adminNavGroups: DashboardNavGroup[] = [
     label: "Commerce",
     items: [
       { label: "Orders", href: "/admin/orders", icon: "orders" },
+      {
+        label: "Logistics",
+        href: "/admin/logistics",
+        icon: "orders",
+      },
       { label: "Refunds", href: "/admin/refunds", icon: "orders" },
       {
         label: "Commissions",

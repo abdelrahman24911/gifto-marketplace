@@ -128,7 +128,7 @@ export default async function AccountOrderPage({
     supabase
     .from("orders")
     .select(
-      "id, status, payment_method, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, address_line, city, governorate, notes, created_at, order_vendors(id, status, subtotal_minor, vendor_id, delivered_at, order_items(id, product_name, product_slug, unit_price_minor, quantity, line_total_minor))",
+      "id, status, payment_method, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, address_line, city, governorate, notes, created_at, order_vendors(id, status, subtotal_minor, vendor_id, delivered_at, courier_name, tracking_ref, handed_over_at, order_items(id, product_name, product_slug, unit_price_minor, quantity, line_total_minor))",
     )
     .eq("id", id)
     ,
@@ -256,6 +256,16 @@ export default async function AccountOrderPage({
                 </div>
                 {badge(suborder.status, statusLabels)}
               </div>
+
+              {suborder.courier_name ? (
+                <p className="mt-2 text-sm text-zinc-600">
+                  Shipped via {suborder.courier_name}
+                  {suborder.tracking_ref ? ` · ${suborder.tracking_ref}` : ""}
+                  {suborder.handed_over_at
+                    ? ` · handed over ${new Date(suborder.handed_over_at).toLocaleString(dateLocale, { dateStyle: "medium", timeStyle: "short" })}`
+                    : ""}
+                </p>
+              ) : null}
 
               <p className="mt-2 text-sm text-zinc-600">
                 {isOrderStatus(suborder.status)

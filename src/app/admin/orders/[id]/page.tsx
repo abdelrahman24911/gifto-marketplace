@@ -49,7 +49,7 @@ export default async function AdminOrderDetailPage({
     supabase
       .from("orders")
       .select(
-        "id, public_reference, user_id, status, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, contact_email, address_line, city, governorate, notes, created_at, updated_at, order_vendors(id, status, subtotal_minor, delivery_fee_minor, commission_rate, confirmed_at, shipped_at, delivered_at, cancelled_at, created_at, vendor:vendors(name, slug), order_items(id, product_name, product_slug, quantity, unit_price_minor, line_total_minor), commission_entries(amount_minor, status))",
+        "id, public_reference, user_id, status, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, contact_email, address_line, city, governorate, notes, created_at, updated_at, order_vendors(id, status, subtotal_minor, delivery_fee_minor, commission_rate, confirmed_at, shipped_at, delivered_at, cancelled_at, courier_name, tracking_ref, handed_over_at, created_at, vendor:vendors(name, slug), order_items(id, product_name, product_slug, quantity, unit_price_minor, line_total_minor), commission_entries(amount_minor, status))",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -203,6 +203,17 @@ export default async function AdminOrderDetailPage({
                         : "products"}{" "}
                       � {formatEgp(suborder.subtotal_minor)}
                     </p>
+                    {suborder.courier_name ? (
+                      <p className="mt-1 text-xs text-ink-mute">
+                        Shipped via {suborder.courier_name}
+                        {suborder.tracking_ref
+                          ? ` · ${suborder.tracking_ref}`
+                          : ""}
+                        {suborder.handed_over_at
+                          ? ` · handed over ${formatOrderDateTime(suborder.handed_over_at)}`
+                          : ""}
+                      </p>
+                    ) : null}
                   </div>
                   <span
                     className={`rounded-full border px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-wide ${ADMIN_ORDER_STATUS_STYLES[subStatus]}`}

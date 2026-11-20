@@ -699,7 +699,7 @@ begin
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000001';
 
   perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
-  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', 'TRK-0001');
   perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
 
   select delivered_at into v_at from public.order_vendors where id = v_ov;
@@ -722,7 +722,7 @@ begin
   select id into v_ov from public.order_vendors
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000002';
 
-  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', 'TRK-0001');
   perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
 
   select status into v_parent from public.orders where id = v_oid;
@@ -851,7 +851,7 @@ begin
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000001';
 
   perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
-  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', 'TRK-0001');
   perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
 end $$;
 
@@ -872,7 +872,7 @@ begin
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000002';
 
   perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
-  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', 'TRK-0001');
 
   select stock into v_stock_before from public.products
    where id = '51100000-0000-0000-0000-000000000004';
@@ -1059,6 +1059,98 @@ begin
     raise exception 'TEST 17 FAILED: legacy wrapper stopped placing';
   end if;
   raise notice 'TEST 17 PASSED: signed-in price consent blocks, re-confirms, and totals are checked';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 18 (P1-15, H-08): shipping records courier, tracking reference and
+-- handover time; shipping without them fails; clients cannot write the
+-- handover columns directly.
+-- ---------------------------------------------------------------------------
+set role authenticated;
+set request.jwt.claim.sub = '11100000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"11100000-0000-0000-0000-000000000001"}';
+do $$
+declare v_oid uuid;
+begin
+  v_oid := public.place_order(
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria', null);
+  perform set_config('gifto_test.courier_order_id', v_oid::text, false);
+end $$;
+
+reset role;
+do $$
+begin
+  -- The new columns are not client-writable: the RPC is the only write path.
+  if has_column_privilege('authenticated', 'public.order_vendors', 'courier_name', 'update')
+     or has_column_privilege('authenticated', 'public.order_vendors', 'tracking_ref', 'update')
+     or has_column_privilege('authenticated', 'public.order_vendors', 'handed_over_at', 'update') then
+    raise exception 'TEST 18 FAILED: handover columns are directly updatable';
+  end if;
+  if has_function_privilege('anon', 'public.set_order_vendor_status(uuid, public.order_status, public.order_status, text, text, text, text)', 'execute')
+     or not has_function_privilege('authenticated', 'public.set_order_vendor_status(uuid, public.order_status, public.order_status, text, text, text, text)', 'execute') then
+    raise exception 'TEST 18 FAILED: transition RPC grants are wrong';
+  end if;
+  raise notice 'TEST 18 PASSED: handover columns are RPC-only';
+end $$;
+
+set role authenticated;
+set request.jwt.claim.sub = '21100000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"21100000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_oid uuid;
+  v_ov uuid;
+  v_row public.order_vendors;
+begin
+  v_oid := current_setting('gifto_test.courier_order_id')::uuid;
+  select id into v_ov from public.order_vendors
+   where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000001';
+
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+
+  -- Shipping without courier/tracking fails and changes nothing.
+  begin
+    perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
+    raise exception 'TEST 18 FAILED: shipping without courier was accepted';
+  exception when check_violation then
+    null;
+  end;
+
+  begin
+    perform public.set_order_vendor_status(
+      v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', null);
+    raise exception 'TEST 18 FAILED: shipping without a tracking reference was accepted';
+  exception when check_violation then
+    null;
+  end;
+
+  if (select status from public.order_vendors where id = v_ov) <> 'confirmed' then
+    raise exception 'TEST 18 FAILED: rejected shipment changed the status';
+  end if;
+
+  -- Shipping with courier + tracking stores the handover record.
+  perform public.set_order_vendor_status(
+    v_ov, 'shipped', 'confirmed', null, null, 'Bosta', 'BST-77881');
+
+  select * into v_row from public.order_vendors where id = v_ov;
+  if v_row.status <> 'shipped'
+     or v_row.courier_name <> 'Bosta'
+     or v_row.tracking_ref <> 'BST-77881'
+     or v_row.handed_over_at is null then
+    raise exception 'TEST 18 FAILED: handover record was not stored (status=%, courier=%, tracking=%, handed_over_at=%)',
+      v_row.status, v_row.courier_name, v_row.tracking_ref, v_row.handed_over_at;
+  end if;
+  raise notice 'TEST 18 PASSED: shipping without courier/tracking fails; with them it records the handover';
+
+  -- Courier/tracking passed to a non-ship transition are ignored, never stored.
+  perform public.set_order_vendor_status(
+    v_ov, 'delivered', 'shipped', null, null, 'Other Courier', 'OTHER-1');
+  select * into v_row from public.order_vendors where id = v_ov;
+  if v_row.courier_name <> 'Bosta' or v_row.tracking_ref <> 'BST-77881' then
+    raise exception 'TEST 18 FAILED: a later transition overwrote the handover record';
+  end if;
+  raise notice 'TEST 18 PASSED: handover survives the delivery transition unchanged';
 end $$;
 
 reset role;

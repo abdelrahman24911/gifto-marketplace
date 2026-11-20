@@ -140,7 +140,7 @@ export default async function VendorOrdersPage({
   let listQuery = supabase
     .from("order_vendors")
     .select(
-      "id, status, subtotal_minor, created_at, order:orders(id, public_reference, recipient_name, contact_phone, address_line, city, governorate, notes, created_at), order_items(id, product_name, quantity, unit_price_minor, line_total_minor)",
+      "id, status, subtotal_minor, created_at, courier_name, tracking_ref, handed_over_at, order:orders(id, public_reference, recipient_name, contact_phone, address_line, city, governorate, notes, created_at), order_items(id, product_name, quantity, unit_price_minor, line_total_minor)",
       { count: "exact" },
     )
     .eq("vendor_id", access.vendorId);
@@ -408,6 +408,17 @@ export default async function VendorOrdersPage({
                         Line {suborder.id.slice(0, 8)} · placed{" "}
                         {formatDateTime(suborder.created_at)}
                       </p>
+                      {suborder.courier_name ? (
+                        <p className="mt-1 text-xs text-ink-mute">
+                          Shipped via {suborder.courier_name}
+                          {suborder.tracking_ref
+                            ? ` · ${suborder.tracking_ref}`
+                            : ""}
+                          {suborder.handed_over_at
+                            ? ` · handed over ${formatDateTime(suborder.handed_over_at)}`
+                            : ""}
+                        </p>
+                      ) : null}
                     </div>
                     <span
                       className={`rounded-full border px-3 py-1 text-xs font-medium ${ORDER_STATUS_STYLES[status]}`}

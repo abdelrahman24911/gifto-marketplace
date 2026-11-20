@@ -89,8 +89,8 @@ begin
     raise exception 'TEST 1 FAILED: authenticated can still update status columns directly';
   end if;
 
-  if has_function_privilege('anon', 'public.set_order_vendor_status(uuid, public.order_status, public.order_status, text, text)', 'execute')
-     or not has_function_privilege('authenticated', 'public.set_order_vendor_status(uuid, public.order_status, public.order_status, text, text)', 'execute') then
+  if has_function_privilege('anon', 'public.set_order_vendor_status(uuid, public.order_status, public.order_status, text, text, text, text)', 'execute')
+     or not has_function_privilege('authenticated', 'public.set_order_vendor_status(uuid, public.order_status, public.order_status, text, text, text, text)', 'execute') then
     raise exception 'TEST 1 FAILED: transition RPC grants are wrong';
   end if;
 
@@ -161,7 +161,7 @@ begin
   end;
 
   perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
-  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', 'TRK-0001');
 
   begin
     perform public.set_order_vendor_status(v_ov, 'cancelled', 'shipped');
@@ -263,7 +263,7 @@ declare v_ov uuid;
 begin
   v_ov := current_setting('gifto_test.audit_ov2')::uuid;
   perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
-  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', 'TRK-0001');
   perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
 end $$;
 
@@ -636,7 +636,7 @@ begin
   select id into v_ov from public.order_vendors
    where order_id = v_oid and vendor_id = 'a1100000-0000-0000-0000-0000000000a1';
   perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
-  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', 'TRK-0001');
   perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
 end $$;
 

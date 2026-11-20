@@ -310,6 +310,44 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- TEST 7b (P1-15, H-08): the guest order payload carries the handover record
+-- once the shop ships with courier and tracking.
+-- ---------------------------------------------------------------------------
+set role authenticated;
+set request.jwt.claim.sub = '31100000-0000-0000-0000-000000000101';
+set request.jwt.claims = '{"sub":"31100000-0000-0000-0000-000000000101"}';
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.guest_order_id')::uuid;
+  v_ov uuid;
+begin
+  select id into v_ov from public.order_vendors where order_id = v_oid;
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+  perform public.set_order_vendor_status(
+    v_ov, 'shipped', 'confirmed', null, null, 'Bosta', 'BST-77881');
+end $$;
+
+reset role;
+set role service_role;
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.guest_order_id')::uuid;
+  v_doc jsonb;
+begin
+  v_doc := public.get_guest_order(v_oid, current_setting('gifto_test.guest_hash'));
+  if (v_doc -> 'vendors' -> 0 ->> 'courier_name') <> 'Bosta' then
+    raise exception 'TEST 7b FAILED: guest payload has no courier';
+  end if;
+  if (v_doc -> 'vendors' -> 0 ->> 'tracking_ref') <> 'BST-77881' then
+    raise exception 'TEST 7b FAILED: guest payload has no tracking reference';
+  end if;
+  if (v_doc -> 'vendors' -> 0 ->> 'handed_over_at') is null then
+    raise exception 'TEST 7b FAILED: guest payload has no handover time';
+  end if;
+  raise notice 'TEST 7b PASSED: guest order shows courier, tracking and handover time';
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- TEST 8: the service role cannot read a guest order without the token hash
 -- via the generic table path (guests are opaque to other RPCs is out of scope;
 -- this asserts the RPC gate is the access control, and anon/authenticated have

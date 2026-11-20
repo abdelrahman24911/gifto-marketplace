@@ -81,6 +81,9 @@ type GuestOrderVendor = {
   status: string;
   subtotal_minor: number;
   delivered_at: string | null;
+  courier_name: string | null;
+  tracking_ref: string | null;
+  handed_over_at: string | null;
   vendor_name: string;
   vendor_slug: string;
   items: GuestOrderItem[];
@@ -328,6 +331,16 @@ export default async function GuestOrderPage({
                 </span>
               ) : null}
             </div>
+
+            {vendor.courier_name ? (
+              <p className="mt-2 text-sm text-zinc-600">
+                Shipped via {vendor.courier_name}
+                {vendor.tracking_ref ? ` · ${vendor.tracking_ref}` : ""}
+                {vendor.handed_over_at
+                  ? ` · handed over ${new Date(vendor.handed_over_at).toLocaleString(dateLocale, { dateStyle: "medium", timeStyle: "short" })}`
+                  : ""}
+              </p>
+            ) : null}
 
             <ul className="mt-4 flex flex-col divide-y divide-zinc-100">
               {vendor.items.map((item, index) => (

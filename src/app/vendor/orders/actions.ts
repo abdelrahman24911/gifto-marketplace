@@ -34,6 +34,11 @@ function transitionError(code: string | undefined) {
   }
 }
 
+const COURIER_NAME_MIN = 2;
+const COURIER_NAME_MAX = 80;
+const TRACKING_REF_MIN = 3;
+const TRACKING_REF_MAX = 80;
+
 /**
  * Moves one of the shop's suborders to its next state through the audited,
  * stale-safe RPC. The database remains the real authorization and transition
@@ -51,6 +56,10 @@ export async function setSuborderStatus(
   const expected = String(formData.get("expected_status") ?? "").trim();
   const reasonInput = String(formData.get("reason_code") ?? "").trim();
   const note = String(formData.get("note") ?? "").trim();
+  // P1-15: the handover record. Required only when shipping; the RPC is
+  // the backstop that rejects a shipped transition without them.
+  const courierName = String(formData.get("courier_name") ?? "").trim();
+  const trackingRef = String(formData.get("tracking_ref") ?? "").trim();
 
   if (!suborderId) return { error: "Missing order line id.", attempt };
   if (!isOrderStatus(next)) return { error: "Invalid status.", attempt };
@@ -66,6 +75,33 @@ export async function setSuborderStatus(
       error: "That status change is not allowed for this order line.",
       attempt,
     };
+  }
+
+  if (next === "shipped") {
+    if (!courierName || !trackingRef) {
+      return {
+        error: "Add the courier and the tracking reference before marking as shipped.",
+        attempt,
+      };
+    }
+    if (
+      courierName.length < COURIER_NAME_MIN ||
+      courierName.length > COURIER_NAME_MAX
+    ) {
+      return {
+        error: `Courier name must be between ${COURIER_NAME_MIN} and ${COURIER_NAME_MAX} characters.`,
+        attempt,
+      };
+    }
+    if (
+      trackingRef.length < TRACKING_REF_MIN ||
+      trackingRef.length > TRACKING_REF_MAX
+    ) {
+      return {
+        error: `Tracking reference must be between ${TRACKING_REF_MIN} and ${TRACKING_REF_MAX} characters.`,
+        attempt,
+      };
+    }
   }
 
   if (reasonInput && !isOrderStatusReasonCode(reasonInput)) {
@@ -108,6 +144,8 @@ export async function setSuborderStatus(
     p_expected_status: expected,
     p_reason_code: reason,
     p_note: note || null,
+    p_courier_name: next === "shipped" ? courierName : null,
+    p_tracking_ref: next === "shipped" ? trackingRef : null,
   });
 
   if (error) return { error: transitionError(error.code), attempt };

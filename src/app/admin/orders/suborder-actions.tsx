@@ -39,7 +39,12 @@ export function AdminSuborderActions({
   >(setAdminSuborderStatus, null);
 
   const options = ADMIN_NEXT_STATUSES[status] ?? [];
-  const directOptions = options.filter((option) => !isException(option.value));
+  // P1-15: shipping records the handover (courier + tracking reference),
+  // so it gets a form of its own instead of a bare button.
+  const shipOption = options.find((option) => option.value === "shipped");
+  const directOptions = options.filter(
+    (option) => !isException(option.value) && option.value !== "shipped",
+  );
   const exceptionOptions = options.filter((option) =>
     isException(option.value),
   );
@@ -73,6 +78,55 @@ export function AdminSuborderActions({
               </button>
             ))}
           </form>
+        ) : null}
+
+        {shipOption ? (
+          <details className="rounded-2xl border border-line bg-paper px-3 py-2">
+            <summary
+              className={`${secondaryClass} inline-flex cursor-pointer list-none`}
+            >
+              {shipOption.label}
+            </summary>
+            <form action={formAction} className="mt-3 flex flex-col gap-3">
+              <input type="hidden" name="suborder_id" value={suborderId} />
+              <input type="hidden" name="order_id" value={orderId} />
+              <input type="hidden" name="expected_status" value={status} />
+              <input type="hidden" name="status" value="shipped" />
+              <p className="text-sm text-ink-soft">
+                Record who takes the parcel and under what reference. The
+                shop and the customer see the same details.
+              </p>
+              <label className="flex flex-col gap-1 text-sm text-ink">
+                <span className="font-medium">Courier</span>
+                <input
+                  name="courier_name"
+                  required
+                  minLength={2}
+                  maxLength={80}
+                  placeholder="Courier or driver name"
+                  className="rounded-lg border border-line-strong bg-paper px-3 py-2 text-sm text-ink"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm text-ink">
+                <span className="font-medium">Tracking reference</span>
+                <input
+                  name="tracking_ref"
+                  required
+                  minLength={3}
+                  maxLength={80}
+                  placeholder="e.g. BST-77881"
+                  className="rounded-lg border border-line-strong bg-paper px-3 py-2 text-sm text-ink"
+                />
+              </label>
+              <button
+                type="submit"
+                disabled={pending}
+                className={`${secondaryClass} self-start`}
+              >
+                {pending ? "Saving." : "Confirm shipment"}
+              </button>
+            </form>
+          </details>
         ) : null}
 
         {exceptionOptions.map((option) => (

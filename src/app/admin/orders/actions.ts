@@ -51,6 +51,10 @@ export async function setAdminSuborderStatus(
   const expected = String(formData.get("expected_status") ?? "").trim();
   const reasonInput = String(formData.get("reason_code") ?? "").trim();
   const note = String(formData.get("note") ?? "").trim();
+  // P1-15: the handover record. Required only when shipping; the RPC is
+  // the backstop that rejects a shipped transition without them.
+  const courierName = String(formData.get("courier_name") ?? "").trim();
+  const trackingRef = String(formData.get("tracking_ref") ?? "").trim();
 
   if (!suborderId) return { error: "Missing order line id.", attempt };
   if (!isOrderStatus(next)) return { error: "Invalid status.", attempt };
@@ -66,6 +70,27 @@ export async function setAdminSuborderStatus(
       error: "That status change is not allowed for this order line.",
       attempt,
     };
+  }
+
+  if (next === "shipped") {
+    if (!courierName || !trackingRef) {
+      return {
+        error: "Add the courier and the tracking reference before marking as shipped.",
+        attempt,
+      };
+    }
+    if (courierName.length < 2 || courierName.length > 80) {
+      return {
+        error: "Courier name must be between 2 and 80 characters.",
+        attempt,
+      };
+    }
+    if (trackingRef.length < 3 || trackingRef.length > 80) {
+      return {
+        error: "Tracking reference must be between 3 and 80 characters.",
+        attempt,
+      };
+    }
   }
 
   if (reasonInput && !isOrderStatusReasonCode(reasonInput)) {
@@ -97,6 +122,8 @@ export async function setAdminSuborderStatus(
     p_expected_status: expected,
     p_reason_code: reason,
     p_note: note || null,
+    p_courier_name: next === "shipped" ? courierName : null,
+    p_tracking_ref: next === "shipped" ? trackingRef : null,
   });
 
   if (error) return { error: transitionError(error.code), attempt };

@@ -524,6 +524,9 @@ export type Database = {
           shipped_at: string | null;
           delivered_at: string | null;
           cancelled_at: string | null;
+          courier_name: string | null;
+          tracking_ref: string | null;
+          handed_over_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -540,6 +543,9 @@ export type Database = {
           shipped_at?: string | null;
           delivered_at?: string | null;
           cancelled_at?: string | null;
+          courier_name?: string | null;
+          tracking_ref?: string | null;
+          handed_over_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -556,6 +562,9 @@ export type Database = {
           shipped_at?: string | null;
           delivered_at?: string | null;
           cancelled_at?: string | null;
+          courier_name?: string | null;
+          tracking_ref?: string | null;
+          handed_over_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -1772,6 +1781,8 @@ export type Database = {
           p_expected_status: OrderStatus;
           p_reason_code?: string | null;
           p_note?: string | null;
+          p_courier_name?: string | null;
+          p_tracking_ref?: string | null;
         };
         Returns: {
           order_id: string;

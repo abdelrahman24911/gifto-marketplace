@@ -130,7 +130,7 @@ begin
   select id into v_ov from public.order_vendors
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000001';
   perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
-  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', 'TRK-0001');
   perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
 end $$;
 
@@ -143,7 +143,7 @@ begin
   select id into v_ov from public.order_vendors
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000002';
   perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
-  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', 'TRK-0001');
   perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
 end $$;
 
@@ -467,7 +467,7 @@ begin
   select id into v_ov from public.order_vendors
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000002';
   perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
-  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', 'TRK-0001');
   perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
 end $$;
 
@@ -878,7 +878,7 @@ begin
    where order_id = current_setting('gifto_test.comm_order5_id')::uuid
      and vendor_id = '41100000-0000-0000-0000-000000000002';
   perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
-  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', 'TRK-0001');
   perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
 end $$;
 
@@ -939,7 +939,7 @@ begin
    where order_id = current_setting('gifto_test.comm_order6_id')::uuid
      and vendor_id = '41100000-0000-0000-0000-000000000001';
   perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
-  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', 'TRK-0001');
   perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
 end $$;
 
@@ -1047,7 +1047,7 @@ begin
    where order_id = current_setting('gifto_test.comm_order19_id')::uuid
      and vendor_id = '41100000-0000-0000-0000-000000000001';
   perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
-  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', 'TRK-0001');
   perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
 end $$;
 
