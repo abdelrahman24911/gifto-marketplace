@@ -120,6 +120,36 @@ export function removeFromWishlist(
   return items.filter((i) => i.productId !== productId);
 }
 
+export type WishlistMerge = {
+  /** Server items first (fresh prices/stock), then guest-only items. */
+  merged: WishlistItem[];
+  /** Guest items that are not on the server yet and must be uploaded. */
+  toUpload: WishlistItem[];
+};
+
+/**
+ * Merge a guest's browser-local wishlist into the account copy on
+ * sign-in (R-08). The old behaviour replaced the local list with the
+ * server list, silently discarding everything the guest had saved
+ * before signing in. Server items win on conflict (their prices and
+ * stock are live), guest-only items are appended in local order and
+ * capped at MAX_WISHLIST_ITEMS like every other wishlist write.
+ */
+export function mergeWishlists(
+  serverItems: WishlistItem[],
+  localItems: WishlistItem[],
+): WishlistMerge {
+  const merged: WishlistItem[] = [...serverItems];
+  const toUpload: WishlistItem[] = [];
+  for (const local of localItems) {
+    if (isWishlisted(merged, local.productId)) continue;
+    if (merged.length >= MAX_WISHLIST_ITEMS) break;
+    merged.push({ ...local });
+    toUpload.push(local);
+  }
+  return { merged, toUpload };
+}
+
 export function readStoredWishlist(): WishlistItem[] {
   if (typeof window === "undefined") return [];
   try {

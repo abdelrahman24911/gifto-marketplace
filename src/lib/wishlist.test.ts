@@ -5,6 +5,7 @@ import {
   WISHLIST_STORAGE_KEY,
   addToWishlist,
   isWishlisted,
+  mergeWishlists,
   readStoredWishlist,
   removeFromWishlist,
   toWishlistItem,
@@ -126,5 +127,37 @@ describe("readStoredWishlist validation", () => {
     expect(readStoredWishlist()).toEqual([]);
     writeStoredWishlist([item()]);
     expect(JSON.parse(written[0])).toEqual([item()]);
+  });
+});
+
+describe("mergeWishlists (R-08 sign-in merge)", () => {
+  it("keeps server items first and uploads guest-only items", () => {
+    const server = [item({ productId: "p1", priceMinor: 20000 })];
+    const local = [
+      item({ productId: "p1", priceMinor: 15000 }),
+      item({ productId: "p2" }),
+    ];
+    const { merged, toUpload } = mergeWishlists(server, local);
+    // Server wins on the conflict (live price), guest-only p2 is kept.
+    expect(merged).toEqual([
+      item({ productId: "p1", priceMinor: 20000 }),
+      item({ productId: "p2" }),
+    ]);
+    expect(toUpload).toEqual([item({ productId: "p2" })]);
+  });
+
+  it("uploads nothing when the guest list is already on the server", () => {
+    const { merged, toUpload } = mergeWishlists([item()], [item()]);
+    expect(merged).toEqual([item()]);
+    expect(toUpload).toEqual([]);
+  });
+
+  it("respects the cap and drops guest extras beyond it", () => {
+    const server = Array.from({ length: MAX_WISHLIST_ITEMS }, (_, i) =>
+      item({ productId: `s${i}` }),
+    );
+    const { merged, toUpload } = mergeWishlists(server, [item({ productId: "g1" })]);
+    expect(merged).toEqual(server);
+    expect(toUpload).toEqual([]);
   });
 });

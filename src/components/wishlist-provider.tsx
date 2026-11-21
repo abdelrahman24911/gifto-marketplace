@@ -15,6 +15,7 @@ import { useToast } from "@/components/toast-provider";
 import {
   addToWishlist,
   isWishlisted,
+  mergeWishlists,
   removeFromWishlist,
   type WishlistItem,
 } from "@/lib/wishlist";
@@ -50,7 +51,9 @@ const WishlistContext = createContext<WishlistContextValue | null>(null);
  * the database copy (migration 47) is loaded once on mount and every
  * toggle writes through to it. A failed server write rolls the local
  * change back and announces the failure — the button never claims a save
- * that did not happen.
+ * that did not happen. On sign-in the guest list is MERGED into the
+ * account list (R-08): gifts saved before signing in are uploaded, not
+ * discarded.
  */
 export function WishlistProvider({
   children,
@@ -68,9 +71,36 @@ export function WishlistProvider({
     if (!signedIn || synced.current) return;
     synced.current = true;
     let cancelled = false;
+    // Capture the guest list BEFORE the server list replaces it — this
+    // is the list that used to be silently discarded on sign-in.
+    const guestItems = getSnapshot();
     listWishlistItems()
       .then((serverItems) => {
-        if (!cancelled) setWishlist(serverItems);
+        if (cancelled) return;
+        const { merged, toUpload } = mergeWishlists(serverItems, guestItems);
+        setWishlist(merged);
+        if (toUpload.length === 0) return;
+        // Upload the guest-only items so the account copy matches the
+        // merged list. A failed upload leaves the item in the local
+        // list (already written above), so the next toggle retries it
+        // and nothing is lost.
+        void Promise.allSettled(
+          toUpload.map((item) => addWishlistItem(item.productId)),
+        ).then((results) => {
+          if (cancelled) return;
+          if (
+            results.some(
+              (result) =>
+                result.status === "rejected" ||
+                (result.status === "fulfilled" && !result.value.ok),
+            )
+          ) {
+            notify(
+              "Some gifts saved before signing in could not be synced to your account yet. They are still saved on this device.",
+              "error",
+            );
+          }
+        });
       })
       .catch(() => {
         // The local copy stays usable; the next toggle retries the sync.
@@ -79,7 +109,7 @@ export function WishlistProvider({
     return () => {
       cancelled = true;
     };
-  }, [signedIn]);
+  }, [signedIn, notify]);
 
   const toggle = useCallback(
     (item: WishlistItem) => {
