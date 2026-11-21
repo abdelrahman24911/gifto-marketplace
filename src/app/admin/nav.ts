@@ -31,6 +31,11 @@ export const adminNavGroups: DashboardNavGroup[] = [
         icon: "orders",
       },
       { label: "Refunds", href: "/admin/refunds", icon: "orders" },
+      {
+        label: "Price refusals",
+        href: "/admin/price-consent-refusals",
+        icon: "orders",
+      },
       { label: "Reviews", href: "/admin/reviews", icon: "products" },
       {
         label: "Commissions",
