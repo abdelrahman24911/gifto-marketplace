@@ -1,5 +1,7 @@
 "use server";
 
+import { getLocale } from "next-intl/server";
+
 import {
   PUBLIC_REFERENCE_PATTERN,
   isValidEmail,
@@ -85,13 +87,29 @@ export async function requestGuestOrderRecovery(
       // the token never lands in access logs, browser history entries
       // for a server request, or Referer headers. The confirm page reads
       // it client-side and redeems it with a POST (server action).
+      //
+      // S-07: the link is built in the locale the customer requested
+      // the recovery from. A bare link opened by an Arabic-preference
+      // browser makes next-intl redirect to /ar/..., and whether the
+      // #token fragment survives that redirect depends on the browser
+      // — a locale-prefixed link never redirects, so the fragment
+      // always arrives intact. getLocale() may be unavailable outside
+      // a locale request (e.g. unit tests); the bare link then rewrites
+      // to /en/... internally with the URL unchanged, so it still works.
+      let localePrefix = "";
+      try {
+        if ((await getLocale()) === "ar") localePrefix = "/ar";
+      } catch {
+        localePrefix = "";
+      }
       const recoveryUrl =
-        `${getSiteUrl()}/orders/recover/confirm?order=${row.order_id}` +
+        `${getSiteUrl()}${localePrefix}/orders/recover/confirm?order=${row.order_id}` +
         `#token=${row.recovery_token}`;
       await sendGuestOrderRecoveryEmail(
         row.contact_email,
         reference,
         recoveryUrl,
+        row.recovery_token,
       );
     }
     // No match, no email on the order, or a send failure: same generic reply.

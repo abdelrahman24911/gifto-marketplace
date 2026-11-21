@@ -3,6 +3,8 @@
 import { useActionState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 
+import { extractRecoveryToken } from "@/lib/recovery-token";
+
 import {
   redeemGuestOrderRecovery,
   type RedeemRecoveryState,
@@ -22,12 +24,14 @@ const buttonClass =
  * fragment into the hidden token field, clears it from the address bar
  * so it does not linger in browser history, and submits it in the POST
  * body. If the link has no fragment (for example the customer opened
- * the page without the link), the customer can paste the recovery code
- * from the email instead — the same POST path, no GET redemption
- * anywhere. The token lives in an uncontrolled hidden field on purpose:
- * it is read from an external system (the URL fragment) on mount, and
- * keeping it out of React state avoids a hydration mismatch between
- * the server render (no fragment) and the client.
+ * the page without the link, or the fragment was lost on the way), the
+ * customer can paste the recovery code from the email instead — or the
+ * full recovery link, which the form parses back into the code (S-07).
+ * The same POST path, no GET redemption anywhere. The token lives in an
+ * uncontrolled hidden field on purpose: it is read from an external
+ * system (the URL fragment) on mount, and keeping it out of React state
+ * avoids a hydration mismatch between the server render (no fragment)
+ * and the client.
  */
 export function ConfirmRecoveryForm({ orderId }: { orderId: string }) {
   const t = useTranslations("order");
@@ -69,7 +73,10 @@ export function ConfirmRecoveryForm({ orderId }: { orderId: string }) {
           autoComplete="off"
           onChange={(event) => {
             if (tokenRef.current) {
-              tokenRef.current.value = event.target.value.trim();
+              // S-07: accept the raw code or the full recovery link.
+              tokenRef.current.value = extractRecoveryToken(
+                event.target.value,
+              );
             }
           }}
         />

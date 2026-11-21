@@ -24,6 +24,7 @@ vi.mock("@/lib/supabase/service", () => ({
 import {
   enqueueMailOutbox,
   getMailConfig,
+  guestOrderRecoveryEmail,
   orderPlacedCustomerEmail,
   orderPlacedVendorEmail,
   orderStatusEmail,
@@ -188,6 +189,22 @@ describe("mail templates", () => {
     );
     expect(message.text).toContain("expires after one hour");
     expect(message.text).not.toMatch(/password is|your password:/i);
+  });
+
+  it("S-07: shows the recovery link and the recovery code separately", () => {
+    const code = "b".repeat(64);
+    const message = guestOrderRecoveryEmail({
+      reference: "GFT-ABCDEF123456",
+      recoveryUrl: `https://gifto.example/orders/recover/confirm?order=11111111-1111-1111-1111-111111111111#token=${code}`,
+      recoveryCode: code,
+    });
+    expect(message.text).toContain(
+      "https://gifto.example/orders/recover/confirm?order=11111111-1111-1111-1111-111111111111#token=",
+    );
+    // The code on its own line, so a customer whose link lost its
+    // fragment can paste it on the confirmation page.
+    expect(message.text).toContain(code);
+    expect(message.text).toContain("expires after one hour");
   });
 
   it("invites staff with the shop, role and a single-use link", () => {

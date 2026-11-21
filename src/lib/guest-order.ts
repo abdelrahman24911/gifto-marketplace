@@ -34,6 +34,10 @@ export function isValidGuestToken(value: unknown): value is string {
   return typeof value === "string" && GUEST_TOKEN_PATTERN.test(value);
 }
 
+// Re-exported from the client-safe module (S-07): the recovery confirm
+// form is a client component and cannot import this file (node:crypto).
+export { extractRecoveryToken } from "./recovery-token";
+
 export function isValidIdempotencyKey(value: unknown): value is string {
   return typeof value === "string" && IDEMPOTENCY_KEY_PATTERN.test(value);
 }

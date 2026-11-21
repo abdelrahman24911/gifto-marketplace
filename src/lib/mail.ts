@@ -835,10 +835,16 @@ export async function notifyRefundCaseResolved(caseId: string): Promise<void> {
 export function guestOrderRecoveryEmail(input: {
   reference: string;
   recoveryUrl: string;
+  recoveryCode: string;
 }): MailMessage {
   const text =
     `You asked to recover access to your Gifto order ${input.reference}.\n\n` +
     `Use this link to open your order again (it expires after one hour and can be used once):\n${input.recoveryUrl}\n\n` +
+    // S-07: the code is printed separately from the link. If the link's
+    // #token fragment is lost on the way (locale redirect, an email
+    // client that strips fragments), the customer can still paste the
+    // code on the confirmation page instead of being stuck.
+    `If the link does not open your order, paste this recovery code on the confirmation page instead:\n${input.recoveryCode}\n\n` +
     `If you did not ask for this, ignore this email — your order link stays unchanged.`;
   return {
     to: "",
@@ -856,10 +862,11 @@ export async function sendGuestOrderRecoveryEmail(
   email: string,
   reference: string,
   recoveryUrl: string,
+  recoveryCode: string,
 ): Promise<MailSendResult> {
   return sendMail(
     {
-      ...guestOrderRecoveryEmail({ reference, recoveryUrl }),
+      ...guestOrderRecoveryEmail({ reference, recoveryUrl, recoveryCode }),
       to: email,
     },
     { enqueue: false },
