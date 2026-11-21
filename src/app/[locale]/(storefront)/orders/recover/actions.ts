@@ -80,9 +80,14 @@ export async function requestGuestOrderRecovery(
 
     const row = Array.isArray(data) ? data[0] : null;
     if (!error && row?.recovery_token && row?.contact_email) {
+      // The recovery token travels in the URL FRAGMENT (#token=...), never
+      // in the query string: fragments are never sent to the server, so
+      // the token never lands in access logs, browser history entries
+      // for a server request, or Referer headers. The confirm page reads
+      // it client-side and redeems it with a POST (server action).
       const recoveryUrl =
         `${getSiteUrl()}/orders/recover/confirm?order=${row.order_id}` +
-        `&token=${row.recovery_token}`;
+        `#token=${row.recovery_token}`;
       await sendGuestOrderRecoveryEmail(
         row.contact_email,
         reference,
