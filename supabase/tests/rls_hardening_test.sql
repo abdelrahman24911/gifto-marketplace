@@ -320,6 +320,25 @@ begin
     raise exception 'TEST I FAILED: a plain customer can read the outbox (saw %)', v_count;
   end if;
   raise notice 'TEST I-b PASSED: non-admin users cannot read the outbox';
+end $$;
+
+-- TEST I-c: requeue bookkeeping (migration 65, S-10) — a fresh row
+-- starts with zero requeues and no first error recorded yet.
+reset role;
+do $$
+declare
+  v_requeues int;
+  v_first_error text;
+begin
+  select requeue_count, first_error into v_requeues, v_first_error
+    from public.mail_outbox where kind = 'order_status' limit 1;
+  if v_requeues <> 0 then
+    raise exception 'TEST I FAILED: fresh outbox row has requeue_count %', v_requeues;
+  end if;
+  if v_first_error is not null then
+    raise exception 'TEST I FAILED: fresh outbox row already has a first_error';
+  end if;
+  raise notice 'TEST I-c PASSED: fresh outbox row starts with zero requeues';
   raise notice 'TEST I PASSED: mail_outbox is admin-read-only';
 end $$;
 

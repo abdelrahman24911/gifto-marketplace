@@ -11,12 +11,35 @@ import {
  * Requeues one terminally failed outbox row (S-06). Requeueing burns
  * no attempt — it moves the row back to pending with a fresh attempt
  * count so it can be retried once SMTP is configured.
+ *
+ * S-10: requeues are capped per row. At the cap the button is replaced
+ * by a note — the server action refuses it too, so this is display
+ * only, not the enforcement. The counts arrive as plain numbers from
+ * the server page: this client form must not import the server-only
+ * mail module for the cap constant.
  */
-export function MailOutboxRequeueForm({ rowId }: { rowId: string }) {
+export function MailOutboxRequeueForm({
+  rowId,
+  requeueCount,
+  maxRequeues,
+}: {
+  rowId: string;
+  requeueCount: number;
+  maxRequeues: number;
+}) {
   const [state, formAction, pending] = useActionState<
     MailOutboxActionState,
     FormData
   >(requeueMailOutboxRow, null);
+
+  if (requeueCount >= maxRequeues) {
+    return (
+      <p className="mt-2 text-xs text-ink-mute">
+        Requeue limit reached — this email has already been requeued{" "}
+        {maxRequeues} times and stays failed.
+      </p>
+    );
+  }
 
   return (
     <form action={formAction} className="mt-2">

@@ -70,6 +70,20 @@ export type MailOutboxKind =
 /** A retry stops permanently after this many failed attempts. */
 export const MAIL_OUTBOX_MAX_ATTEMPTS = 5;
 
+/**
+ * A terminally failed row may be requeued this many times (S-10). Each
+ * requeue starts a fresh retry cycle of up to MAIL_OUTBOX_MAX_ATTEMPTS,
+ * so the bound on total attempts per row is 5 + 2 × 5 — and after that
+ * the row stays failed for good. An uncapped requeue made the terminal
+ * cap advisory for a determined admin; the cap makes it bind again.
+ */
+export const MAIL_OUTBOX_MAX_REQUEUES = 2;
+
+/** Outcome of a requeue attempt: the cap is a distinct refusal. */
+export type RequeueMailOutboxResult =
+  | { ok: true }
+  | { ok: false; reason: "not_failed" | "cap_reached" };
+
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function parsePort(value: string | undefined, fallback: number): number {
@@ -240,6 +254,10 @@ export async function enqueueMailOutbox(
       body_html: message.html ?? null,
       status: "pending",
       last_error: reason.slice(0, 500),
+      // S-10: the first failure reason is recorded once and never
+      // overwritten — later retries update last_error only, so the
+      // original reason stays answerable from the row.
+      first_error: reason.slice(0, 500),
     });
     if (error) {
       console.error(
@@ -264,37 +282,62 @@ export type MailOutboxRow = {
   body_text: string;
   body_html: string | null;
   attempts: number;
+  first_error: string | null;
 };
 
 /**
  * Requeues one terminally failed outbox row (migration 63, S-06) so it
  * can be retried again once SMTP is configured. Only a row already in
  * 'failed' moves: a pending or sent row is left untouched and the call
- * returns false. Attempts reset to 0 — the requeue starts a fresh retry
- * cycle; the 5-attempt cap still applies to the new cycle. Never throws.
+ * returns `{ ok: false, reason: "not_failed" }`. Attempts reset to 0 —
+ * the requeue starts a fresh retry cycle; the 5-attempt cap still
+ * applies to the new cycle. Never throws.
+ *
+ * S-10: requeues are capped at MAIL_OUTBOX_MAX_REQUEUES per row. Once
+ * the row has been requeued that many times, a further requeue is
+ * refused with `{ ok: false, reason: "cap_reached" }` and the row stays
+ * terminally failed. The original failure reason is preserved: the
+ * requeue leaves last_error untouched (it still says what actually
+ * failed) and first_error holds the very first failure reason — the
+ * previous behaviour overwrote last_error with a generic requeue note
+ * and lost both.
  */
-export async function requeueMailOutbox(rowId: string): Promise<boolean> {
-  if (!rowId) return false;
+export async function requeueMailOutbox(
+  rowId: string,
+): Promise<RequeueMailOutboxResult> {
+  if (!rowId) return { ok: false, reason: "not_failed" };
   try {
     const service = createServiceClient();
     const { data, error } = await service
       .from("mail_outbox")
-      .select("id, status")
+      .select("id, status, requeue_count")
       .eq("id", rowId)
       .maybeSingle();
-    const row = data as unknown as { id: string; status: string } | null;
-    if (error || !row || row.status !== "failed") return false;
+    const row = data as unknown as {
+      id: string;
+      status: string;
+      requeue_count?: number | null;
+    } | null;
+    if (error || !row || row.status !== "failed") {
+      return { ok: false, reason: "not_failed" };
+    }
+    const requeueCount = row.requeue_count ?? 0;
+    if (requeueCount >= MAIL_OUTBOX_MAX_REQUEUES) {
+      return { ok: false, reason: "cap_reached" };
+    }
     const { error: updateError } = await service
       .from("mail_outbox")
       .update({
         status: "pending",
         attempts: 0,
-        last_error: "Requeued by an admin — retry once SMTP is configured.",
+        requeue_count: requeueCount + 1,
       })
       .eq("id", rowId);
-    return !updateError;
+    return updateError
+      ? { ok: false, reason: "not_failed" }
+      : { ok: true };
   } catch {
-    return false;
+    return { ok: false, reason: "not_failed" };
   }
 }
 
@@ -357,7 +400,9 @@ export async function processMailOutbox(
     const service = createServiceClient();
     const { data, error } = await service
       .from("mail_outbox")
-      .select("id, kind, to_email, subject, body_text, body_html, attempts")
+      .select(
+        "id, kind, to_email, subject, body_text, body_html, attempts, first_error",
+      )
       .eq("status", "pending")
       .order("created_at", { ascending: true })
       .limit(limit);
@@ -405,6 +450,10 @@ export async function processMailOutbox(
           .update({
             attempts,
             last_error: reason.slice(0, 500),
+            // S-10: first_error is set at enqueue and never overwritten.
+            // Rows written before migration 65 have none, so a failure
+            // here fills it in once — after that it is left alone.
+            first_error: row.first_error ?? reason.slice(0, 500),
             status: attempts >= MAIL_OUTBOX_MAX_ATTEMPTS ? "failed" : "pending",
           })
           .eq("id", row.id);

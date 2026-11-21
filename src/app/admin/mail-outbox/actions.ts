@@ -67,6 +67,10 @@ export async function retryMailOutbox(
  * moves the row back to pending with a fresh attempt count — so it is
  * allowed even before a provider exists; the retry action above stays
  * guarded. Admin-only, quota guarded like the other admin mutations.
+ *
+ * S-10: requeues are capped at MAIL_OUTBOX_MAX_REQUEUES (2) per row —
+ * a row at the cap stays terminally failed, and the admin is told so
+ * instead of seeing a generic failure.
  */
 export async function requeueMailOutboxRow(
   _prev: MailOutboxActionState,
@@ -80,10 +84,15 @@ export async function requeueMailOutboxRow(
   const rowId = String(formData.get("row_id") ?? "").trim();
   if (!rowId) return { error: "Choose a failed email to requeue." };
 
-  const requeued = await requeueMailOutbox(rowId);
-  if (!requeued) {
+  const result = await requeueMailOutbox(rowId);
+  if (!result.ok) {
     return {
-      error: "That email could not be requeued — it may no longer be failed.",
+      error:
+        result.reason === "cap_reached"
+          ? "That email has already been requeued twice and stays failed. " +
+            "It cannot be requeued again — check the failure reason and " +
+            "resend it another way if it still matters."
+          : "That email could not be requeued — it may no longer be failed.",
     };
   }
   revalidatePath("/admin/mail-outbox");

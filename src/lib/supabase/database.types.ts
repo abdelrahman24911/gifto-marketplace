@@ -776,6 +776,8 @@ export type Database = {
           status: string;
           attempts: number;
           last_error: string | null;
+          requeue_count: number;
+          first_error: string | null;
           created_at: string;
           sent_at: string | null;
         };
@@ -789,6 +791,8 @@ export type Database = {
           status?: string;
           attempts?: number;
           last_error?: string | null;
+          requeue_count?: number;
+          first_error?: string | null;
           created_at?: string;
           sent_at?: string | null;
         };
@@ -802,6 +806,8 @@ export type Database = {
           status?: string;
           attempts?: number;
           last_error?: string | null;
+          requeue_count?: number;
+          first_error?: string | null;
           created_at?: string;
           sent_at?: string | null;
         };

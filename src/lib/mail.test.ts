@@ -336,6 +336,8 @@ type OutboxRow = {
   attempts: number;
   status: string;
   last_error?: string;
+  requeue_count?: number;
+  first_error?: string | null;
 };
 
 function makeOutboxFake(rows: OutboxRow[]) {
@@ -358,6 +360,8 @@ function makeOutboxFake(rows: OutboxRow[]) {
           body_html: (row.body_html as string | null) ?? null,
           attempts: 0,
           status: "pending",
+          requeue_count: 0,
+          first_error: (row.first_error as string | null) ?? null,
         });
         return { error: null };
       };
@@ -597,7 +601,7 @@ describe("mail outbox", () => {
     ];
     const fake = makeOutboxFake(rows);
     serviceState.client = fake;
-    expect(await requeueMailOutbox("row-1")).toBe(true);
+    expect(await requeueMailOutbox("row-1")).toEqual({ ok: true });
     expect(rows[0].status).toBe("pending");
     expect(rows[0].attempts).toBe(0);
   });
@@ -617,11 +621,120 @@ describe("mail outbox", () => {
     ];
     const fake = makeOutboxFake(rows);
     serviceState.client = fake;
-    expect(await requeueMailOutbox("row-1")).toBe(false);
-    expect(await requeueMailOutbox("no-such-row")).toBe(false);
-    expect(await requeueMailOutbox("")).toBe(false);
+    expect(await requeueMailOutbox("row-1")).toEqual({
+      ok: false,
+      reason: "not_failed",
+    });
+    expect(await requeueMailOutbox("no-such-row")).toEqual({
+      ok: false,
+      reason: "not_failed",
+    });
+    expect(await requeueMailOutbox("")).toEqual({
+      ok: false,
+      reason: "not_failed",
+    });
     expect(rows[0].status).toBe("pending");
     expect(rows[0].attempts).toBe(1);
     expect(fake.updates).toHaveLength(0);
+  });
+
+  it("S-10: requeue preserves the original failure reason and counts the requeue", async () => {
+    const rows: OutboxRow[] = [
+      {
+        id: "row-1",
+        kind: "order_status",
+        to_email: "customer@example.com",
+        subject: "Your order shipped",
+        body_text: "Hi",
+        body_html: null,
+        attempts: 5,
+        status: "failed",
+        last_error: "connection refused",
+        first_error: "connection refused",
+        requeue_count: 0,
+      },
+    ];
+    const fake = makeOutboxFake(rows);
+    serviceState.client = fake;
+    expect(await requeueMailOutbox("row-1")).toEqual({ ok: true });
+    expect(rows[0].status).toBe("pending");
+    expect(rows[0].attempts).toBe(0);
+    expect(rows[0].requeue_count).toBe(1);
+    // The original failure reason stays on the row — it is no longer
+    // overwritten with a generic requeue note.
+    expect(rows[0].last_error).toBe("connection refused");
+    expect(rows[0].first_error).toBe("connection refused");
+  });
+
+  it("S-10: requeue is refused once the row has already been requeued twice", async () => {
+    const rows: OutboxRow[] = [
+      {
+        id: "row-1",
+        kind: "order_status",
+        to_email: "customer@example.com",
+        subject: "Your order shipped",
+        body_text: "Hi",
+        body_html: null,
+        attempts: 5,
+        status: "failed",
+        last_error: "connection refused",
+        first_error: "connection refused",
+        requeue_count: 2,
+      },
+    ];
+    const fake = makeOutboxFake(rows);
+    serviceState.client = fake;
+    expect(await requeueMailOutbox("row-1")).toEqual({
+      ok: false,
+      reason: "cap_reached",
+    });
+    expect(rows[0].status).toBe("failed");
+    expect(rows[0].requeue_count).toBe(2);
+    expect(fake.updates).toHaveLength(0);
+  });
+
+  it("S-10: enqueue records the first failure reason on the row", async () => {
+    const fake = makeOutboxFake([]);
+    serviceState.client = fake;
+    const result = await sendMail(
+      { to: "customer@example.com", subject: "Your order shipped", text: "Hi" },
+      { config: null, kind: "order_status" },
+    );
+    expect(result).toEqual({ sent: false, skipped: "unconfigured" });
+    expect(fake.inserts).toHaveLength(1);
+    expect(fake.inserts[0]).toMatchObject({
+      last_error: "SMTP is not configured",
+      first_error: "SMTP is not configured",
+    });
+  });
+
+  it("S-10: a failed retry keeps the first failure reason and updates the latest one", async () => {
+    const rows: OutboxRow[] = [
+      {
+        id: "row-1",
+        kind: "order_status",
+        to_email: "customer@example.com",
+        subject: "Your order shipped",
+        body_text: "Hi",
+        body_html: null,
+        attempts: 0,
+        status: "pending",
+        last_error: "SMTP is not configured",
+        first_error: "SMTP is not configured",
+      },
+    ];
+    const fake = makeOutboxFake(rows);
+    serviceState.client = fake;
+    const failingTransport = {
+      sendMail: async () => {
+        throw new Error("connection refused");
+      },
+    } as never;
+    const outcome = await processMailOutbox({ transport: failingTransport });
+    expect(outcome).toEqual({ sent: 0, failed: 1, remaining: 1 });
+    expect(rows[0].status).toBe("pending");
+    expect(rows[0].attempts).toBe(1);
+    expect(rows[0].last_error).toBe("connection refused");
+    expect(rows[0].first_error).toBe("SMTP is not configured");
   });
 });

@@ -1,7 +1,7 @@
 import { Breadcrumb, EmptyState } from "@/components/ui/section";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
-import { isMailConfigured } from "@/lib/mail";
+import { MAIL_OUTBOX_MAX_REQUEUES, isMailConfigured } from "@/lib/mail";
 
 import { AdminNotice, AdminPageHeader } from "../ui";
 import { MailOutboxRequeueForm } from "./mail-outbox-requeue-form";
@@ -41,7 +41,7 @@ export default async function AdminMailOutboxPage() {
     supabase
       .from("mail_outbox")
       .select(
-        "id, kind, to_email, subject, body_text, status, attempts, last_error, created_at, sent_at",
+        "id, kind, to_email, subject, body_text, status, attempts, last_error, first_error, requeue_count, created_at, sent_at",
       )
       .eq("status", "pending")
       .order("created_at", { ascending: true })
@@ -49,7 +49,7 @@ export default async function AdminMailOutboxPage() {
     supabase
       .from("mail_outbox")
       .select(
-        "id, kind, to_email, subject, body_text, status, attempts, last_error, created_at, sent_at",
+        "id, kind, to_email, subject, body_text, status, attempts, last_error, first_error, requeue_count, created_at, sent_at",
       )
       .eq("status", "failed")
       .order("created_at", { ascending: false })
@@ -80,7 +80,8 @@ export default async function AdminMailOutboxPage() {
         <AdminNotice tone="warning" role="alert">
           SMTP is not configured yet, so retries are disabled — retrying
           now would not send anything. Failed emails can still be
-          requeued below; retry the queue once a provider is configured.
+          requeued below (up to {MAIL_OUTBOX_MAX_REQUEUES} times each);
+          retry the queue once a provider is configured.
         </AdminNotice>
       ) : null}
 
@@ -116,14 +117,27 @@ export default async function AdminMailOutboxPage() {
                 {formatDateTime(row.created_at)}
                 {row.sent_at ? ` · sent ${formatDateTime(row.sent_at)}` : ""}
                 {row.attempts > 0 ? ` · ${row.attempts} attempt(s)` : ""}
+                {row.requeue_count > 0
+                  ? ` · requeued ${row.requeue_count} ${row.requeue_count === 1 ? "time" : "times"}`
+                  : ""}
               </p>
               {row.last_error ? (
                 <p className="mt-2 rounded-lg bg-paper-deep px-3 py-2 text-xs text-ink-soft">
-                  {row.last_error}
+                  Latest failure: {row.last_error}
+                </p>
+              ) : null}
+              {row.first_error &&
+              row.first_error !== row.last_error ? (
+                <p className="mt-2 rounded-lg bg-paper-deep px-3 py-2 text-xs text-ink-soft">
+                  First failure: {row.first_error}
                 </p>
               ) : null}
               {row.status === "failed" ? (
-                <MailOutboxRequeueForm rowId={row.id} />
+                <MailOutboxRequeueForm
+                  rowId={row.id}
+                  requeueCount={row.requeue_count ?? 0}
+                  maxRequeues={MAIL_OUTBOX_MAX_REQUEUES}
+                />
               ) : null}
             </li>
           ))}
