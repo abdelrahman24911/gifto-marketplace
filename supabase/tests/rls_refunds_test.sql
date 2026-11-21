@@ -2786,6 +2786,270 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- TEST 16e (R-01 residual, v6): voiding a settlement that only PARTIALLY
+-- applied a clawback restores only the un-applied portion — no
+-- double-restore, and the already-applied part stays applied.
+-- ---------------------------------------------------------------------------
+-- Vendor H: settle 1000, pay, post-payment refund 5000 -> clawback -500.
+reset role;
+insert into public.vendors (id, name, slug, status, commission_rate)
+values (
+  '42200000-0000-0000-0000-000000000018',
+  'Partial Void Clawback Shop', 'partial-void-clawback-shop', 'active', 0.1000
+);
+
+insert into public.orders (
+  id, user_id, status, subtotal_minor, total_minor, recipient_name,
+  contact_phone, address_line, city, governorate
+) values (
+  '62200000-0000-0000-0000-000000000019',
+  '12200000-0000-0000-0000-000000000001',
+  'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+  '12 Road 9, Maadi', 'Maadi', 'Cairo'
+);
+
+insert into public.order_vendors (
+  id, order_id, vendor_id, status, subtotal_minor, commission_rate, delivered_at
+) values (
+  '72200000-0000-0000-0000-000000000019',
+  '62200000-0000-0000-0000-000000000019',
+  '42200000-0000-0000-0000-000000000018',
+  'delivered', 10000, 0.1000, now()
+);
+
+insert into public.commission_entries (
+  id, order_vendor_id, vendor_id, rate, base_minor, amount_minor, earned_at
+) values (
+  '82200000-0000-0000-0000-000000000019',
+  '72200000-0000-0000-0000-000000000019',
+  '42200000-0000-0000-0000-000000000018',
+  0.1000, 10000, 1000, now()
+);
+
+set role authenticated;
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+insert into refund_test_ids
+select 'r01p_settlement_1', public.create_settlement(
+  '42200000-0000-0000-0000-000000000018', 'R-01 partial first batch');
+
+do $$
+begin
+  perform public.mark_settlement_paid(
+    (select id from refund_test_ids where name = 'r01p_settlement_1'),
+    1000, 'bank_transfer', 'R01P-TEST16E-001');
+end $$;
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000001"}';
+insert into refund_test_ids
+select 'r01p_case', public.open_refund_case(
+  '72200000-0000-0000-0000-000000000019', 'R-01 partial paid-return issue', 5000);
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+do $$
+begin
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'r01p_case'), true, 5000, 'R-01 partial refund approved');
+
+  if not exists (
+    select 1 from public.commission_clawbacks
+     where refund_case_id = (select id from refund_test_ids where name = 'r01p_case')
+       and amount_minor = -500
+       and status = 'outstanding'
+       and consumed_at is null
+  ) then
+    raise exception 'TEST 16e FAILED: clawback is wrong (expected -500 outstanding)';
+  end if;
+  raise notice 'TEST 16e-a PASSED: paid-return refund records a -500 outstanding clawback';
+end $$;
+
+-- New earnings of only 200: the next settlement applies just 200 of the
+-- 500 clawback, so the clawback stays outstanding (not consumed).
+reset role;
+insert into public.orders (
+  id, user_id, status, subtotal_minor, total_minor, recipient_name,
+  contact_phone, address_line, city, governorate
+) values (
+  '62200000-0000-0000-0000-000000000020',
+  '12200000-0000-0000-0000-000000000001',
+  'delivered', 2000, 2000, 'Refund Buyer', '01001112233',
+  '12 Road 9, Maadi', 'Maadi', 'Cairo'
+);
+
+insert into public.order_vendors (
+  id, order_id, vendor_id, status, subtotal_minor, commission_rate, delivered_at
+) values (
+  '72200000-0000-0000-0000-000000000020',
+  '62200000-0000-0000-0000-000000000020',
+  '42200000-0000-0000-0000-000000000018',
+  'delivered', 2000, 0.1000, now()
+);
+
+insert into public.commission_entries (
+  id, order_vendor_id, vendor_id, rate, base_minor, amount_minor, earned_at
+) values (
+  '82200000-0000-0000-0000-000000000020',
+  '72200000-0000-0000-0000-000000000020',
+  '42200000-0000-0000-0000-000000000018',
+  0.1000, 2000, 200, now()
+);
+
+set role authenticated;
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+insert into refund_test_ids
+select 'r01p_settlement_2', public.create_settlement(
+  '42200000-0000-0000-0000-000000000018', 'R-01 partial second batch');
+
+do $$
+declare
+  v_sid uuid := (select id from refund_test_ids where name = 'r01p_settlement_2');
+  v_clawback_id uuid := (
+    select id from public.commission_clawbacks
+     where refund_case_id = (select id from refund_test_ids where name = 'r01p_case')
+  );
+begin
+  if (select total_minor from public.settlements where id = v_sid) <> 0 then
+    raise exception 'TEST 16e FAILED: partial settlement total is not 0 (200 - 200)';
+  end if;
+
+  if (select clawback_minor from public.settlements where id = v_sid) <> 200 then
+    raise exception 'TEST 16e FAILED: partial settlement clawback_minor is not 200';
+  end if;
+
+  if (select coalesce(sum(amount_minor), 0) from public.clawback_applications
+       where settlement_id = v_sid) <> 200 then
+    raise exception 'TEST 16e FAILED: partial settlement did not apply exactly 200';
+  end if;
+
+  -- Partially applied: the clawback stays outstanding, never consumed.
+  if not exists (
+    select 1 from public.commission_clawbacks
+     where id = v_clawback_id
+       and status = 'outstanding'
+       and consumed_at is null
+  ) then
+    raise exception 'TEST 16e FAILED: partially applied clawback was consumed';
+  end if;
+  raise notice 'TEST 16e-b PASSED: second settlement applies only 200 of the 500 clawback; it stays outstanding';
+
+  -- Void the batch: its 200 application is deleted, the clawback stays
+  -- outstanding, and the full 500 is outstanding again — the un-applied
+  -- portion is restored, nothing is double-restored.
+  perform public.void_settlement(v_sid, 'Voided by mistake');
+
+  if (select status from public.settlements where id = v_sid) <> 'voided' then
+    raise exception 'TEST 16e FAILED: voided settlement status is not voided';
+  end if;
+
+  if (select count(*) from public.clawback_applications
+       where settlement_id = v_sid) <> 0 then
+    raise exception 'TEST 16e FAILED: void left clawback applications on the voided batch';
+  end if;
+
+  if not exists (
+    select 1 from public.commission_clawbacks
+     where id = v_clawback_id
+       and status = 'outstanding'
+       and consumed_at is null
+  ) then
+    raise exception 'TEST 16e FAILED: void changed the partially applied clawback status';
+  end if;
+
+  if (select abs(amount_minor) - coalesce((
+         select sum(amount_minor) from public.clawback_applications
+          where clawback_id = v_clawback_id), 0)
+       from public.commission_clawbacks
+      where id = v_clawback_id) <> 500 then
+    raise exception 'TEST 16e FAILED: outstanding remainder after void is not 500';
+  end if;
+  raise notice 'TEST 16e-c PASSED: voiding a partial batch restores the full 500 outstanding';
+end $$;
+
+-- New earnings of 2000 for the third batch: the released 200 entry is
+-- re-batched with it (gross 2200, clawback 500 -> total 1700).
+reset role;
+insert into public.orders (
+  id, user_id, status, subtotal_minor, total_minor, recipient_name,
+  contact_phone, address_line, city, governorate
+) values (
+  '62200000-0000-0000-0000-000000000052',
+  '12200000-0000-0000-0000-000000000001',
+  'delivered', 20000, 20000, 'Refund Buyer', '01001112233',
+  '12 Road 9, Maadi', 'Maadi', 'Cairo'
+);
+
+insert into public.order_vendors (
+  id, order_id, vendor_id, status, subtotal_minor, commission_rate, delivered_at
+) values (
+  '72200000-0000-0000-0000-000000000052',
+  '62200000-0000-0000-0000-000000000052',
+  '42200000-0000-0000-0000-000000000018',
+  'delivered', 20000, 0.1000, now()
+);
+
+insert into public.commission_entries (
+  id, order_vendor_id, vendor_id, rate, base_minor, amount_minor, earned_at
+) values (
+  '82200000-0000-0000-0000-000000000052',
+  '72200000-0000-0000-0000-000000000052',
+  '42200000-0000-0000-0000-000000000018',
+  0.1000, 20000, 2000, now()
+);
+
+set role authenticated;
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+insert into refund_test_ids
+select 'r01p_settlement_3', public.create_settlement(
+  '42200000-0000-0000-0000-000000000018', 'R-01 partial third batch re-nets the clawback');
+
+do $$
+declare
+  v_sid uuid := (select id from refund_test_ids where name = 'r01p_settlement_3');
+  v_clawback_id uuid := (
+    select id from public.commission_clawbacks
+     where refund_case_id = (select id from refund_test_ids where name = 'r01p_case')
+  );
+begin
+  if (select total_minor from public.settlements where id = v_sid) <> 1700 then
+    raise exception 'TEST 16e FAILED: third settlement total is not 1700 (2200 - 500)';
+  end if;
+
+  if (select clawback_minor from public.settlements where id = v_sid) <> 500 then
+    raise exception 'TEST 16e FAILED: third settlement clawback_minor is not 500';
+  end if;
+
+  -- The voided 200 is not counted again: live applications total 500,
+  -- exactly once, on this batch — not 700.
+  if (select count(*) from public.clawback_applications
+       where clawback_id = v_clawback_id) <> 1 then
+    raise exception 'TEST 16e FAILED: restored clawback was not applied exactly once in total';
+  end if;
+
+  if (select coalesce(sum(amount_minor), 0) from public.clawback_applications
+       where clawback_id = v_clawback_id) <> 500 then
+    raise exception 'TEST 16e FAILED: live clawback applications do not total 500 (double-restore?)';
+  end if;
+
+  if not exists (
+    select 1 from public.commission_clawbacks
+     where id = v_clawback_id
+       and status = 'consumed'
+       and consumed_at is not null
+  ) then
+    raise exception 'TEST 16e FAILED: fully applied clawback is not consumed';
+  end if;
+
+  perform public.mark_settlement_paid(
+    v_sid, 1700, 'bank_transfer', 'R01P-TEST16E-002', 'Third batch, net of restored clawback');
+  raise notice 'TEST 16e-d PASSED: restored clawback is re-netted once (500, not 700) and the net 1700 pays';
+  raise notice 'TEST 16e PASSED: partial-consumption void restores only the un-applied portion';
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- TEST 17 (R-05, D-09): damaged is never restocked; the return-courier
 -- payer follows the inspection condition
 -- ---------------------------------------------------------------------------
