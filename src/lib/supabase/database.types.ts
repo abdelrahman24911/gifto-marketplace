@@ -676,6 +676,54 @@ export type Database = {
           },
         ];
       };
+      price_consent_events: {
+        Row: {
+          id: string;
+          order_id: string;
+          user_id: string | null;
+          guest_token_hash: string | null;
+          expected_prices: Json;
+          expected_total_minor: number;
+          live_total_minor: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          order_id: string;
+          user_id?: string | null;
+          guest_token_hash?: string | null;
+          expected_prices: Json;
+          expected_total_minor: number;
+          live_total_minor: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          order_id?: string;
+          user_id?: string | null;
+          guest_token_hash?: string | null;
+          expected_prices?: Json;
+          expected_total_minor?: number;
+          live_total_minor?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "price_consent_events_order_id_fkey";
+            columns: ["order_id"];
+            isOneToOne: true;
+            referencedRelation: "orders";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "price_consent_events_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       order_address_corrections: {
         Row: {
           id: number;

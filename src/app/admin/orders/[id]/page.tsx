@@ -45,30 +45,39 @@ export default async function AdminOrderDetailPage({
   const { id } = await params;
   const { supabase } = await requirePlatformAdmin();
 
-  const [orderResult, eventsResult, correctionsResult] = await Promise.all([
-    supabase
-      .from("orders")
-      .select(
-        "id, public_reference, user_id, status, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, contact_email, address_line, city, governorate, notes, gift_wrap, gift_message, preferred_delivery_date, delivery_time_note, created_at, updated_at, order_vendors(id, status, subtotal_minor, delivery_fee_minor, commission_rate, confirmed_at, shipped_at, delivered_at, cancelled_at, courier_name, tracking_ref, handed_over_at, created_at, vendor:vendors(name, slug), order_items(id, product_name, product_slug, quantity, unit_price_minor, line_total_minor), commission_entries(amount_minor, status))",
-      )
-      .eq("id", id)
-      .maybeSingle(),
-    supabase
-      .from("order_status_events")
-      .select(
-        "id, order_vendor_id, from_status, to_status, actor_id, actor_role, reason_code, note, created_at",
-      )
-      .eq("order_id", id)
-      .order("created_at", { ascending: true }),
-    // P1-13: address-correction audit (own table, not status events).
-    supabase
-      .from("order_address_corrections")
-      .select(
-        "id, actor_id, reason_code, note, before, after, coverage_warning_acknowledged, created_at",
-      )
-      .eq("order_id", id)
-      .order("created_at", { ascending: false }),
-  ]);
+  const [orderResult, eventsResult, correctionsResult, consentResult] =
+    await Promise.all([
+      supabase
+        .from("orders")
+        .select(
+          "id, public_reference, user_id, status, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, contact_email, address_line, city, governorate, notes, gift_wrap, gift_message, preferred_delivery_date, delivery_time_note, created_at, updated_at, order_vendors(id, status, subtotal_minor, delivery_fee_minor, commission_rate, confirmed_at, shipped_at, delivered_at, cancelled_at, courier_name, tracking_ref, handed_over_at, created_at, vendor:vendors(name, slug), order_items(id, product_id, product_name, product_slug, quantity, unit_price_minor, line_total_minor), commission_entries(amount_minor, status))",
+        )
+        .eq("id", id)
+        .maybeSingle(),
+      supabase
+        .from("order_status_events")
+        .select(
+          "id, order_vendor_id, from_status, to_status, actor_id, actor_role, reason_code, note, created_at",
+        )
+        .eq("order_id", id)
+        .order("created_at", { ascending: true }),
+      // P1-13: address-correction audit (own table, not status events).
+      supabase
+        .from("order_address_corrections")
+        .select(
+          "id, actor_id, reason_code, note, before, after, coverage_warning_acknowledged, created_at",
+        )
+        .eq("order_id", id)
+        .order("created_at", { ascending: false }),
+      // Migration 62: price-consent audit (one row per order).
+      supabase
+        .from("price_consent_events")
+        .select(
+          "id, user_id, guest_token_hash, expected_prices, expected_total_minor, live_total_minor, created_at",
+        )
+        .eq("order_id", id)
+        .maybeSingle(),
+    ]);
 
   if (orderResult.error) {
     return (
@@ -99,6 +108,7 @@ export default async function AdminOrderDetailPage({
   const suborders = order.order_vendors ?? [];
   const events = eventsResult.data ?? [];
   const corrections = correctionsResult.data ?? [];
+  const consent = consentResult.data ?? null;
   const reference = order.public_reference ?? `#${order.id.slice(0, 8)}`;
   // P1-13: correction is allowed only while no shop line has been
   // delivered or returned; the RPC enforces the same guard.
@@ -503,6 +513,62 @@ export default async function AdminOrderDetailPage({
                     );
                   })}
                 </ol>
+              </div>
+            ) : null}
+
+            {consent ? (
+              <div className="mt-4">
+                <h3 className="text-sm font-semibold text-ink">
+                  Price consent
+                </h3>
+                <div className="mt-2 rounded-xl border border-line bg-paper px-4 py-3 text-sm">
+                  <p className="text-ink">
+                    {consent.user_id
+                      ? "Signed-in customer"
+                      : "Guest checkout"}{" "}
+                    agreed to the prices shown at checkout on{" "}
+                    {formatOrderDateTime(consent.created_at)}.
+                  </p>
+                  <p className="mt-1 text-xs text-ink-mute">
+                    Expected total {formatEgp(consent.expected_total_minor)} ·{" "}
+                    charged total {formatEgp(consent.live_total_minor)}
+                    {consent.expected_total_minor ===
+                    consent.live_total_minor
+                      ? " · prices matched"
+                      : " · PRICES DIFFER — investigate"}
+                  </p>
+                  {Array.isArray(consent.expected_prices) ? (
+                    <ul className="mt-2 flex flex-col gap-1 text-xs text-ink-soft">
+                      {(
+                        consent.expected_prices as {
+                          product_id?: unknown;
+                          unit_price_minor?: unknown;
+                        }[]
+                      ).map((line) => {
+                        const productId =
+                          typeof line.product_id === "string"
+                            ? line.product_id
+                            : "";
+                        const item = suborders
+                          .flatMap((s) => s.order_items ?? [])
+                          .find((i) => i.product_id === productId);
+                        return (
+                          <li key={productId || "unknown"}>
+                            {item?.product_name ??
+                              `Product ${productId.slice(0, 8)}`}
+                            : expected{" "}
+                            {typeof line.unit_price_minor === "number"
+                              ? formatEgp(line.unit_price_minor)
+                              : "—"}
+                            {item
+                              ? ` · charged ${formatEgp(item.unit_price_minor)}`
+                              : ""}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : null}
+                </div>
               </div>
             ) : null}
           </section>

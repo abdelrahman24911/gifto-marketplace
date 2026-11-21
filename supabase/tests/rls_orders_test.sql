@@ -1266,6 +1266,190 @@ begin
   raise notice 'TEST 19 PASSED: legacy no-check checkout RPCs are gone; only the price-check RPCs remain';
 end $$;
 
+-- TEST 20 (migration 62): the price consent is recorded append-only,
+-- once per order, for signed-in and guest checkout alike
+-- ---------------------------------------------------------------------------
+reset role;
+update public.products set stock = 5, price_minor = 10000
+ where id = '51100000-0000-0000-0000-000000000001';
+
+set role authenticated;
+set request.jwt.claim.sub = '11100000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"11100000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_oid uuid;
+  v_key uuid := gen_random_uuid();
+  v_blocked boolean := false;
+  v_count int;
+begin
+  -- (a) A signed-in order records its consent: who, what prices, what
+  -- was charged (expected total = live total by construction).
+  v_oid := public.place_order_with_price_check(
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Sara Buyer', '01001112233', 'buyer@orders.gifto.test',
+    '12 Main Street', 'Alexandria', 'Alexandria', null,
+    v_key,
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":10000}]'::jsonb,
+    10000);
+  if v_oid is null then
+    raise exception 'TEST 20 FAILED: signed-in order did not place';
+  end if;
+
+  if not exists (
+    select 1 from public.price_consent_events
+     where order_id = v_oid
+       and user_id = '11100000-0000-0000-0000-000000000001'
+       and guest_token_hash is null
+       and expected_total_minor = 10000
+       and live_total_minor = 10000
+       and expected_prices @> '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":10000}]'::jsonb
+  ) then
+    raise exception 'TEST 20 FAILED: signed-in consent was not recorded (who/what/charged)';
+  end if;
+  raise notice 'TEST 20a PASSED: signed-in consent recorded with expected and charged totals';
+
+  -- (b) An idempotency retry returns the same order and records the
+  -- consent exactly once.
+  if public.place_order_with_price_check(
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Sara Buyer', '01001112233', 'buyer@orders.gifto.test',
+    '12 Main Street', 'Alexandria', 'Alexandria', null,
+    v_key,
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":10000}]'::jsonb,
+    10000) <> v_oid then
+    raise exception 'TEST 20 FAILED: idempotency retry did not return the same order';
+  end if;
+
+  select count(*) into v_count from public.price_consent_events where order_id = v_oid;
+  if v_count <> 1 then
+    raise exception 'TEST 20 FAILED: idempotency retry recorded % consent rows, expected 1', v_count;
+  end if;
+  raise notice 'TEST 20b PASSED: idempotency retry records the consent exactly once';
+end $$;
+
+-- (c) A guest order records the consent keyed by the token hash, with
+-- no user id.
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_hash text := encode(digest('guest-token-consent', 'sha256'), 'hex');
+  v_oid uuid;
+begin
+  v_oid := gifto_test.place_guest_order(
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Nour Guest', '01001112233', 'nour@orders.gifto.test',
+    '12 Main Street', 'Alexandria', 'Alexandria', null,
+    gen_random_uuid(), v_hash);
+
+  if v_oid is null then
+    raise exception 'TEST 20 FAILED: guest order did not place';
+  end if;
+
+  if not exists (
+    select 1 from public.price_consent_events
+     where order_id = v_oid
+       and user_id is null
+       and guest_token_hash = v_hash
+       and expected_total_minor = 10000
+       and live_total_minor = 10000
+  ) then
+    raise exception 'TEST 20 FAILED: guest consent was not recorded by token hash';
+  end if;
+  raise notice 'TEST 20c PASSED: guest consent recorded by token hash, no user id';
+end $$;
+
+-- (d) The trail is append-only: no API role can write it directly, and
+-- the internal recorder is not executable by authenticated users.
+set role authenticated;
+set request.jwt.claim.sub = '11100000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"11100000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_blocked boolean := false;
+  v_oid uuid := (select order_id from public.price_consent_events limit 1);
+begin
+  begin
+    insert into public.price_consent_events
+      (order_id, user_id, expected_prices, expected_total_minor, live_total_minor)
+    values (v_oid, '11100000-0000-0000-0000-000000000001', '[]'::jsonb, 0, 0);
+  exception when insufficient_privilege then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 20 FAILED: an authenticated user inserted a consent row';
+  end if;
+
+  v_blocked := false;
+  begin
+    update public.price_consent_events set live_total_minor = 0 where order_id = v_oid;
+  exception when insufficient_privilege then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 20 FAILED: an authenticated user updated a consent row';
+  end if;
+
+  v_blocked := false;
+  begin
+    delete from public.price_consent_events where order_id = v_oid;
+  exception when insufficient_privilege then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 20 FAILED: an authenticated user deleted a consent row';
+  end if;
+
+  if has_function_privilege('authenticated', 'public._record_price_consent_event(uuid,uuid,text,jsonb,int)', 'execute') then
+    raise exception 'TEST 20 FAILED: _record_price_consent_event is executable by authenticated users';
+  end if;
+  raise notice 'TEST 20d PASSED: consent trail is append-only; the recorder is not API-callable';
+end $$;
+
+-- (e) A PRICE_CHANGED refusal records no consent row: the refusing
+-- transaction rolls back, so there is nothing to record.
+reset role;
+update public.products set price_minor = 12000
+ where id = '51100000-0000-0000-0000-000000000001';
+
+set role authenticated;
+set request.jwt.claim.sub = '11100000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"11100000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_before int;
+  v_after int;
+  v_blocked boolean := false;
+begin
+  select count(*) into v_before from public.price_consent_events;
+
+  begin
+    perform public.place_order_with_price_check(
+      '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+      'Sara Buyer', '01001112233', 'buyer@orders.gifto.test',
+      '12 Main Street', 'Alexandria', 'Alexandria', null,
+      gen_random_uuid(),
+      '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":10000}]'::jsonb,
+      10000);
+  exception when check_violation then
+    if sqlerrm like 'PRICE_CHANGED:%' then
+      v_blocked := true;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 20 FAILED: changed price did not block the order';
+  end if;
+
+  select count(*) into v_after from public.price_consent_events;
+  if v_after <> v_before then
+    raise exception 'TEST 20 FAILED: a refused order recorded a consent row';
+  end if;
+  raise notice 'TEST 20e PASSED: a PRICE_CHANGED refusal records no consent row';
+  raise notice 'TEST 20 PASSED: price consent is recorded append-only, once per order';
+end $$;
+
 reset role;
 
 rollback;
