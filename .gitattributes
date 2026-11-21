@@ -1,0 +1,4 @@
+# Keep shell scripts LF on every platform. Windows checkouts default to
+# core.autocrlf=true, and CRLF breaks bash in Linux CI and Git Bash.
+.gitattributes text eol=lf
+*.sh text eol=lf

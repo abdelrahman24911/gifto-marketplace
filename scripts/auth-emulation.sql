@@ -3,8 +3,9 @@
 -- The RLS suites and migrations expect the Supabase platform's `auth` schema
 -- (`auth.users`, `auth.uid()`) and the `anon` / `authenticated` /
 -- `service_role` roles, which a plain local Postgres does not ship. The
--- GitHub-hosted CI job uses the `supabase/postgres` image, which provides
--- them natively, and this file is skipped there.
+-- `supabase/postgres` image has them in its default database, but a freshly
+-- created `gifto_rls_test` database does not inherit them, so the CI job
+-- applies this file too.
 --
 -- The runner (scripts/run-rls-suites.sh) applies this file ONLY when
 -- `auth.users` does not already exist. It is test infrastructure only:
@@ -32,7 +33,14 @@ as $$
   select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid;
 $$;
 
+-- The Supabase image already creates these roles, including service_role with
+-- BYPASSRLS. A reserved role can only be modified by a superuser, and CI's
+-- postgres role is not one, so only attempt the ALTER when the required
+-- attribute is actually missing. The assertions below run either way: this
+-- never silently skips BYPASSRLS or weakens the RLS test semantics.
 do $$
+declare
+  v_bypassrls boolean;
 begin
   if not exists (select 1 from pg_roles where rolname = 'anon') then
     create role anon nologin;
@@ -45,13 +53,39 @@ begin
     -- hardening suite's bootstrap path relies on it).
     create role service_role nologin bypassrls;
   end if;
+
+  select rolbypassrls into v_bypassrls
+  from pg_roles
+  where rolname = 'service_role';
+
+  if not v_bypassrls then
+    if not (select rolsuper from pg_roles where rolname = current_user) then
+      raise exception
+        'service_role lacks BYPASSRLS and % is not a superuser; cannot preserve RLS test semantics',
+        current_user;
+    end if;
+    execute 'alter role service_role with bypassrls';
+  end if;
+
+  if not exists (
+    select 1 from pg_roles
+    where rolname = 'service_role' and rolbypassrls
+  ) then
+    raise exception 'service_role must have BYPASSRLS for RLS test semantics';
+  end if;
+
+  if exists (
+    select 1 from pg_roles
+    where rolname in ('anon', 'authenticated') and rolbypassrls
+  ) then
+    raise exception 'anon and authenticated must not have BYPASSRLS';
+  end if;
 end $$;
 
 -- The Supabase platform grants the API roles USAGE on the auth schema so
 -- they can call auth.uid() (the catalog/occasions suites do exactly this
--- as authenticated/anon). The ALTER is idempotent: roles created by an
--- older version of this file (without BYPASSRLS) are upgraded in place,
--- because roles are cluster-wide and survive dropping the test database.
-alter role service_role with bypassrls;
+-- as authenticated/anon). Roles are cluster-wide and survive dropping the
+-- test database; the DO block above verifies their attributes without
+-- requiring superuser rights when they are already correct.
 grant usage on schema auth to anon, authenticated, service_role;
 grant execute on function auth.uid() to anon, authenticated, service_role;
