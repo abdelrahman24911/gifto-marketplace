@@ -471,8 +471,10 @@ reset role;
 do $$
 begin
   begin
-    perform public._create_order(
-      null,
+    -- R-03: the legacy 11-arg _create_order wrapper is dropped
+    -- (migration 57); the test helper builds expected prices from the
+    -- live rows and goes through the price-checked guest path.
+    perform gifto_test.place_guest_order(
       '[{"product_id":"d1000000-0000-0000-0000-0000000000aa","quantity":1}]'::jsonb,
       'Pause Buyer', '01000000000', null, '10 Test Street, Cairo',
       'Cairo', 'Cairo', null, gen_random_uuid(), 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
@@ -505,8 +507,10 @@ end $$;
 do $$
 declare v_order_id uuid; v_stock int; v_commission numeric; v_subtotal int;
 begin
-  v_order_id := public._create_order(
-    null,
+  -- R-03: the legacy 11-arg _create_order wrapper is dropped
+  -- (migration 57); the test helper builds expected prices from the
+  -- live rows and goes through the price-checked guest path.
+  v_order_id := gifto_test.place_guest_order(
     '[{"product_id":"d1000000-0000-0000-0000-0000000000aa","quantity":2}]'::jsonb,
     'Resume Buyer', '01000000000', null, '10 Test Street, Cairo',
     'Cairo', 'Cairo', null, gen_random_uuid(), 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'

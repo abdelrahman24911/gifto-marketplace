@@ -65,8 +65,17 @@ begin
     end if;
   end loop;
 
-  if has_function_privilege('authenticated', 'public._create_order(uuid,jsonb,text,text,text,text,text,text,text,uuid,text)', 'execute')
-     or has_function_privilege('service_role', 'public._create_order(uuid,jsonb,text,text,text,text,text,text,text,uuid,text)', 'execute') then
+  -- R-03: the legacy 11-argument _create_order wrapper is dropped
+  -- (migration 57), so it must not exist at all — and the surviving
+  -- 13-argument price-checked implementation stays private to the
+  -- migration role (no API role may execute it).
+  if to_regprocedure('public._create_order(uuid,jsonb,text,text,text,text,text,text,text,uuid,text)') is not null then
+    raise exception 'TEST 1 FAILED: legacy 11-arg _create_order still exists';
+  end if;
+
+  if has_function_privilege('anon', 'public._create_order(uuid,jsonb,text,text,text,text,text,text,text,uuid,text,jsonb,int)', 'execute')
+     or has_function_privilege('authenticated', 'public._create_order(uuid,jsonb,text,text,text,text,text,text,text,uuid,text,jsonb,int)', 'execute')
+     or has_function_privilege('service_role', 'public._create_order(uuid,jsonb,text,text,text,text,text,text,text,uuid,text,jsonb,int)', 'execute') then
     raise exception 'TEST 1 FAILED: _create_order is executable by an API role';
   end if;
 
