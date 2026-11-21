@@ -12,7 +12,9 @@ import type { ReorderResolution } from "@/lib/reorder";
  * computed server-side against live prices and stock, so this button
  * only adds what is actually orderable today; anything skipped is
  * named in the toast, and the customer lands on the cart to review
- * before paying.
+ * before paying. The toast is flashed (R-08), not just notified:
+ * the button navigates to /cart, and a flashed toast is the path
+ * that survives the navigation.
  */
 export function ReorderButton({
   resolution,
@@ -21,7 +23,7 @@ export function ReorderButton({
 }) {
   const t = useTranslations("order");
   const { addMany } = useCart();
-  const { notify } = useToast();
+  const { flash } = useToast();
   const router = useRouter();
 
   if (resolution.items.length === 0) {
@@ -41,7 +43,7 @@ export function ReorderButton({
         t("reorderPartial", { skipped: resolution.skipped.join(", ") }),
       );
     }
-    notify(parts.join(" "), "success");
+    flash(parts.join(" "), "success");
     router.push("/cart");
   }
 

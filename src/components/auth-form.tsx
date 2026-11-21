@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { createClient } from "@/lib/supabase/client";
 import { getAuthCallbackUrl, getSafeAuthPath } from "@/lib/auth-redirect";
+import { useToast } from "@/components/toast-provider";
 
 import { checkLoginQuota, checkSignupQuota } from "@/app/[locale]/(auth)/quota-actions";
 
@@ -22,6 +23,7 @@ const buttonClass =
  */
 export function AuthForm({ mode, initialError }: { mode: Mode; initialError?: string }) {
   const router = useRouter();
+  const { flash } = useToast();
   const [error, setError] = useState<string | null>(initialError ?? null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -76,6 +78,9 @@ export function AuthForm({ mode, initialError }: { mode: Mode; initialError?: st
           setError(signInError.message);
           return;
         }
+        // R-08: the sign-in ends in a navigation, so the confirmation
+        // is flashed — a flashed toast is the path that survives it.
+        flash("Signed in — welcome back.", "success");
         router.push(redirectTo);
         router.refresh();
       } else {
@@ -92,6 +97,7 @@ export function AuthForm({ mode, initialError }: { mode: Mode; initialError?: st
           return;
         }
         if (data.session) {
+          flash("Account created — welcome to Gifto.", "success");
           router.push(redirectTo);
           router.refresh();
         } else {
