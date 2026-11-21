@@ -1408,8 +1408,13 @@ begin
   raise notice 'TEST 20d PASSED: consent trail is append-only; the recorder is not API-callable';
 end $$;
 
--- (e) A PRICE_CHANGED refusal records no consent row: the refusing
--- transaction rolls back, so there is nothing to record.
+-- (e) A PRICE_CHANGED refusal records no consent row — but (migration
+-- 64, S-08) it DOES record a refusal row, in a separate transaction:
+-- the refusing transaction rolls back, so the refusal is recorded by
+-- the checkout server action through _record_price_consent_refusal,
+-- which the suite calls here as service_role to simulate it. The old
+-- invariant ("a refused order records nothing anywhere") is replaced
+-- intentionally: a refused attempt must be auditable.
 reset role;
 update public.products set price_minor = 12000
  where id = '51100000-0000-0000-0000-000000000001';
@@ -1421,6 +1426,7 @@ do $$
 declare
   v_before int;
   v_after int;
+  v_key uuid := gen_random_uuid();
   v_blocked boolean := false;
 begin
   select count(*) into v_before from public.price_consent_events;
@@ -1430,7 +1436,7 @@ begin
       '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
       'Sara Buyer', '01001112233', 'buyer@orders.gifto.test',
       '12 Main Street', 'Alexandria', 'Alexandria', null,
-      gen_random_uuid(),
+      v_key,
       '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":10000}]'::jsonb,
       10000);
   exception when check_violation then
@@ -1447,6 +1453,149 @@ begin
     raise exception 'TEST 20 FAILED: a refused order recorded a consent row';
   end if;
   raise notice 'TEST 20e PASSED: a PRICE_CHANGED refusal records no consent row';
+end $$;
+
+-- The refusal itself is recorded by the service-role recorder, in its
+-- own transaction — exactly what the checkout server action does after
+-- catching the PRICE_CHANGED error.
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_count int;
+begin
+  -- No refusal row exists yet for this attempt: the RPC refused the
+  -- order, it did not record anything itself.
+  select count(*) into v_count from public.price_consent_refusals;
+  if v_count <> 0 then
+    raise exception 'TEST 20 FAILED: a refusal row existed before recording';
+  end if;
+end $$;
+
+-- Re-run the refused attempt's key through the recorder: the suite
+-- cannot reuse the v_key variable across blocks, so record with a fresh
+-- key for the same cart/prices and assert on that key instead.
+do $$
+declare
+  v_key uuid := gen_random_uuid();
+  v_count int;
+begin
+  perform public._record_price_consent_refusal(
+    v_key,
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    '11100000-0000-0000-0000-000000000001',
+    null,
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":10000}]'::jsonb,
+    10000);
+
+  if not exists (
+    select 1 from public.price_consent_refusals
+     where idempotency_key = v_key
+       and user_id = '11100000-0000-0000-0000-000000000001'
+       and guest_token_hash is null
+       and expected_total_minor = 10000
+       and live_total_minor = 12000
+       and expected_prices @> '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":10000}]'::jsonb
+  ) then
+    raise exception 'TEST 20 FAILED: refusal was not recorded (who/what/expected/live)';
+  end if;
+
+  -- A retried recording for the same attempt is a no-op.
+  perform public._record_price_consent_refusal(
+    v_key,
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    '11100000-0000-0000-0000-000000000001',
+    null,
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":10000}]'::jsonb,
+    10000);
+  select count(*) into v_count from public.price_consent_refusals
+   where idempotency_key = v_key;
+  if v_count <> 1 then
+    raise exception 'TEST 20 FAILED: retried recording recorded % refusal rows, expected 1', v_count;
+  end if;
+  raise notice 'TEST 20e PASSED: a PRICE_CHANGED refusal records exactly one refusal row (expected 10000, live 12000)';
+end $$;
+
+-- (f) The refusal trail is append-only and the recorder is
+-- self-validating: no API role can write it, it is not executable by
+-- authenticated users, and a call with matching prices records nothing.
+set role authenticated;
+set request.jwt.claim.sub = '11100000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"11100000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_blocked boolean := false;
+  v_key uuid := (select idempotency_key from public.price_consent_refusals limit 1);
+begin
+  begin
+    insert into public.price_consent_refusals
+      (idempotency_key, user_id, expected_prices, expected_total_minor, live_total_minor)
+    values (gen_random_uuid(), '11100000-0000-0000-0000-000000000001', '[]'::jsonb, 0, 0);
+  exception when insufficient_privilege then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 20 FAILED: an authenticated user inserted a refusal row';
+  end if;
+
+  v_blocked := false;
+  begin
+    delete from public.price_consent_refusals where idempotency_key = v_key;
+  exception when insufficient_privilege then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 20 FAILED: an authenticated user deleted a refusal row';
+  end if;
+
+  if has_function_privilege('authenticated', 'public._record_price_consent_refusal(uuid,jsonb,uuid,text,jsonb,int)', 'execute') then
+    raise exception 'TEST 20 FAILED: _record_price_consent_refusal is executable by authenticated users';
+  end if;
+  raise notice 'TEST 20f PASSED: refusal trail is append-only; the recorder is not API-callable';
+end $$;
+
+-- (f, continued) A recording with matching prices is refused: the
+-- recorder only records genuine mismatches.
+reset role;
+update public.products set price_minor = 10000
+ where id = '51100000-0000-0000-0000-000000000001';
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_before int;
+  v_after int;
+  v_refused boolean := false;
+begin
+  select count(*) into v_before from public.price_consent_refusals;
+
+  begin
+    perform public._record_price_consent_refusal(
+      gen_random_uuid(),
+      '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+      '11100000-0000-0000-0000-000000000001',
+      null,
+      '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":10000}]'::jsonb,
+      10000);
+  exception when invalid_parameter_value then
+    -- The recorder refuses with 22023, not 23514: "No price mismatch
+    -- to record." (and its validation refusals share the same code).
+    if sqlerrm like 'No price mismatch%' then
+      v_refused := true;
+    end if;
+  end;
+  if not v_refused then
+    raise exception 'TEST 20 FAILED: a matching-prices recording was not refused';
+  end if;
+
+  select count(*) into v_after from public.price_consent_refusals;
+  if v_after <> v_before then
+    raise exception 'TEST 20 FAILED: a matching-prices call recorded a refusal row';
+  end if;
+  raise notice 'TEST 20f PASSED: a matching-prices recording is refused and records nothing';
   raise notice 'TEST 20 PASSED: price consent is recorded append-only, once per order';
 end $$;
 

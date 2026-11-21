@@ -724,6 +724,47 @@ export type Database = {
           },
         ];
       };
+      price_consent_refusals: {
+        Row: {
+          id: string;
+          idempotency_key: string;
+          user_id: string | null;
+          guest_token_hash: string | null;
+          expected_prices: Json;
+          expected_total_minor: number;
+          live_total_minor: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          idempotency_key: string;
+          user_id?: string | null;
+          guest_token_hash?: string | null;
+          expected_prices: Json;
+          expected_total_minor: number;
+          live_total_minor: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          idempotency_key?: string;
+          user_id?: string | null;
+          guest_token_hash?: string | null;
+          expected_prices?: Json;
+          expected_total_minor?: number;
+          live_total_minor?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "price_consent_refusals_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       mail_outbox: {
         Row: {
           id: string;
@@ -2067,6 +2108,17 @@ export type Database = {
           p_delivery_time_note?: string | null;
         };
         Returns: string;
+      };
+      _record_price_consent_refusal: {
+        Args: {
+          p_idempotency_key: string;
+          p_items: Json;
+          p_user_id: string | null;
+          p_guest_token_hash: string | null;
+          p_expected_prices: Json;
+          p_expected_total_minor: number;
+        };
+        Returns: undefined;
       };
       place_guest_order_with_price_check: {
         Args: {
