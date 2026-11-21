@@ -250,6 +250,79 @@ begin
   raise notice 'TEST H PASSED: vendor cascade delete not blocked by last-owner guard';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST I: mail_outbox is admin-read-only (migration 63)
+-- ---------------------------------------------------------------------------
+-- The queue is written only through the service-role mail module; no API
+-- role can read it except a platform admin, and nobody can write it
+-- through PostgREST at all (no insert/update/delete policy exists).
+reset role;
+insert into public.mail_outbox
+  (kind, to_email, subject, body_text, status)
+values
+  ('order_status', 'customer@gifto.test', 'Your order shipped', 'Shipped.', 'pending');
+
+set role authenticated;
+set request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+set request.jwt.claims = '{"sub":"11111111-1111-1111-1111-111111111111"}';
+do $$
+declare
+  v_count int;
+  v_blocked boolean := false;
+begin
+  select count(*) into v_count from public.mail_outbox;
+  if v_count <> 1 then
+    raise exception 'TEST I FAILED: platform admin cannot read the outbox (saw %)', v_count;
+  end if;
+
+  begin
+    insert into public.mail_outbox
+      (kind, to_email, subject, body_text, status)
+    values
+      ('order_status', 'x@gifto.test', 'Forged', 'Forged.', 'pending');
+  exception when insufficient_privilege then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST I FAILED: platform admin inserted an outbox row through the API';
+  end if;
+
+  v_blocked := false;
+  begin
+    update public.mail_outbox set status = 'sent' where kind = 'order_status';
+  exception when insufficient_privilege then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST I FAILED: platform admin updated an outbox row through the API';
+  end if;
+
+  v_blocked := false;
+  begin
+    delete from public.mail_outbox where kind = 'order_status';
+  exception when insufficient_privilege then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST I FAILED: platform admin deleted an outbox row through the API';
+  end if;
+  raise notice 'TEST I-a PASSED: platform admin reads the outbox but cannot write it';
+end $$;
+
+set request.jwt.claim.sub = '44444444-4444-4444-4444-444444444444';
+set request.jwt.claims = '{"sub":"44444444-4444-4444-4444-444444444444"}';
+do $$
+declare
+  v_count int;
+begin
+  select count(*) into v_count from public.mail_outbox;
+  if v_count <> 0 then
+    raise exception 'TEST I FAILED: a plain customer can read the outbox (saw %)', v_count;
+  end if;
+  raise notice 'TEST I-b PASSED: non-admin users cannot read the outbox';
+  raise notice 'TEST I PASSED: mail_outbox is admin-read-only';
+end $$;
+
 reset role;
 
 rollback;

@@ -5,18 +5,30 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 // src/lib/mail.ts is server-only; the guard package throws outside React
 // Server Components, so tests stub it out.
 vi.mock("server-only", () => ({}));
+
+// The service client is unavailable by default (the historical behaviour
+// for the mail tests); outbox tests install a recording fake instead.
+const serviceState = vi.hoisted(() => ({
+  client: null as unknown,
+}));
+
 vi.mock("@/lib/supabase/service", () => ({
   createServiceClient: () => {
-    throw new Error("service client is not available in unit tests");
+    if (!serviceState.client) {
+      throw new Error("service client is not available in unit tests");
+    }
+    return serviceState.client;
   },
 }));
 
 import {
+  enqueueMailOutbox,
   getMailConfig,
   orderPlacedCustomerEmail,
   orderPlacedVendorEmail,
   orderStatusEmail,
   passwordResetEmail,
+  processMailOutbox,
   refundCaseResolvedEmail,
   sendMail,
   vendorStaffAddedEmail,
@@ -289,5 +301,216 @@ describe("sendMail over real SMTP to a local sink", () => {
       Object.assign(process.env, originalEnv);
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
+  });
+});
+
+/**
+ * Mail outbox (migration 63): skipped/failed notification sends are
+ * queued durably for admin retry; single-use-link sends are never queued.
+ */
+type OutboxRow = {
+  id: string;
+  kind: string;
+  to_email: string;
+  subject: string;
+  body_text: string;
+  body_html: string | null;
+  attempts: number;
+  status: string;
+  last_error?: string;
+};
+
+function makeOutboxFake(rows: OutboxRow[]) {
+  const inserts: Record<string, unknown>[] = [];
+  const updates: { id: string; patch: Record<string, unknown> }[] = [];
+  const client = {
+    inserts,
+    updates,
+    from(table: string) {
+      if (table !== "mail_outbox") throw new Error(`unexpected table ${table}`);
+      const builder: Record<string, unknown> = {};
+      builder.insert = async (row: Record<string, unknown>) => {
+        inserts.push(row);
+        rows.push({
+          id: `row-${rows.length + 1}`,
+          kind: String(row.kind),
+          to_email: String(row.to_email),
+          subject: String(row.subject),
+          body_text: String(row.body_text),
+          body_html: (row.body_html as string | null) ?? null,
+          attempts: 0,
+          status: "pending",
+        });
+        return { error: null };
+      };
+      builder.select = (
+        _columns: string,
+        opts?: { count?: string; head?: boolean },
+      ) => {
+        builder._head = Boolean(opts?.head);
+        return builder;
+      };
+      builder.eq = (column: string, value: unknown) => {
+        builder._eq = [column, value];
+        return builder;
+      };
+      builder.order = () => builder;
+      builder.limit = () => builder;
+      builder.update = (patch: Record<string, unknown>) => {
+        builder._patch = patch;
+        return builder;
+      };
+      // Supabase builders are thenable: awaiting the chain resolves to
+      // the query result.
+      builder.then = (resolve: (value: unknown) => void) => {
+        if ((builder as { _head?: boolean })._head) {
+          resolve({
+            count: rows.filter((r) => r.status === "pending").length,
+            error: null,
+          });
+          return;
+        }
+        if ((builder as { _patch?: Record<string, unknown> })._patch) {
+          const patch = (builder as { _patch: Record<string, unknown> })
+            ._patch;
+          const [, id] = (builder as { _eq?: [string, unknown] })._eq ?? [];
+          const row = rows.find((r) => r.id === id);
+          if (row) {
+            Object.assign(row, patch);
+            updates.push({ id: String(id), patch });
+          }
+          resolve({ error: null });
+          return;
+        }
+        resolve({
+          data: rows.filter((r) => r.status === "pending"),
+          error: null,
+        });
+      };
+      return builder;
+    },
+  };
+  return client;
+}
+
+describe("mail outbox", () => {
+  const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  beforeEach(() => {
+    serviceState.client = null;
+  });
+
+  afterEach(() => {
+    serviceState.client = null;
+    errorSpy.mockClear();
+  });
+
+  it("enqueues a skipped send (no provider) instead of losing it to the log", async () => {
+    const fake = makeOutboxFake([]);
+    serviceState.client = fake;
+    const result = await sendMail(
+      { to: "customer@example.com", subject: "Your order shipped", text: "Hi" },
+      { config: null, kind: "order_status" },
+    );
+    expect(result).toEqual({ sent: false, skipped: "unconfigured" });
+    expect(fake.inserts).toHaveLength(1);
+    expect(fake.inserts[0]).toMatchObject({
+      kind: "order_status",
+      to_email: "customer@example.com",
+      subject: "Your order shipped",
+      status: "pending",
+    });
+  });
+
+  it("enqueues a failed transport send with the error, and never throws when the service client is missing", async () => {
+    const failingTransport = {
+      sendMail: async () => {
+        throw new Error("connection refused");
+      },
+    } as never;
+    const result = await sendMail(
+      { to: "customer@example.com", subject: "Test", text: "hello" },
+      { transport: failingTransport },
+    );
+    expect(result).toEqual({ sent: false, error: "connection refused" });
+    // No service client in this test: enqueue fails silently, send result kept.
+    expect(await enqueueMailOutbox(
+      { to: "customer@example.com", subject: "Test", text: "hello" },
+      "notification",
+      "connection refused",
+    )).toBe(false);
+  });
+
+  it("does not enqueue when enqueue:false (single-use-link sends)", async () => {
+    const fake = makeOutboxFake([]);
+    serviceState.client = fake;
+    const result = await sendMail(
+      { to: "customer@example.com", subject: "Test", text: "hello" },
+      { config: null, enqueue: false },
+    );
+    expect(result.sent).toBe(false);
+    expect(fake.inserts).toHaveLength(0);
+  });
+
+  it("retries pending rows and marks them sent", async () => {
+    const rows: OutboxRow[] = [
+      {
+        id: "row-1",
+        kind: "order_status",
+        to_email: "customer@example.com",
+        subject: "Your order shipped",
+        body_text: "Hi",
+        body_html: null,
+        attempts: 0,
+        status: "pending",
+      },
+    ];
+    const fake = makeOutboxFake(rows);
+    serviceState.client = fake;
+    const workingTransport = {
+      sendMail: async () => ({ messageId: "abc" }),
+    } as never;
+    const outcome = await processMailOutbox({
+      transport: workingTransport,
+      config: {
+        host: "smtp.example.com",
+        port: 587,
+        secure: false,
+        user: null,
+        pass: null,
+        from: "Gifto <orders@gifto.example>",
+        timeoutMs: 5000,
+      },
+    });
+    expect(outcome).toEqual({ sent: 1, failed: 0, remaining: 0 });
+    expect(rows[0].status).toBe("sent");
+    expect(rows[0].attempts).toBe(1);
+  });
+
+  it("leaves a failed retry pending (and marks it failed after 5 attempts)", async () => {
+    const rows: OutboxRow[] = [
+      {
+        id: "row-1",
+        kind: "order_status",
+        to_email: "customer@example.com",
+        subject: "Your order shipped",
+        body_text: "Hi",
+        body_html: null,
+        attempts: 4,
+        status: "pending",
+      },
+    ];
+    const fake = makeOutboxFake(rows);
+    serviceState.client = fake;
+    const failingTransport = {
+      sendMail: async () => {
+        throw new Error("connection refused");
+      },
+    } as never;
+    const outcome = await processMailOutbox({ transport: failingTransport });
+    expect(outcome).toEqual({ sent: 0, failed: 1, remaining: 0 });
+    expect(rows[0].status).toBe("failed");
+    expect(rows[0].attempts).toBe(5);
+    expect(rows[0].last_error).toBe("connection refused");
   });
 });

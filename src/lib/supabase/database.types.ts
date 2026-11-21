@@ -724,6 +724,48 @@ export type Database = {
           },
         ];
       };
+      mail_outbox: {
+        Row: {
+          id: string;
+          kind: string;
+          to_email: string;
+          subject: string;
+          body_text: string;
+          body_html: string | null;
+          status: string;
+          attempts: number;
+          last_error: string | null;
+          created_at: string;
+          sent_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          kind: string;
+          to_email: string;
+          subject: string;
+          body_text: string;
+          body_html?: string | null;
+          status?: string;
+          attempts?: number;
+          last_error?: string | null;
+          created_at?: string;
+          sent_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          kind?: string;
+          to_email?: string;
+          subject?: string;
+          body_text?: string;
+          body_html?: string | null;
+          status?: string;
+          attempts?: number;
+          last_error?: string | null;
+          created_at?: string;
+          sent_at?: string | null;
+        };
+        Relationships: [];
+      };
       order_address_corrections: {
         Row: {
           id: number;

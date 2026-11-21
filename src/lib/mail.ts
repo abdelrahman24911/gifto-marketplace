@@ -24,7 +24,11 @@ import type { OrderStatus } from "./supabase/database.types";
  * resolution: every public helper in this module catches its own errors,
  * logs them with the `[gifto-mail]` prefix for ops retry, and returns a
  * result instead of throwing. Callers `await` the helpers but never branch
- * on them.
+ * on them. Skipped/failed notification sends are also written to the
+ * mail_outbox table (migration 63) so an admin can retry them from
+ * /admin/mail-outbox; recovery, password-reset and staff-invite emails
+ * are never enqueued — their single-use links must not be persisted, and
+ * a retry after expiry would be useless.
  *
  * Templates are plain-text first; the HTML body is the same content in a
  * minimal wrapper. Amounts use the existing EGP formatter (integer
@@ -51,6 +55,20 @@ export type MailMessage = {
 export type MailSendResult =
   | { sent: true; messageId: string }
   | { sent: false; skipped?: "unconfigured"; error?: string };
+
+/** Kinds of notification that may be queued in mail_outbox. */
+export type MailOutboxKind =
+  | "order_placed_customer"
+  | "order_placed_vendor"
+  | "order_status"
+  | "refund_opened"
+  | "refund_resolved"
+  | "support_status"
+  | "staff_added"
+  | "notification";
+
+/** A retry stops permanently after this many failed attempts. */
+export const MAIL_OUTBOX_MAX_ATTEMPTS = 5;
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -144,13 +162,17 @@ function logFailed(to: string, subject: string, error: unknown): void {
 /**
  * Sends one message. Never throws: an unconfigured provider, an invalid
  * recipient, or a transport failure is returned as `{ sent: false }` and
- * logged for ops retry.
+ * logged for ops retry. A skipped/failed notification send is also
+ * written to mail_outbox (unless `enqueue: false`, which the
+ * single-use-link sends use) so an admin can retry it later.
  */
 export async function sendMail(
   message: MailMessage,
   overrides: {
     config?: MailConfig | null;
     transport?: Transporter;
+    kind?: MailOutboxKind;
+    enqueue?: boolean;
   } = {},
 ): Promise<MailSendResult> {
   const config =
@@ -164,6 +186,13 @@ export async function sendMail(
 
   if (!config && !overrides.transport) {
     logSkipped(message.to, message.subject, "SMTP is not configured");
+    if (overrides.enqueue !== false) {
+      await enqueueMailOutbox(
+        message,
+        overrides.kind ?? "notification",
+        "SMTP is not configured",
+      );
+    }
     return { sent: false, skipped: "unconfigured" };
   }
 
@@ -181,12 +210,149 @@ export async function sendMail(
     });
     return { sent: true, messageId: info.messageId ?? "" };
   } catch (error) {
+    const reason =
+      error instanceof Error ? error.message : "send failed";
     logFailed(message.to, message.subject, error);
-    return {
-      sent: false,
-      error: error instanceof Error ? error.message : "send failed",
-    };
+    if (overrides.enqueue !== false) {
+      await enqueueMailOutbox(message, overrides.kind ?? "notification", reason);
+    }
+    return { sent: false, error: reason };
   }
+}
+
+/**
+ * Writes one undelivered notification to mail_outbox for later retry.
+ * Best-effort and never throws: the outbox must never break the request
+ * that triggered the send, and in unit tests there is no service client.
+ */
+export async function enqueueMailOutbox(
+  message: MailMessage,
+  kind: MailOutboxKind,
+  reason: string,
+): Promise<boolean> {
+  try {
+    const service = createServiceClient();
+    const { error } = await service.from("mail_outbox").insert({
+      kind,
+      to_email: message.to,
+      subject: message.subject,
+      body_text: message.text,
+      body_html: message.html ?? null,
+      status: "pending",
+      last_error: reason.slice(0, 500),
+    });
+    if (error) {
+      console.error(
+        `[gifto-mail] outbox enqueue failed to=${message.to} subject="${message.subject}": ${error.message}`,
+      );
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error(
+      `[gifto-mail] outbox enqueue failed to=${message.to} subject="${message.subject}": ${error instanceof Error ? error.message : "unknown error"}`,
+    );
+    return false;
+  }
+}
+
+export type MailOutboxRow = {
+  id: string;
+  kind: string;
+  to_email: string;
+  subject: string;
+  body_text: string;
+  body_html: string | null;
+  attempts: number;
+};
+
+/**
+ * Retries pending outbox rows, oldest first (admin-triggered from
+ * /admin/mail-outbox; a future cron route can call the same function).
+ * Each row is sent with `enqueue: false` so a failed retry never
+ * re-enqueues itself. After MAIL_OUTBOX_MAX_ATTEMPTS the row is marked
+ * 'failed' (terminal) instead of spinning forever. Never throws.
+ */
+export async function processMailOutbox(
+  options: {
+    limit?: number;
+    config?: MailConfig | null;
+    transport?: Transporter;
+  } = {},
+): Promise<{ sent: number; failed: number; remaining: number }> {
+  const limit =
+    options.limit !== undefined && options.limit > 0
+      ? Math.min(options.limit, 100)
+      : 25;
+  const outcome = { sent: 0, failed: 0, remaining: 0 };
+  try {
+    const service = createServiceClient();
+    const { data, error } = await service
+      .from("mail_outbox")
+      .select("id, kind, to_email, subject, body_text, body_html, attempts")
+      .eq("status", "pending")
+      .order("created_at", { ascending: true })
+      .limit(limit);
+    if (error || !data) return outcome;
+    const rows = data as unknown as MailOutboxRow[];
+
+    for (const row of rows) {
+      if (row.attempts >= MAIL_OUTBOX_MAX_ATTEMPTS) {
+        await service
+          .from("mail_outbox")
+          .update({ status: "failed", last_error: "retry limit reached" })
+          .eq("id", row.id);
+        outcome.failed += 1;
+        continue;
+      }
+      const result = await sendMail(
+        {
+          to: row.to_email,
+          subject: row.subject,
+          text: row.body_text,
+          html: row.body_html ?? undefined,
+        },
+        {
+          config: options.config,
+          transport: options.transport,
+          enqueue: false,
+        },
+      );
+      if (result.sent) {
+        await service
+          .from("mail_outbox")
+          .update({
+            status: "sent",
+            attempts: row.attempts + 1,
+            sent_at: new Date().toISOString(),
+          })
+          .eq("id", row.id);
+        outcome.sent += 1;
+      } else {
+        const attempts = row.attempts + 1;
+        const reason =
+          result.skipped ?? result.error ?? "send failed";
+        await service
+          .from("mail_outbox")
+          .update({
+            attempts,
+            last_error: reason.slice(0, 500),
+            status: attempts >= MAIL_OUTBOX_MAX_ATTEMPTS ? "failed" : "pending",
+          })
+          .eq("id", row.id);
+        outcome.failed += 1;
+      }
+    }
+
+    const { count } = await service
+      .from("mail_outbox")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending");
+    outcome.remaining = count ?? 0;
+  } catch {
+    // A retry run never throws; the admin page reports the counts it got.
+  }
+  return outcome;
 }
 
 // ---------------------------------------------------------------------------
@@ -356,10 +522,13 @@ export async function sendVendorStaffInviteEmail(
   role: string,
   inviteUrl: string,
 ): Promise<MailSendResult> {
-  return sendMail({
-    ...vendorStaffInviteEmail({ shopName, role, inviteUrl }),
-    to: email,
-  });
+  return sendMail(
+    {
+      ...vendorStaffInviteEmail({ shopName, role, inviteUrl }),
+      to: email,
+    },
+    { enqueue: false },
+  );
 }
 
 export function vendorStaffAddedEmail(input: {
@@ -384,10 +553,13 @@ export async function sendVendorStaffAddedEmail(
   shopName: string,
   role: string,
 ): Promise<MailSendResult> {
-  return sendMail({
-    ...vendorStaffAddedEmail({ shopName, role }),
-    to: email,
-  });
+  return sendMail(
+    {
+      ...vendorStaffAddedEmail({ shopName, role }),
+      to: email,
+    },
+    { kind: "staff_added" },
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -455,7 +627,8 @@ export async function notifyOrderPlaced(orderId: string): Promise<void> {
         contactPhone: order.contact_phone,
       }),
       to: vendor.contact_email,
-    });
+    },
+    { kind: "order_placed_vendor" });
   }
 
   if (order.contact_email) {
@@ -466,7 +639,8 @@ export async function notifyOrderPlaced(orderId: string): Promise<void> {
         orderUrl: `${siteUrl}/orders/${order.id}`,
       }),
       to: order.contact_email,
-    });
+    },
+    { kind: "order_placed_customer" });
   }
 }
 
@@ -505,7 +679,8 @@ export async function notifyOrderStatusChanged(
         orderUrl: `${getSiteUrl()}/orders/${order.id}`,
       }),
       to: order.contact_email,
-    });
+    },
+    { kind: "order_status" });
   } catch {
     // A failed notification never rolls back the status change.
     return;
@@ -540,7 +715,8 @@ export async function notifyRefundCaseOpened(caseId: string): Promise<void> {
         vendorName: row.vendor?.name ?? "Gifto",
       }),
       to: order.contact_email,
-    });
+    },
+    { kind: "refund_opened" });
   } catch {
     return;
   }
@@ -581,7 +757,8 @@ export async function notifyRefundCaseResolved(caseId: string): Promise<void> {
         note: row.resolution_note,
       }),
       to: order.contact_email,
-    });
+    },
+    { kind: "refund_resolved" });
   } catch {
     return;
   }
@@ -612,10 +789,13 @@ export async function sendGuestOrderRecoveryEmail(
   reference: string,
   recoveryUrl: string,
 ): Promise<MailSendResult> {
-  return sendMail({
-    ...guestOrderRecoveryEmail({ reference, recoveryUrl }),
-    to: email,
-  });
+  return sendMail(
+    {
+      ...guestOrderRecoveryEmail({ reference, recoveryUrl }),
+      to: email,
+    },
+    { enqueue: false },
+  );
 }
 
 /** Sends the Supabase password-reset link through the same mail module. */
@@ -623,10 +803,13 @@ export async function sendPasswordResetEmail(
   email: string,
   resetUrl: string,
 ): Promise<MailSendResult> {
-  return sendMail({
-    ...passwordResetEmail({ resetUrl }),
-    to: email,
-  });
+  return sendMail(
+    {
+      ...passwordResetEmail({ resetUrl }),
+      to: email,
+    },
+    { enqueue: false },
+  );
 }
 
 /** Vendor email when an admin changes a support request's status. */
@@ -650,7 +833,8 @@ export async function notifySupportRequestStatusChanged(
     await sendMail({
       ...supportStatusEmail({ subject: row.subject, status }),
       to: row.vendor.contact_email,
-    });
+    },
+    { kind: "support_status" });
   } catch {
     return;
   }

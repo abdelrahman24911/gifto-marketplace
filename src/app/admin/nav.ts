@@ -57,6 +57,7 @@ export const adminNavGroups: DashboardNavGroup[] = [
     label: "Support",
     items: [
       { label: "Vendor support", href: "/admin/support", icon: "support" },
+      { label: "Mail outbox", href: "/admin/mail-outbox", icon: "support" },
     ],
   },
 ];
