@@ -26,6 +26,10 @@ export const GIFT_OPTIONS_STORAGE_KEY = "gifto.gift-options.v1";
 export type GiftOptions = {
   giftWrap: boolean;
   giftMessage: string;
+  /** Preferred delivery day (YYYY-MM-DD) or "" when unset. */
+  preferredDeliveryDate: string;
+  /** Preferred delivery time note or "" when unset. */
+  deliveryTimeNote: string;
 };
 
 export type GiftOptionsInput = {
@@ -38,6 +42,8 @@ export type GiftOptionsInput = {
 export const EMPTY_GIFT_OPTIONS: GiftOptions = {
   giftWrap: false,
   giftMessage: "",
+  preferredDeliveryDate: "",
+  deliveryTimeNote: "",
 };
 
 /** `YYYY-MM-DD` in the browser's local timezone (never UTC-shifted). */
@@ -116,28 +122,42 @@ export function validateGiftOptions(
   return null;
 }
 
-function isGiftOptions(value: unknown): value is GiftOptions {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.giftWrap === "boolean" &&
-    typeof record.giftMessage === "string" &&
-    record.giftMessage.length <= GIFT_MESSAGE_MAX_LENGTH
-  );
-}
-
+/**
+ * Reads the stored draft, sanitising field by field (R-08). A stale or
+ * malformed field is dropped on its own — a preferred date that has
+ * since left the tomorrow..+14-day window, or a draft written before
+ * the date/time-note fields existed, must not wipe the wrap and
+ * message the customer already chose.
+ */
 export function readGiftOptions(): GiftOptions {
   if (typeof window === "undefined") return { ...EMPTY_GIFT_OPTIONS };
   try {
     const raw = window.localStorage.getItem(GIFT_OPTIONS_STORAGE_KEY);
     if (!raw) return { ...EMPTY_GIFT_OPTIONS };
     const parsed: unknown = JSON.parse(raw);
-    if (!isGiftOptions(parsed)) return { ...EMPTY_GIFT_OPTIONS };
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return { ...EMPTY_GIFT_OPTIONS };
+    }
+    const record = parsed as Record<string, unknown>;
+    const giftMessage =
+      typeof record.giftMessage === "string" ? record.giftMessage : "";
+    const deliveryTimeNote =
+      typeof record.deliveryTimeNote === "string" ? record.deliveryTimeNote : "";
+    const preferredDeliveryDate =
+      typeof record.preferredDeliveryDate === "string"
+        ? record.preferredDeliveryDate
+        : "";
     return {
-      giftWrap: parsed.giftWrap,
-      giftMessage: parsed.giftMessage,
+      giftWrap: record.giftWrap === true,
+      giftMessage:
+        giftMessage.length <= GIFT_MESSAGE_MAX_LENGTH ? giftMessage : "",
+      preferredDeliveryDate: isValidPreferredDeliveryDate(preferredDeliveryDate)
+        ? preferredDeliveryDate
+        : "",
+      deliveryTimeNote:
+        deliveryTimeNote.length <= DELIVERY_TIME_NOTE_MAX_LENGTH
+          ? deliveryTimeNote
+          : "",
     };
   } catch {
     return { ...EMPTY_GIFT_OPTIONS };
@@ -152,6 +172,11 @@ export function writeGiftOptions(options: GiftOptions): void {
       JSON.stringify({
         giftWrap: options.giftWrap,
         giftMessage: options.giftMessage.slice(0, GIFT_MESSAGE_MAX_LENGTH),
+        preferredDeliveryDate: options.preferredDeliveryDate,
+        deliveryTimeNote: options.deliveryTimeNote.slice(
+          0,
+          DELIVERY_TIME_NOTE_MAX_LENGTH,
+        ),
       }),
     );
   } catch {

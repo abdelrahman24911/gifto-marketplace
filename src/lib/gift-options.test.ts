@@ -106,21 +106,82 @@ describe("gift options localStorage draft", () => {
 
   it("round-trips a gift draft and rejects malformed stored values", () => {
     const written = withStorage(
-      JSON.stringify({ giftWrap: true, giftMessage: "Happy birthday!" }),
+      JSON.stringify({
+        giftWrap: true,
+        giftMessage: "Happy birthday!",
+        preferredDeliveryDate: "",
+        deliveryTimeNote: "",
+      }),
     );
     expect(readGiftOptions()).toEqual({
       giftWrap: true,
       giftMessage: "Happy birthday!",
+      preferredDeliveryDate: "",
+      deliveryTimeNote: "",
     });
-    writeGiftOptions({ giftWrap: false, giftMessage: "Hi" });
+    writeGiftOptions({
+      giftWrap: false,
+      giftMessage: "Hi",
+      preferredDeliveryDate: "",
+      deliveryTimeNote: "",
+    });
     expect(JSON.parse(written[0])).toEqual({
       giftWrap: false,
       giftMessage: "Hi",
+      preferredDeliveryDate: "",
+      deliveryTimeNote: "",
     });
 
     withStorage("{not json");
-    expect(readGiftOptions()).toEqual({ giftWrap: false, giftMessage: "" });
+    expect(readGiftOptions()).toEqual({
+      giftWrap: false,
+      giftMessage: "",
+      preferredDeliveryDate: "",
+      deliveryTimeNote: "",
+    });
     withStorage(JSON.stringify({ giftWrap: true, giftMessage: "x".repeat(501) }));
-    expect(readGiftOptions()).toEqual({ giftWrap: false, giftMessage: "" });
+    // Per-field sanitising (R-08): the over-long message is dropped on
+    // its own; the wrap choice survives.
+    expect(readGiftOptions()).toEqual({
+      giftWrap: true,
+      giftMessage: "",
+      preferredDeliveryDate: "",
+      deliveryTimeNote: "",
+    });
+  });
+
+  it("keeps an old-shape draft and drops only a stale date (R-08)", () => {
+    // A draft written before the date/time-note fields existed.
+    withStorage(JSON.stringify({ giftWrap: true, giftMessage: "Hi" }));
+    expect(readGiftOptions()).toEqual({
+      giftWrap: true,
+      giftMessage: "Hi",
+      preferredDeliveryDate: "",
+      deliveryTimeNote: "",
+    });
+
+    // A date that has since left the window is dropped on its own;
+    // the wrap and message survive. (Local date, never UTC-shifted.)
+    const today = new Date();
+    const yesterday = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate() - 1,
+    );
+    const stale = toISODateLocal(yesterday);
+    withStorage(
+      JSON.stringify({
+        giftWrap: true,
+        giftMessage: "Hi",
+        preferredDeliveryDate: stale,
+        deliveryTimeNote: "Evenings",
+      }),
+    );
+    expect(readGiftOptions()).toEqual({
+      giftWrap: true,
+      giftMessage: "Hi",
+      preferredDeliveryDate: "",
+      deliveryTimeNote: "Evenings",
+    });
   });
 });

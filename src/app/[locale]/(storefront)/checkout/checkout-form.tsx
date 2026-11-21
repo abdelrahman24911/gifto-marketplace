@@ -92,8 +92,9 @@ export function CheckoutForm({
   // The store is read with useSyncExternalStore, so the server render
   // (empty draft) and the hydrated render (stored draft) never mismatch.
   // Unchecking gift wrap clears the message instead of submitting a
-  // stale one. The preferred day and time note are checkout-only and
-  // stay in local component state.
+  // stale one. The preferred day and time note live in the same store
+  // (R-08): they used to be checkout-only component state, so leaving
+  // checkout — or a failed submit remounting the form — lost them.
   const giftDraft = useSyncExternalStore(
     subscribeGiftOptions,
     getGiftOptionsSnapshot,
@@ -101,12 +102,8 @@ export function CheckoutForm({
   );
   const giftWrap = giftDraft.giftWrap;
   const giftMessage = giftDraft.giftMessage;
-  const [preferredDeliveryDate, setPreferredDeliveryDate] = useState(
-    defaults.preferredDeliveryDate,
-  );
-  const [deliveryTimeNote, setDeliveryTimeNote] = useState(
-    defaults.deliveryTimeNote,
-  );
+  const preferredDeliveryDate = giftDraft.preferredDeliveryDate;
+  const deliveryTimeNote = giftDraft.deliveryTimeNote;
   const [pickedAddressId, setPickedAddressId] = useState<string | null>(null);
   const dateRange = preferredDeliveryDateRange();
 
@@ -495,7 +492,9 @@ export function CheckoutForm({
                 min={dateRange.min}
                 max={dateRange.max}
                 onChange={(event) =>
-                  setPreferredDeliveryDate(event.target.value)
+                  setGiftOptions({
+                    preferredDeliveryDate: event.target.value,
+                  })
                 }
                 className={inputClass}
               />
@@ -511,7 +510,9 @@ export function CheckoutForm({
                 name="delivery_time_note"
                 maxLength={200}
                 value={deliveryTimeNote}
-                onChange={(event) => setDeliveryTimeNote(event.target.value)}
+                onChange={(event) =>
+                  setGiftOptions({ deliveryTimeNote: event.target.value })
+                }
                 placeholder={t("timeNotePlaceholder")}
                 className={inputClass}
               />

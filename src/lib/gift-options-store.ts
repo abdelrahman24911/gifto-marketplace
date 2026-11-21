@@ -43,8 +43,11 @@ export function getGiftOptionsServerSnapshot(): GiftOptions {
   return EMPTY_GIFT_OPTIONS;
 }
 
-export function setGiftOptions(options: GiftOptions): void {
-  cache = { ...options };
+export function setGiftOptions(options: Partial<GiftOptions>): void {
+  // Partial updates: the cart's wrap toggle must not wipe a delivery
+  // date the customer already picked at checkout (R-08), and vice
+  // versa. Callers pass only the fields they change.
+  cache = { ...getCache(), ...options };
   writeGiftOptions(cache);
   emit();
 }
