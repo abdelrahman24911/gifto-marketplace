@@ -17,7 +17,7 @@ import {
 import { loadLiveProductsByIds } from "@/lib/catalog";
 import { formatEgp } from "@/lib/money";
 import { isOrderStatus } from "@/lib/orders";
-import { resolveReorderItems } from "@/lib/reorder";
+import { canReorderOrder, resolveReorderItems } from "@/lib/reorder";
 import {
   REFUND_CASE_STATUS_STYLES,
   canRequestRefundWithinWindow,
@@ -560,7 +560,9 @@ export default async function GuestOrderPage({
           {t("payCourier")}
         </p>
 
-        <ReorderButton resolution={reorderResolution} />
+        {canReorderOrder(order.status) ? (
+          <ReorderButton resolution={reorderResolution} />
+        ) : null}
       </section>
 
       <div className="mt-6 flex flex-wrap gap-3">

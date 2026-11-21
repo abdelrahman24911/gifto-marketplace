@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { CatalogProduct } from "@/lib/catalog";
 import {
+  canReorderOrder,
   resolveReorderItems,
   type ReorderLine,
 } from "@/lib/reorder";
@@ -90,5 +91,18 @@ describe("resolveReorderItems", () => {
     );
     expect(result.items).toHaveLength(1);
     expect(result.items[0]?.quantity).toBe(3);
+  });
+});
+
+describe("canReorderOrder (R-08)", () => {
+  it("allows delivered, in-flight and partially completed orders", () => {
+    for (const status of ["placed", "confirmed", "shipped", "delivered", "partially_completed"]) {
+      expect(canReorderOrder(status)).toBe(true);
+    }
+  });
+
+  it("blocks cancelled and returned orders", () => {
+    expect(canReorderOrder("cancelled")).toBe(false);
+    expect(canReorderOrder("returned")).toBe(false);
   });
 });

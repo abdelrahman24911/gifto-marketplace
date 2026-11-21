@@ -20,6 +20,19 @@ export type ReorderResolution = {
 };
 
 /**
+ * Whether an order may be reordered at all (R-08). A cancelled order
+ * never completed and a returned order was sent back — offering
+ * "order these again" on either is wrong, so the button does not
+ * render there. Every other status may be reordered: a delivered
+ * order is the usual case, and an in-flight order can legitimately be
+ * ordered a second time (a second identical gift). The per-line
+ * checks in resolveReorderItems still apply on top of this gate.
+ */
+export function canReorderOrder(status: string): boolean {
+  return status !== "cancelled" && status !== "returned";
+}
+
+/**
  * Resolve a past order's lines against live catalog data.
  *
  * A line is reordered only when the product is still listed, its shop is
