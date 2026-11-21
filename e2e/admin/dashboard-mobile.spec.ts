@@ -15,10 +15,12 @@ import {
  * and as the E2E vendor owner.
  *
  * Runs in the local-admin lane only (local Supabase + dev server); it cannot
- * run against the hosted project. It is listed by the default Playwright
- * config too (R-09, `local-admin` project in playwright.config.ts) so the
- * default `npx playwright test --list` finds it — execute it with
- * `npm run test:e2e:admin`, which seeds the admin/vendor users.
+ * run against the hosted project. It runs once, seeded, under
+ * `npm run test:e2e:admin` (playwright.admin.config.ts) — it is NOT a
+ * project in the default config, because the default lane does not seed
+ * its admin/vendor users and listing it there made full default runs
+ * fail at login (and running both lanes executed it twice). Find it
+ * with `npm run test:e2e:list`, which lists both configs.
  */
 
 const MOBILE = { ...devices["Pixel 7"] };

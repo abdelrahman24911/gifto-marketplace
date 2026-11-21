@@ -110,20 +110,13 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
       testMatch: /read-only-guard\.spec\.ts/,
     },
-    {
-      // R-09: the dashboard-mobile spec lives under e2e/admin, outside
-      // this config's testDir ("./tests"), so `npx playwright test
-      // e2e/admin/dashboard-mobile.spec.ts --list` used to find 0 tests
-      // and anyone running the default command wrongly concluded the
-      // spec was empty. This project makes the spec discoverable from
-      // the default config. Executing it still needs the seeded local
-      // Supabase stack and the production server the admin lane
-      // provides — run `npm run test:e2e:admin` for that; the default
-      // lane lists it but does not seed its admin/vendor users.
-      name: "local-admin",
-      testDir: "./e2e/admin",
-      testMatch: "**/dashboard-mobile.spec.ts",
-      use: { ...devices["Pixel 7"] },
-    },
+    // R-09: the e2e/admin specs (including dashboard-mobile) are NOT
+    // projects here. They need the admin lane's seeded local Supabase
+    // stack (e2e/admin/global-setup.ts); the default lane's global
+    // setup does not seed admin/vendor users, so listing them here
+    // made a full default run fail at login, and running both lanes
+    // executed dashboard-mobile twice. They run once, seeded, under
+    // `npm run test:e2e:admin` (playwright.admin.config.ts), and
+    // `npm run test:e2e:list` lists both configs.
   ],
 });
