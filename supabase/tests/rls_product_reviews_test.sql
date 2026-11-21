@@ -456,6 +456,93 @@ begin
   raise notice 'TEST 7 PASSED: summary counts approved reviews only, anon sees newly approved reviews';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST 8 (R-08): a shop's own member cannot review its gifts, even as a
+-- verified buyer — owner-a buys their own product A and receives it.
+-- ---------------------------------------------------------------------------
+reset role;
+insert into public.orders (
+  id, user_id, status, subtotal_minor, total_minor, recipient_name,
+  contact_phone, address_line, city, governorate
+) values (
+  '96200000-0000-0000-0000-000000000004',
+  '93200000-0000-0000-0000-000000000004',
+  'delivered', 5000, 5000, 'Owner A', '01001112233', '1 Street', 'Alexandria', 'Alexandria'
+);
+
+insert into public.order_vendors (
+  id, order_id, vendor_id, status, subtotal_minor, commission_rate, delivered_at
+) values (
+  '97200000-0000-0000-0000-000000000004',
+  '96200000-0000-0000-0000-000000000004',
+  '94200000-0000-0000-0000-000000000001',
+  'delivered', 5000, 0.1000, now()
+);
+
+insert into public.order_items (
+  id, order_vendor_id, product_id, product_name, product_slug,
+  unit_price_minor, quantity, line_total_minor
+) values (
+  '98200000-0000-0000-0000-000000000004',
+  '97200000-0000-0000-0000-000000000004',
+  '95200000-0000-0000-0000-000000000001',
+  'A Gift', 'a-gift', 5000, 1, 5000
+);
+
+set role authenticated;
+set request.jwt.claim.sub = '93200000-0000-0000-0000-000000000004';
+set request.jwt.claims = '{"sub":"93200000-0000-0000-0000-000000000004"}';
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  -- The owner really is a verified buyer for their own gift — that is
+  -- the hole: the verified-buyer check alone does not stop them.
+  if not public.is_verified_buyer('95200000-0000-0000-0000-000000000001') then
+    raise exception 'TEST 8 FAILED: the shop owner is not a verified buyer for their own delivered gift';
+  end if;
+
+  begin
+    perform public.submit_product_review(
+      '95200000-0000-0000-0000-000000000001', 5, 'My own shop is great');
+  exception when check_violation then
+    if sqlerrm like '%own shop%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 8 FAILED: wrong error for a self-review: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 8 FAILED: a shop owner reviewed their own gift';
+  end if;
+  if exists (
+    select 1 from public.product_reviews
+     where product_id = '95200000-0000-0000-0000-000000000001'
+       and user_id = '93200000-0000-0000-0000-000000000004'
+  ) then
+    raise exception 'TEST 8 FAILED: the refused self-review left a row';
+  end if;
+
+  -- And the same owner may still review another shop's gift they
+  -- received — the bar is per-shop, not per-person. Owner-a never
+  -- received product B, so that refusal stays the verified-buyer one.
+  v_blocked := false;
+  begin
+    perform public.submit_product_review(
+      '95200000-0000-0000-0000-000000000002', 5, 'Not mine');
+  exception when check_violation then
+    if sqlerrm like '%Only customers who received%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 8 FAILED: wrong error for the other shop: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 8 FAILED: the other-shop check did not refuse as a non-buyer';
+  end if;
+  raise notice 'TEST 8 PASSED: a shop member cannot review their own shop''s gifts';
+end $$;
+
 reset role;
 
 rollback;
