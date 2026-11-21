@@ -115,3 +115,53 @@ export async function confirmRefundReceipt(
     attempt,
   };
 }
+
+// R-05 correction path: the shop fixes a wrong inspection call before
+// Gifto restocks. The courier payer follows the corrected condition
+// (customer for good, the shop for wrong/damaged); a restocked return
+// can no longer be corrected, and the database keeps the replaced
+// value for audit.
+export async function correctInspectionCondition(
+  prev: VendorRefundState,
+  formData: FormData,
+): Promise<VendorRefundState> {
+  const attempt = (prev?.attempt ?? 0) + 1;
+  const caseId = String(formData.get("case_id") ?? "").trim();
+  const vendorId = String(formData.get("vendor_id") ?? "").trim();
+  const conditionRaw = String(formData.get("condition") ?? "").trim();
+
+  if (!UUID_PATTERN.test(caseId) || !UUID_PATTERN.test(vendorId)) {
+    return { error: "That refund case could not be found.", attempt };
+  }
+  const condition = INSPECTION_CONDITIONS.find((c) => c === conditionRaw);
+  if (!condition) {
+    return {
+      error: "Choose what arrived: good condition, wrong item, or damaged.",
+      attempt,
+    };
+  }
+
+  const { supabase, user } = await requireVendorRole(vendorId);
+
+  const quotaError = await checkMutationQuota("vendor", user.id);
+  if (quotaError) return { error: quotaError, attempt };
+  const { error } = await supabase.rpc("correct_refund_inspection_condition", {
+    p_case_id: caseId,
+    p_condition: condition,
+  });
+
+  if (error) return refundError(error, attempt);
+
+  revalidatePath(`/vendor/refunds?vendor=${vendorId}`);
+  revalidatePath(`/vendor/refunds/${caseId}?vendor=${vendorId}`);
+
+  return {
+    success:
+      condition === "good"
+        ? "Inspection corrected to good condition. The customer pays the return courier and the item can be restocked after inspection."
+        : condition === "wrong_item"
+          ? "Inspection corrected to wrong item. The shop pays the return courier and the item is not restocked against this order."
+          : "Inspection corrected to damaged. The shop pays the return courier and a damaged item is never restocked.",
+    attempt,
+  };
+}

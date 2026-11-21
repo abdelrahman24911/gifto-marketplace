@@ -13,6 +13,7 @@ import { requireVendorRole } from "@/lib/vendor";
 import { VendorNotice, VendorPageHeader } from "../../ui";
 import { AcknowledgeRefundForm } from "../acknowledge-refund-form";
 import { ConfirmReceiptForm } from "../confirm-receipt-form";
+import { CorrectInspectionForm } from "../correct-inspection-form";
 
 import type { OrderStatus, RefundCaseStatus } from "@/lib/supabase/database.types";
 import type { RefundReturnPath } from "@/lib/refunds";
@@ -35,6 +36,13 @@ type VendorRefundDetail = {
   return_path: RefundReturnPath | null;
   received_at: string | null;
   receipt_note: string | null;
+  inspection_condition: "good" | "wrong_item" | "damaged" | null;
+  return_courier_paid_by: "customer" | "vendor" | null;
+  inspection_condition_previous:
+    | "good"
+    | "wrong_item"
+    | "damaged"
+    | null;
   acknowledged_at: string | null;
   restocked_at: string | null;
   escalation_count: number;
@@ -66,7 +74,7 @@ export default async function VendorRefundDetailPage({
   const { data, error } = await supabase
     .from("refund_cases")
     .select(
-      "id, order_id, order_vendor_id, vendor_id, source, status, reason, requested_amount_minor, refund_amount_minor, resolution_note, created_at, resolved_at, return_path, received_at, receipt_note, acknowledged_at, restocked_at, escalation_count, escalated_at, escalation_note, order:orders(public_reference, recipient_name, contact_phone), order_vendor:order_vendors(status, subtotal_minor)",
+      "id, order_id, order_vendor_id, vendor_id, source, status, reason, requested_amount_minor, refund_amount_minor, resolution_note, created_at, resolved_at, return_path, received_at, receipt_note, inspection_condition, return_courier_paid_by, inspection_condition_previous, acknowledged_at, restocked_at, escalation_count, escalated_at, escalation_note, order:orders(public_reference, recipient_name, contact_phone), order_vendor:order_vendors(status, subtotal_minor)",
     )
     .eq("id", id)
     .eq("vendor_id", vendorId)
@@ -162,6 +170,22 @@ export default async function VendorRefundDetailPage({
               {refundCase.received_at
                 ? `You confirmed receipt${refundCase.receipt_note ? ` — “${refundCase.receipt_note}”` : ""}.`
                 : "The item has not been confirmed received yet."}
+              {refundCase.inspection_condition
+                ? ` Inspection: ${
+                    refundCase.inspection_condition === "good"
+                      ? "good condition"
+                      : refundCase.inspection_condition === "wrong_item"
+                        ? "wrong item"
+                        : "damaged"
+                  } — return courier paid by ${
+                    refundCase.return_courier_paid_by === "vendor"
+                      ? "the shop"
+                      : "the customer"
+                  }.`
+                : null}
+              {refundCase.inspection_condition_previous
+                ? ` (Corrected from ${refundCase.inspection_condition_previous === "good" ? "good condition" : refundCase.inspection_condition_previous === "wrong_item" ? "wrong item" : "damaged"}.)`
+                : null}
               {refundCase.restocked_at
                 ? " Gifto restocked it after your inspection."
                 : null}
@@ -217,6 +241,31 @@ export default async function VendorRefundDetailPage({
                   <ConfirmReceiptForm
                     caseId={refundCase.id}
                     vendorId={vendorId}
+                  />
+                </div>
+              </div>
+            ) : null}
+
+            {refundCase.status === "approved" &&
+            refundCase.return_path === "physical_return" &&
+            refundCase.received_at &&
+            !refundCase.restocked_at &&
+            refundCase.inspection_condition ? (
+              <div>
+                <h2 className="text-sm font-semibold text-ink">
+                  Correct the inspection
+                </h2>
+                <p className="mt-1 text-xs text-ink-mute">
+                  Picked the wrong condition at receipt? Correct it here
+                  before Gifto restocks — the return courier payer follows
+                  the corrected condition. Once restocked, the inspection
+                  can no longer be changed.
+                </p>
+                <div className="mt-2">
+                  <CorrectInspectionForm
+                    caseId={refundCase.id}
+                    vendorId={vendorId}
+                    currentCondition={refundCase.inspection_condition}
                   />
                 </div>
               </div>

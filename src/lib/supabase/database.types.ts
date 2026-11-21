@@ -981,6 +981,13 @@ export type Database = {
           receipt_note: string | null;
           inspection_condition: "good" | "wrong_item" | "damaged" | null;
           return_courier_paid_by: "customer" | "vendor" | null;
+          inspection_condition_previous:
+            | "good"
+            | "wrong_item"
+            | "damaged"
+            | null;
+          inspection_corrected_at: string | null;
+          inspection_corrected_by: string | null;
           acknowledged_at: string | null;
           acknowledged_by: string | null;
           restocked_at: string | null;
@@ -1014,6 +1021,13 @@ export type Database = {
           receipt_note?: string | null;
           inspection_condition?: "good" | "wrong_item" | "damaged" | null;
           return_courier_paid_by?: "customer" | "vendor" | null;
+          inspection_condition_previous?:
+            | "good"
+            | "wrong_item"
+            | "damaged"
+            | null;
+          inspection_corrected_at?: string | null;
+          inspection_corrected_by?: string | null;
           acknowledged_at?: string | null;
           acknowledged_by?: string | null;
           restocked_at?: string | null;
@@ -1047,6 +1061,13 @@ export type Database = {
           receipt_note?: string | null;
           inspection_condition?: "good" | "wrong_item" | "damaged" | null;
           return_courier_paid_by?: "customer" | "vendor" | null;
+          inspection_condition_previous?:
+            | "good"
+            | "wrong_item"
+            | "damaged"
+            | null;
+          inspection_corrected_at?: string | null;
+          inspection_corrected_by?: string | null;
           acknowledged_at?: string | null;
           acknowledged_by?: string | null;
           restocked_at?: string | null;
@@ -2052,6 +2073,13 @@ export type Database = {
       };
       restock_refund_case: {
         Args: { p_case_id: string };
+        Returns: undefined;
+      };
+      correct_refund_inspection_condition: {
+        Args: {
+          p_case_id: string;
+          p_condition: "good" | "wrong_item" | "damaged";
+        };
         Returns: undefined;
       };
       escalate_refund_case: {

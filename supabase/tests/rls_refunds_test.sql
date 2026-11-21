@@ -3519,6 +3519,347 @@ begin
   raise notice 'TEST 19 PASSED: R-07 direct repayment cannot double-recover an open-batch clawback';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST 20 (R-05 caveat): a wrong inspection condition can be corrected
+-- before restock — and only then, and only by the owning shop or admin
+-- ---------------------------------------------------------------------------
+-- Three fresh delivered suborders on the Refund Gift (stock reset to 10
+-- so the restock assertions are absolute, not order-dependent).
+reset role;
+update public.products set stock = 10
+ where id = '52200000-0000-0000-0000-000000000001';
+
+insert into public.orders (
+  id, user_id, status, subtotal_minor, total_minor, recipient_name,
+  contact_phone, address_line, city, governorate
+) values
+  ('62200000-0000-0000-0000-000000000046',
+   '12200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+   '12 Road 9, Maadi', 'Maadi', 'Cairo'),
+  ('62200000-0000-0000-0000-000000000047',
+   '12200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+   '12 Road 9, Maadi', 'Maadi', 'Cairo'),
+  ('62200000-0000-0000-0000-000000000048',
+   '12200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+   '12 Road 9, Maadi', 'Maadi', 'Cairo');
+
+insert into public.order_vendors (
+  id, order_id, vendor_id, status, subtotal_minor, commission_rate, delivered_at
+) values
+  ('72200000-0000-0000-0000-000000000046',
+   '62200000-0000-0000-0000-000000000046',
+   '42200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 0.1000, now()),
+  ('72200000-0000-0000-0000-000000000047',
+   '62200000-0000-0000-0000-000000000047',
+   '42200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 0.1000, now()),
+  ('72200000-0000-0000-0000-000000000048',
+   '62200000-0000-0000-0000-000000000048',
+   '42200000-0000-0000-0000-000000000001',
+   'delivered', 10000, 0.1000, now());
+
+insert into public.order_items (
+  order_vendor_id, product_id, product_name, product_slug,
+  unit_price_minor, quantity, line_total_minor
+) values
+  ('72200000-0000-0000-0000-000000000046',
+   '52200000-0000-0000-0000-000000000001', 'Refund Gift', 'refund-gift',
+   10000, 1, 10000),
+  ('72200000-0000-0000-0000-000000000047',
+   '52200000-0000-0000-0000-000000000001', 'Refund Gift', 'refund-gift',
+   10000, 1, 10000),
+  ('72200000-0000-0000-0000-000000000048',
+   '52200000-0000-0000-0000-000000000001', 'Refund Gift', 'refund-gift',
+   10000, 1, 10000);
+
+insert into public.commission_entries (
+  id, order_vendor_id, vendor_id, rate, base_minor, amount_minor, earned_at
+) values
+  ('82200000-0000-0000-0000-000000000046',
+   '72200000-0000-0000-0000-000000000046',
+   '42200000-0000-0000-0000-000000000001',
+   0.1000, 10000, 1000, now()),
+  ('82200000-0000-0000-0000-000000000047',
+   '72200000-0000-0000-0000-000000000047',
+   '42200000-0000-0000-0000-000000000001',
+   0.1000, 10000, 1000, now()),
+  ('82200000-0000-0000-0000-000000000048',
+   '72200000-0000-0000-0000-000000000048',
+   '42200000-0000-0000-0000-000000000001',
+   0.1000, 10000, 1000, now());
+
+-- The buyer opens one case per suborder; the admin approves all three
+-- as physical returns.
+set role authenticated;
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000001"}';
+insert into refund_test_ids
+select 'case_r05_correct_a', public.open_refund_case(
+  '72200000-0000-0000-0000-000000000046', 'Looks fine at first glance', 1000);
+insert into refund_test_ids
+select 'case_r05_correct_b', public.open_refund_case(
+  '72200000-0000-0000-0000-000000000047', 'Arrived shattered', 1000);
+insert into refund_test_ids
+select 'case_r05_correct_c', public.open_refund_case(
+  '72200000-0000-0000-0000-000000000048', 'Changed my mind', 1000);
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+do $$
+begin
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'case_r05_correct_a'),
+    true, 1000, 'Approved, send it back');
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'case_r05_correct_b'),
+    true, 1000, 'Approved, send it back');
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'case_r05_correct_c'),
+    true, 1000, 'Approved, send it back');
+end $$;
+
+-- The vendor records receipt: A as good, B as damaged, C not yet.
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000004';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000004"}';
+do $$
+begin
+  perform public.confirm_refund_receipt(
+    (select id from refund_test_ids where name = 'case_r05_correct_a'),
+    'Back in good condition', 'good');
+  perform public.confirm_refund_receipt(
+    (select id from refund_test_ids where name = 'case_r05_correct_b'),
+    'Shattered in transit', 'damaged');
+end $$;
+
+-- 20a: the vendor corrects A good -> damaged. The payer flips to the
+-- shop, the replaced value stays on the row for audit, and a damaged
+-- return is now refused a restock.
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  perform public.correct_refund_inspection_condition(
+    (select id from refund_test_ids where name = 'case_r05_correct_a'),
+    'damaged');
+
+  if not exists (
+    select 1 from public.refund_cases
+     where id = (select id from refund_test_ids where name = 'case_r05_correct_a')
+       and inspection_condition = 'damaged'
+       and return_courier_paid_by = 'vendor'
+       and inspection_condition_previous = 'good'
+       and inspection_corrected_by = '12200000-0000-0000-0000-000000000004'
+       and inspection_corrected_at is not null
+  ) then
+    raise exception 'TEST 20 FAILED: good -> damaged correction did not flip the payer or record the audit trail';
+  end if;
+  raise notice 'TEST 20a PASSED: vendor corrects good to damaged; courier payer flips to the shop';
+end $$;
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  begin
+    perform public.restock_refund_case(
+      (select id from refund_test_ids where name = 'case_r05_correct_a'));
+  exception when check_violation then
+    if sqlerrm like '%never restocked%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 20 FAILED: wrong error for restocking a corrected-damaged return: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 20 FAILED: a return corrected to damaged was restocked';
+  end if;
+  if (select stock from public.products
+       where id = '52200000-0000-0000-0000-000000000001') <> 10 then
+    raise exception 'TEST 20 FAILED: refused restock changed stock';
+  end if;
+  raise notice 'TEST 20a PASSED: a return corrected to damaged is never restocked';
+end $$;
+
+-- 20b: the vendor corrects B damaged -> good. The payer flips back to
+-- the customer, and the return becomes restockable again.
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000004';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000004"}';
+do $$
+begin
+  perform public.correct_refund_inspection_condition(
+    (select id from refund_test_ids where name = 'case_r05_correct_b'),
+    'good');
+
+  if not exists (
+    select 1 from public.refund_cases
+     where id = (select id from refund_test_ids where name = 'case_r05_correct_b')
+       and inspection_condition = 'good'
+       and return_courier_paid_by = 'customer'
+       and inspection_condition_previous = 'damaged'
+  ) then
+    raise exception 'TEST 20 FAILED: damaged -> good correction did not flip the payer back';
+  end if;
+  raise notice 'TEST 20b PASSED: vendor corrects damaged to good; courier payer flips to the customer';
+end $$;
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+do $$
+begin
+  perform public.restock_refund_case(
+    (select id from refund_test_ids where name = 'case_r05_correct_b'));
+
+  if (select stock from public.products
+       where id = '52200000-0000-0000-0000-000000000001') <> 11 then
+    raise exception 'TEST 20 FAILED: corrected-good return did not restock';
+  end if;
+  raise notice 'TEST 20b PASSED: a return corrected to good restocks again';
+end $$;
+
+-- 20c: the gates — another shop cannot correct, an invalid condition is
+-- refused, the same value is refused, and nothing can be corrected
+-- before receipt or after restock.
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000005';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000005"}';
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  begin
+    perform public.correct_refund_inspection_condition(
+      (select id from refund_test_ids where name = 'case_r05_correct_a'),
+      'good');
+  exception when insufficient_privilege then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 20 FAILED: another shop corrected an inspection';
+  end if;
+  raise notice 'TEST 20c PASSED: only the owning shop (or admin) may correct';
+end $$;
+
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000004';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000004"}';
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  begin
+    perform public.correct_refund_inspection_condition(
+      (select id from refund_test_ids where name = 'case_r05_correct_a'),
+      'soaked');
+  exception when others then
+    if sqlstate <> '22023' then
+      raise;
+    end if;
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 20 FAILED: an invalid inspection condition was accepted';
+  end if;
+
+  v_blocked := false;
+  begin
+    perform public.correct_refund_inspection_condition(
+      (select id from refund_test_ids where name = 'case_r05_correct_a'),
+      'damaged');
+  exception when check_violation then
+    if sqlerrm like '%already recorded%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 20 FAILED: wrong error for a same-value correction: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 20 FAILED: a same-value correction was accepted';
+  end if;
+
+  v_blocked := false;
+  begin
+    perform public.correct_refund_inspection_condition(
+      (select id from refund_test_ids where name = 'case_r05_correct_c'),
+      'damaged');
+  exception when check_violation then
+    if sqlerrm like '%before correcting%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 20 FAILED: wrong error for correcting before receipt: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 20 FAILED: an unreceived return was corrected';
+  end if;
+
+  v_blocked := false;
+  begin
+    perform public.correct_refund_inspection_condition(
+      (select id from refund_test_ids where name = 'case_r05_correct_b'),
+      'damaged');
+  exception when check_violation then
+    if sqlerrm like '%already restocked%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 20 FAILED: wrong error for correcting after restock: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 20 FAILED: a restocked return was corrected';
+  end if;
+  raise notice 'TEST 20c PASSED: invalid, same-value, pre-receipt and post-restock corrections are all refused';
+end $$;
+
+-- 20d: the admin can correct too — A damaged -> wrong_item -> good,
+-- the audit trail follows the latest replaced value, and A restocks.
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000003"}';
+do $$
+begin
+  perform public.correct_refund_inspection_condition(
+    (select id from refund_test_ids where name = 'case_r05_correct_a'),
+    'wrong_item');
+
+  if not exists (
+    select 1 from public.refund_cases
+     where id = (select id from refund_test_ids where name = 'case_r05_correct_a')
+       and inspection_condition = 'wrong_item'
+       and return_courier_paid_by = 'vendor'
+       and inspection_condition_previous = 'damaged'
+       and inspection_corrected_by = '12200000-0000-0000-0000-000000000003'
+  ) then
+    raise exception 'TEST 20 FAILED: admin correction to wrong_item did not record the audit trail';
+  end if;
+
+  perform public.correct_refund_inspection_condition(
+    (select id from refund_test_ids where name = 'case_r05_correct_a'),
+    'good');
+
+  if not exists (
+    select 1 from public.refund_cases
+     where id = (select id from refund_test_ids where name = 'case_r05_correct_a')
+       and inspection_condition = 'good'
+       and return_courier_paid_by = 'customer'
+       and inspection_condition_previous = 'wrong_item'
+  ) then
+    raise exception 'TEST 20 FAILED: second correction did not track the latest replaced value';
+  end if;
+
+  perform public.restock_refund_case(
+    (select id from refund_test_ids where name = 'case_r05_correct_a'));
+
+  if (select stock from public.products
+       where id = '52200000-0000-0000-0000-000000000001') <> 12 then
+    raise exception 'TEST 20 FAILED: admin-corrected return did not restock';
+  end if;
+  raise notice 'TEST 20d PASSED: admin corrects too, audit follows each correction, corrected return restocks';
+  raise notice 'TEST 20 PASSED: inspection condition has a correction path before restock, audited';
+end $$;
+
 reset role;
 
 rollback;

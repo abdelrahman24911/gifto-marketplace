@@ -54,6 +54,11 @@ type RefundQueueRow = {
   receipt_note: string | null;
   inspection_condition: "good" | "wrong_item" | "damaged" | null;
   return_courier_paid_by: "customer" | "vendor" | null;
+  inspection_condition_previous:
+    | "good"
+    | "wrong_item"
+    | "damaged"
+    | null;
   acknowledged_at: string | null;
   restocked_at: string | null;
   escalation_count: number;
@@ -110,7 +115,7 @@ export default async function AdminRefundsPage({
   let listQuery = supabase
     .from("refund_cases")
     .select(
-      "id, order_id, order_vendor_id, vendor_id, source, status, reason, requested_amount_minor, refund_amount_minor, resolution_note, created_at, resolved_at, resolved_by, return_path, received_at, receipt_note, inspection_condition, return_courier_paid_by, acknowledged_at, restocked_at, escalation_count, escalated_at, escalation_note, first_resolved_at, order:orders(public_reference, recipient_name, contact_phone), order_vendor:order_vendors(status, subtotal_minor, vendor:vendors(name, slug))",
+      "id, order_id, order_vendor_id, vendor_id, source, status, reason, requested_amount_minor, refund_amount_minor, resolution_note, created_at, resolved_at, resolved_by, return_path, received_at, receipt_note, inspection_condition, return_courier_paid_by, inspection_condition_previous, acknowledged_at, restocked_at, escalation_count, escalated_at, escalation_note, first_resolved_at, order:orders(public_reference, recipient_name, contact_phone), order_vendor:order_vendors(status, subtotal_minor, vendor:vendors(name, slug))",
       { count: "exact" },
     );
 
@@ -531,6 +536,9 @@ export default async function AdminRefundsPage({
                           : null}
                         {refundCase.return_courier_paid_by
                           ? ` · return courier paid by ${refundCase.return_courier_paid_by === "vendor" ? "the shop (wrong/damaged)" : "the customer"}`
+                          : null}
+                        {refundCase.inspection_condition_previous
+                          ? ` · inspection corrected from ${refundCase.inspection_condition_previous === "good" ? "good condition" : refundCase.inspection_condition_previous === "wrong_item" ? "wrong item" : "damaged"}`
                           : null}
                         {refundCase.receipt_note
                           ? ` · “${refundCase.receipt_note}”`
