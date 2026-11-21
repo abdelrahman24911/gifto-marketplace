@@ -1055,6 +1055,71 @@ begin
   end if;
   raise notice 'TEST 17d PASSED: wrong expected total blocks with PRICE_CHANGED';
 
+  -- (f) S-01: null expected prices for a priceable cart are refused, not
+  -- treated as "no check". A signed-in caller reaching the public RPC
+  -- directly via PostgREST with p_expected_prices = null must not be
+  -- able to order at live prices with no consent. Stock is 3 here
+  -- (17a and 17c placed, 17b/17d blocked); the live price is 12000.
+  select count(*) into v_orders_before from public.orders;
+  v_blocked := false;
+  begin
+    perform public.place_order_with_price_check(
+      '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+      'Sara Buyer', '01001112233', 'buyer@orders.gifto.test',
+      '12 Main Street', 'Alexandria', 'Alexandria', null,
+      gen_random_uuid(),
+      null,
+      null);
+  exception when data_exception then
+    if sqlerrm like '%could not be verified%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 17 FAILED: wrong error for null expected prices: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 17 FAILED: null expected prices did not block the order';
+  end if;
+  select count(*) into v_orders_after from public.orders;
+  if v_orders_after <> v_orders_before then
+    raise exception 'TEST 17 FAILED: null-price order still created a row';
+  end if;
+  if (select stock from public.products where id = '51100000-0000-0000-0000-000000000001') <> 3 then
+    raise exception 'TEST 17 FAILED: null-price attempt changed stock';
+  end if;
+  raise notice 'TEST 17f PASSED: null expected prices refused, nothing created';
+
+  -- (g) S-01: a null expected total with real expected prices is refused
+  -- the same way — the total is part of the consent, not optional.
+  select count(*) into v_orders_before from public.orders;
+  v_blocked := false;
+  begin
+    perform public.place_order_with_price_check(
+      '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+      'Sara Buyer', '01001112233', 'buyer@orders.gifto.test',
+      '12 Main Street', 'Alexandria', 'Alexandria', null,
+      gen_random_uuid(),
+      '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":12000}]'::jsonb,
+      null);
+  exception when data_exception then
+    if sqlerrm like '%could not be verified%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 17 FAILED: wrong error for null expected total: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 17 FAILED: null expected total did not block the order';
+  end if;
+  select count(*) into v_orders_after from public.orders;
+  if v_orders_after <> v_orders_before then
+    raise exception 'TEST 17 FAILED: null-total order still created a row';
+  end if;
+  if (select stock from public.products where id = '51100000-0000-0000-0000-000000000001') <> 3 then
+    raise exception 'TEST 17 FAILED: null-total attempt changed stock';
+  end if;
+  raise notice 'TEST 17g PASSED: null expected total refused, nothing created';
+
   -- (e) R-03: the legacy no-check wrapper is gone. An authenticated caller
   -- can no longer reach place_order_with_idempotency at all — the function
   -- does not exist (42883) — and no order is created by the attempt. The
