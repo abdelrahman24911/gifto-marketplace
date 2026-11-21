@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import {
@@ -8,20 +8,25 @@ import {
   setDefaultSavedAddress,
   type AddressBookState,
 } from "./actions";
+import { AddressForm, type AddressFormInitial } from "./address-form";
 
 /**
- * Per-address row actions: set as default, and delete (with a confirm —
- * deleting never affects orders already placed, which hold their own
- * address snapshot). Each form reports its own error inline.
+ * Per-address row actions: edit, set as default, and delete (with a
+ * confirm — deleting never affects orders already placed, which hold
+ * their own address snapshot). Each form reports its own error inline.
+ * The edit form is the same AddressForm as the add form, prefilled;
+ * saving it updates the row in place (R-08).
  */
 export function AddressRowActions({
-  addressId,
+  address,
   isDefault,
 }: {
-  addressId: string;
+  address: AddressFormInitial;
   isDefault: boolean;
 }) {
   const t = useTranslations("addressBook");
+  const addressId = address.id;
+  const [editing, setEditing] = useState(false);
   const [defaultState, defaultAction, defaultPending] = useActionState<
     AddressBookState,
     FormData
@@ -33,6 +38,14 @@ export function AddressRowActions({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        onClick={() => setEditing((value) => !value)}
+        aria-expanded={editing}
+        className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50"
+      >
+        {editing ? t("cancel") : t("edit")}
+      </button>
       {!isDefault ? (
         <form action={defaultAction}>
           <input type="hidden" name="address_id" value={addressId} />
@@ -85,6 +98,15 @@ export function AddressRowActions({
         <p role="status" className="w-full text-sm text-emerald-700">
           {deleteState.success}
         </p>
+      ) : null}
+      {editing ? (
+        <div className="w-full">
+          <AddressForm
+            initial={address}
+            onCancel={() => setEditing(false)}
+            onSaved={() => setEditing(false)}
+          />
+        </div>
       ) : null}
     </div>
   );

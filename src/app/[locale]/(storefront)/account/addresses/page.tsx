@@ -67,7 +67,17 @@ export default async function AccountAddressesPage() {
                   ) : null}
                 </div>
                 <AddressRowActions
-                  addressId={address.id}
+                  address={{
+                    id: address.id,
+                    label: address.label,
+                    recipientName: address.recipient_name,
+                    contactPhone: address.contact_phone,
+                    addressLine: address.address_line,
+                    city: address.city,
+                    governorate: address.governorate,
+                    notes: address.notes,
+                    isDefault: address.is_default,
+                  }}
                   isDefault={address.is_default}
                 />
               </div>

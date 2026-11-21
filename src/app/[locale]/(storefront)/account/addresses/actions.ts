@@ -96,6 +96,59 @@ export async function addSavedAddress(
   return { success: "Address saved.", attempt };
 }
 
+export async function updateSavedAddress(
+  prev: AddressBookState,
+  formData: FormData,
+): Promise<AddressBookState> {
+  const attempt =
+    (prev && typeof prev.attempt === "number" ? prev.attempt : 0) + 1;
+  const { supabase, user } = await requireUser();
+  const addressId = String(formData.get("address_id") ?? "").trim();
+  if (!addressId) return { error: "Missing address.", attempt };
+  const input = readInput(formData);
+  const validationError = validateSavedAddressInput(input);
+  if (validationError) return { error: validationError, attempt };
+
+  // R-08: correct a typo without deleting and re-adding. The update is
+  // owner-scoped twice (user id + address id), so a tampered id can
+  // never touch another customer's row — a missing row is "not found",
+  // never an error that leaks ownership. Editing never rewrites a
+  // placed order: orders hold their own address snapshot.
+  const wantsDefault = formData.get("is_default") === "1";
+  if (wantsDefault) {
+    const { error: clearError } = await supabase
+      .from("saved_addresses")
+      .update({ is_default: false })
+      .eq("user_id", user.id)
+      .eq("is_default", true);
+    if (clearError) {
+      return { error: "Your address could not be saved. Try again.", attempt };
+    }
+  }
+
+  const { data, error } = await supabase
+    .from("saved_addresses")
+    .update({
+      label: input.label,
+      recipient_name: input.recipientName,
+      contact_phone: input.contactPhone,
+      address_line: input.addressLine,
+      city: input.city,
+      governorate: input.governorate,
+      notes: input.notes || null,
+      ...(wantsDefault ? { is_default: true } : {}),
+    })
+    .eq("user_id", user.id)
+    .eq("id", addressId)
+    .select("id");
+  if (error || !data || data.length === 0) {
+    return { error: "That address was not found.", attempt };
+  }
+
+  revalidate();
+  return { success: "Address updated.", attempt };
+}
+
 export async function setDefaultSavedAddress(
   prev: AddressBookState,
   formData: FormData,
