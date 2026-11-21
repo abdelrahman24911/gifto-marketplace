@@ -73,7 +73,7 @@ export async function confirmRefundReceipt(
   const caseId = String(formData.get("case_id") ?? "").trim();
   const vendorId = String(formData.get("vendor_id") ?? "").trim();
   const note = String(formData.get("note") ?? "").trim();
-  const conditionRaw = String(formData.get("condition") ?? "good").trim();
+  const conditionRaw = String(formData.get("condition") ?? "").trim();
 
   if (!UUID_PATTERN.test(caseId) || !UUID_PATTERN.test(vendorId)) {
     return { error: "That refund case could not be found.", attempt };

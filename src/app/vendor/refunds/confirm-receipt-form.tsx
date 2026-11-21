@@ -34,7 +34,6 @@ export function ConfirmReceiptForm({
               type="radio"
               name="condition"
               value="good"
-              defaultChecked
               className="mt-0.5"
             />
             <span>

@@ -2067,7 +2067,7 @@ export type Database = {
         Args: {
           p_case_id: string;
           p_note?: string | null;
-          p_condition?: "good" | "wrong_item" | "damaged" | null;
+          p_condition: "good" | "wrong_item" | "damaged";
         };
         Returns: undefined;
       };

@@ -649,7 +649,7 @@ begin
   end if;
 
   perform public.confirm_refund_receipt(
-    (select id from refund_test_ids where name = 'case_window'), 'Item back in good condition');
+    (select id from refund_test_ids where name = 'case_window'), 'Item back in good condition', 'good');
 
   if not exists (
     select 1 from public.refund_cases
@@ -771,7 +771,7 @@ declare
 begin
   begin
     perform public.confirm_refund_receipt(
-      (select id from refund_test_ids where name = 'case_shipped'), 'No item to receive');
+      (select id from refund_test_ids where name = 'case_shipped'), 'No item to receive', 'good');
   exception when check_violation then
     v_blocked := true;
   end;
@@ -827,7 +827,7 @@ begin
   v_blocked := false;
   begin
     perform public.confirm_refund_receipt(
-      (select id from refund_test_ids where name = 'case_window'), 'Not my shop');
+      (select id from refund_test_ids where name = 'case_window'), 'Not my shop', 'good');
   exception when insufficient_privilege then
     v_blocked := true;
   end;
@@ -845,7 +845,7 @@ declare
 begin
   begin
     perform public.confirm_refund_receipt(
-      (select id from refund_test_ids where name = 'case_window'), 'A customer should not do this');
+      (select id from refund_test_ids where name = 'case_window'), 'A customer should not do this', 'good');
   exception when insufficient_privilege then
     v_blocked := true;
   end;
@@ -2093,7 +2093,7 @@ begin
   perform public.acknowledge_refund_case(
     (select id from refund_test_ids where name = 'pending_c'));
   perform public.confirm_refund_receipt(
-    (select id from refund_test_ids where name = 'pending_c'), 'Item back before delivery');
+    (select id from refund_test_ids where name = 'pending_c'), 'Item back before delivery', 'good');
 
   if (select status from public.order_vendors
        where id = '72200000-0000-0000-0000-000000000023') <> 'returned' then
@@ -3211,11 +3211,48 @@ begin
   perform public.confirm_refund_receipt(
     (select id from refund_test_ids where name = 'case_r05_good'),
     'Back in good condition', 'good');
-  -- No condition given: the old 2-argument call still means good.
+  -- An explicitly chosen 'good' still records good / customer-paid.
   perform public.confirm_refund_receipt(
     (select id from refund_test_ids where name = 'case_r05_default'),
-    'Back in good condition');
+    'Back in good condition', 'good');
 
+  -- A missing condition is refused (22023) and records nothing — there
+  -- is no silent default to 'good' any more (migration 61). The same
+  -- holds for a plain 2-argument call, which hits the NULL default.
+  begin
+    perform public.confirm_refund_receipt(
+      (select id from refund_test_ids where name = 'case_r05_bad_condition'),
+      'No condition chosen', null);
+  exception when others then
+    if sqlstate <> '22023' then
+      raise;
+    end if;
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 17 FAILED: a receipt without a condition was accepted';
+  end if;
+  if (select received_at from public.refund_cases
+       where id = (select id from refund_test_ids where name = 'case_r05_bad_condition')) is not null then
+    raise exception 'TEST 17 FAILED: a receipt without a condition recorded a receipt';
+  end if;
+
+  v_blocked := false;
+  begin
+    perform public.confirm_refund_receipt(
+      (select id from refund_test_ids where name = 'case_r05_bad_condition'),
+      'No condition chosen');
+  exception when others then
+    if sqlstate <> '22023' then
+      raise;
+    end if;
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 17 FAILED: a 2-argument receipt without a condition was accepted';
+  end if;
+
+  v_blocked := false;
   begin
     perform public.confirm_refund_receipt(
       (select id from refund_test_ids where name = 'case_r05_bad_condition'),
@@ -3267,7 +3304,7 @@ begin
        and inspection_condition = 'good'
        and return_courier_paid_by = 'customer'
   ) then
-    raise exception 'TEST 17 FAILED: receipt without a condition did not default to good / customer-paid';
+    raise exception 'TEST 17 FAILED: an explicitly chosen good receipt did not record good / customer-paid';
   end if;
   raise notice 'TEST 17a PASSED: inspection condition and courier payer recorded per D-09';
 end $$;
