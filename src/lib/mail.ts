@@ -301,6 +301,17 @@ export type MailOutboxRow = {
  * failed) and first_error holds the very first failure reason — the
  * previous behaviour overwrote last_error with a generic requeue note
  * and lost both.
+ *
+ * S-14: the cap check is atomic at the row, not just in application
+ * code. The read above only decides the *expected* requeue_count; the
+ * update itself is conditional on `status = 'failed'` AND
+ * `requeue_count = <read value>`, and it selects the updated row back.
+ * If two requeues race (double-click, two admins), the loser's update
+ * matches zero rows — the winner already flipped the row to pending
+ * and bumped the count — and is refused instead of granting an extra
+ * retry cycle. The same guard covers a row that was sent (or failed
+ * again) between the read and the update. Zero affected rows is a
+ * refusal, not a success.
  */
 export async function requeueMailOutbox(
   rowId: string,
@@ -325,17 +336,27 @@ export async function requeueMailOutbox(
     if (requeueCount >= MAIL_OUTBOX_MAX_REQUEUES) {
       return { ok: false, reason: "cap_reached" };
     }
-    const { error: updateError } = await service
+    const {
+      data: updated,
+      error: updateError,
+    } = await service
       .from("mail_outbox")
       .update({
         status: "pending",
         attempts: 0,
         requeue_count: requeueCount + 1,
       })
-      .eq("id", rowId);
-    return updateError
-      ? { ok: false, reason: "not_failed" }
-      : { ok: true };
+      .eq("id", rowId)
+      // S-14: conditional on the state the read just saw. A concurrent
+      // requeue (or a send) that already moved the row makes this match
+      // zero rows, and zero affected rows is a refusal.
+      .eq("status", "failed")
+      .eq("requeue_count", requeueCount)
+      .select("id");
+    if (updateError || !updated || updated.length === 0) {
+      return { ok: false, reason: "not_failed" };
+    }
+    return { ok: true };
   } catch {
     return { ok: false, reason: "not_failed" };
   }

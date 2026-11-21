@@ -411,17 +411,26 @@ function makeOutboxFake(rows: OutboxRow[]) {
         if ((builder as { _patch?: Record<string, unknown> })._patch) {
           const patch = (builder as { _patch: Record<string, unknown> })
             ._patch;
-          const [, id] = (builder as { _eq?: [string, unknown] })._eq ?? [];
-          const row = rows.find((r) => r.id === id);
-          if (row) {
+          // S-14: an update applies only to rows matching *all* of its
+          // filters, and reports the rows it actually touched — like
+          // PostgREST, where a conditional update that matches nothing
+          // returns an empty array, not an error.
+          const matched = filtered;
+          for (const row of matched) {
             Object.assign(row, patch);
-            updates.push({ id: String(id), patch });
+            updates.push({ id: row.id, patch });
           }
-          resolve({ error: null });
+          resolve({ data: matched, error: null });
           return;
         }
         if ((builder as { _maybeSingle?: boolean })._maybeSingle) {
-          resolve({ data: filtered[0] ?? null, error: null });
+          // A single-row read returns a snapshot copy, like the JSON
+          // PostgREST returns — not a live reference to the stored row.
+          // Without the copy, a concurrent mutation would leak into a
+          // caller's already-read snapshot and hide the race S-14
+          // guards against.
+          const row = filtered[0];
+          resolve({ data: row ? { ...row } : null, error: null });
           return;
         }
         resolve({
@@ -597,6 +606,10 @@ describe("mail outbox", () => {
         attempts: 5,
         status: "failed",
         last_error: "connection refused",
+        // Real rows always carry the column (migration 65, default 0);
+        // the S-14 conditional update filters on it, so the fixture
+        // must carry it too.
+        requeue_count: 0,
       },
     ];
     const fake = makeOutboxFake(rows);
@@ -691,6 +704,41 @@ describe("mail outbox", () => {
     expect(rows[0].status).toBe("failed");
     expect(rows[0].requeue_count).toBe(2);
     expect(fake.updates).toHaveLength(0);
+  });
+
+  it("S-14: two concurrent requeues at count 1 grant only one extra cycle", async () => {
+    const rows: OutboxRow[] = [
+      {
+        id: "row-1",
+        kind: "order_status",
+        to_email: "customer@example.com",
+        subject: "Your order shipped",
+        body_text: "Hi",
+        body_html: null,
+        attempts: 5,
+        status: "failed",
+        last_error: "connection refused",
+        first_error: "connection refused",
+        requeue_count: 1,
+      },
+    ];
+    const fake = makeOutboxFake(rows);
+    serviceState.client = fake;
+    // Both calls read the same snapshot (failed, count 1) before either
+    // updates — the conditional update must let exactly one through.
+    const outcomes = await Promise.all([
+      requeueMailOutbox("row-1"),
+      requeueMailOutbox("row-1"),
+    ]);
+    expect(outcomes).toHaveLength(2);
+    expect(outcomes.filter((o) => o.ok)).toHaveLength(1);
+    expect(
+      outcomes.filter((o) => !o.ok),
+    ).toEqual([{ ok: false, reason: "not_failed" }]);
+    expect(rows[0].status).toBe("pending");
+    expect(rows[0].attempts).toBe(0);
+    expect(rows[0].requeue_count).toBe(2);
+    expect(fake.updates).toHaveLength(1);
   });
 
   it("S-10: enqueue records the first failure reason on the row", async () => {
