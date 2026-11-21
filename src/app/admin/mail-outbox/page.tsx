@@ -1,8 +1,10 @@
 import { Breadcrumb, EmptyState } from "@/components/ui/section";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
+import { isMailConfigured } from "@/lib/mail";
 
 import { AdminNotice, AdminPageHeader } from "../ui";
+import { MailOutboxRequeueForm } from "./mail-outbox-requeue-form";
 import { MailOutboxRetryForm } from "./mail-outbox-retry-form";
 
 export const metadata = { title: "Mail outbox — Admin — Gifto" };
@@ -31,6 +33,9 @@ function formatDateTime(value: string | null): string {
  */
 export default async function AdminMailOutboxPage() {
   const { supabase } = await requirePlatformAdmin();
+  // S-06: retries are refused while no provider is configured, so say
+  // so up front instead of letting the admin discover it per click.
+  const mailConfigured = isMailConfigured();
 
   const [pendingResult, failedResult] = await Promise.all([
     supabase
@@ -71,6 +76,14 @@ export default async function AdminMailOutboxPage() {
         </AdminNotice>
       ) : null}
 
+      {!mailConfigured ? (
+        <AdminNotice tone="warning" role="alert">
+          SMTP is not configured yet, so retries are disabled — retrying
+          now would not send anything. Failed emails can still be
+          requeued below; retry the queue once a provider is configured.
+        </AdminNotice>
+      ) : null}
+
       <div className="mt-4 flex flex-wrap items-center gap-4">
         <p className="text-sm text-ink-mute">
           {pending.length} pending · {failed.length} failed (showing latest)
@@ -108,6 +121,9 @@ export default async function AdminMailOutboxPage() {
                 <p className="mt-2 rounded-lg bg-paper-deep px-3 py-2 text-xs text-ink-soft">
                   {row.last_error}
                 </p>
+              ) : null}
+              {row.status === "failed" ? (
+                <MailOutboxRequeueForm rowId={row.id} />
               ) : null}
             </li>
           ))}

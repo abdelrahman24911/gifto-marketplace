@@ -30,6 +30,7 @@ import {
   passwordResetEmail,
   processMailOutbox,
   refundCaseResolvedEmail,
+  requeueMailOutbox,
   sendMail,
   vendorStaffAddedEmail,
   vendorStaffInviteEmail,
@@ -350,8 +351,15 @@ function makeOutboxFake(rows: OutboxRow[]) {
         builder._head = Boolean(opts?.head);
         return builder;
       };
+      builder.maybeSingle = () => {
+        builder._maybeSingle = true;
+        return builder;
+      };
       builder.eq = (column: string, value: unknown) => {
         builder._eq = [column, value];
+        const eqs = (builder as { _eqs?: [string, unknown][] })._eqs ?? [];
+        eqs.push([column, value]);
+        builder._eqs = eqs;
         return builder;
       };
       builder.order = () => builder;
@@ -363,9 +371,18 @@ function makeOutboxFake(rows: OutboxRow[]) {
       // Supabase builders are thenable: awaiting the chain resolves to
       // the query result.
       builder.then = (resolve: (value: unknown) => void) => {
+        const eqs =
+          (builder as { _eqs?: [string, unknown][] })._eqs ?? [];
+        const filtered = rows.filter((r) =>
+          eqs.every(
+            ([column, value]) =>
+              String((r as Record<string, unknown>)[column]) ===
+              String(value),
+          ),
+        );
         if ((builder as { _head?: boolean })._head) {
           resolve({
-            count: rows.filter((r) => r.status === "pending").length,
+            count: filtered.length,
             error: null,
           });
           return;
@@ -382,8 +399,12 @@ function makeOutboxFake(rows: OutboxRow[]) {
           resolve({ error: null });
           return;
         }
+        if ((builder as { _maybeSingle?: boolean })._maybeSingle) {
+          resolve({ data: filtered[0] ?? null, error: null });
+          return;
+        }
         resolve({
-          data: rows.filter((r) => r.status === "pending"),
+          data: filtered,
           error: null,
         });
       };
@@ -512,5 +533,78 @@ describe("mail outbox", () => {
     expect(rows[0].status).toBe("failed");
     expect(rows[0].attempts).toBe(5);
     expect(rows[0].last_error).toBe("connection refused");
+  });
+
+  it("S-06: a retry run with no provider configured touches no row", async () => {
+    const rows: OutboxRow[] = [
+      {
+        id: "row-1",
+        kind: "order_status",
+        to_email: "customer@example.com",
+        subject: "Your order shipped",
+        body_text: "Hi",
+        body_html: null,
+        attempts: 4,
+        status: "pending",
+      },
+    ];
+    const fake = makeOutboxFake(rows);
+    serviceState.client = fake;
+    // No transport and an explicit null config: the run is refused
+    // before any row is read, so the 5th attempt is not burned.
+    const outcome = await processMailOutbox({ config: null });
+    expect(outcome).toEqual({
+      sent: 0,
+      failed: 0,
+      remaining: 1,
+      skipped: "unconfigured",
+    });
+    expect(rows[0].status).toBe("pending");
+    expect(rows[0].attempts).toBe(4);
+    expect(fake.updates).toHaveLength(0);
+  });
+
+  it("S-06: requeue restores a failed row to pending with a fresh attempt count", async () => {
+    const rows: OutboxRow[] = [
+      {
+        id: "row-1",
+        kind: "order_status",
+        to_email: "customer@example.com",
+        subject: "Your order shipped",
+        body_text: "Hi",
+        body_html: null,
+        attempts: 5,
+        status: "failed",
+        last_error: "connection refused",
+      },
+    ];
+    const fake = makeOutboxFake(rows);
+    serviceState.client = fake;
+    expect(await requeueMailOutbox("row-1")).toBe(true);
+    expect(rows[0].status).toBe("pending");
+    expect(rows[0].attempts).toBe(0);
+  });
+
+  it("S-06: requeue refuses a pending row and an unknown row", async () => {
+    const rows: OutboxRow[] = [
+      {
+        id: "row-1",
+        kind: "order_status",
+        to_email: "customer@example.com",
+        subject: "Your order shipped",
+        body_text: "Hi",
+        body_html: null,
+        attempts: 1,
+        status: "pending",
+      },
+    ];
+    const fake = makeOutboxFake(rows);
+    serviceState.client = fake;
+    expect(await requeueMailOutbox("row-1")).toBe(false);
+    expect(await requeueMailOutbox("no-such-row")).toBe(false);
+    expect(await requeueMailOutbox("")).toBe(false);
+    expect(rows[0].status).toBe("pending");
+    expect(rows[0].attempts).toBe(1);
+    expect(fake.updates).toHaveLength(0);
   });
 });

@@ -267,11 +267,50 @@ export type MailOutboxRow = {
 };
 
 /**
+ * Requeues one terminally failed outbox row (migration 63, S-06) so it
+ * can be retried again once SMTP is configured. Only a row already in
+ * 'failed' moves: a pending or sent row is left untouched and the call
+ * returns false. Attempts reset to 0 — the requeue starts a fresh retry
+ * cycle; the 5-attempt cap still applies to the new cycle. Never throws.
+ */
+export async function requeueMailOutbox(rowId: string): Promise<boolean> {
+  if (!rowId) return false;
+  try {
+    const service = createServiceClient();
+    const { data, error } = await service
+      .from("mail_outbox")
+      .select("id, status")
+      .eq("id", rowId)
+      .maybeSingle();
+    const row = data as unknown as { id: string; status: string } | null;
+    if (error || !row || row.status !== "failed") return false;
+    const { error: updateError } = await service
+      .from("mail_outbox")
+      .update({
+        status: "pending",
+        attempts: 0,
+        last_error: "Requeued by an admin — retry once SMTP is configured.",
+      })
+      .eq("id", rowId);
+    return !updateError;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Retries pending outbox rows, oldest first (admin-triggered from
  * /admin/mail-outbox; a future cron route can call the same function).
  * Each row is sent with `enqueue: false` so a failed retry never
  * re-enqueues itself. After MAIL_OUTBOX_MAX_ATTEMPTS the row is marked
  * 'failed' (terminal) instead of spinning forever. Never throws.
+ *
+ * S-06: a retry run with no SMTP provider configured does nothing at
+ * all — it returns `{ skipped: "unconfigured" }` without touching any
+ * row. Treating a skipped send like a transport failure used to burn
+ * one attempt per retry click, terminal-failing rows after five clicks
+ * before any provider existed. (A caller-supplied transport counts as
+ * configured: unit tests inject a fake transport with no SMTP env.)
  */
 export async function processMailOutbox(
   options: {
@@ -279,12 +318,41 @@ export async function processMailOutbox(
     config?: MailConfig | null;
     transport?: Transporter;
   } = {},
-): Promise<{ sent: number; failed: number; remaining: number }> {
+): Promise<{
+  sent: number;
+  failed: number;
+  remaining: number;
+  skipped?: "unconfigured";
+}> {
   const limit =
     options.limit !== undefined && options.limit > 0
       ? Math.min(options.limit, 100)
       : 25;
-  const outcome = { sent: 0, failed: 0, remaining: 0 };
+  const outcome: {
+    sent: number;
+    failed: number;
+    remaining: number;
+    skipped?: "unconfigured";
+  } = { sent: 0, failed: 0, remaining: 0 };
+  const config =
+    options.config !== undefined ? options.config : getMailConfig();
+  if (!config && options.transport === undefined) {
+    // No provider and no injected transport: refuse the run before any
+    // row is read, so no attempt is consumed. Count the pending rows
+    // so the caller can still report how many are waiting.
+    try {
+      const service = createServiceClient();
+      const { count } = await service
+        .from("mail_outbox")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "pending");
+      outcome.remaining = count ?? 0;
+    } catch {
+      // The skipped run still never throws.
+    }
+    outcome.skipped = "unconfigured";
+    return outcome;
+  }
   try {
     const service = createServiceClient();
     const { data, error } = await service
