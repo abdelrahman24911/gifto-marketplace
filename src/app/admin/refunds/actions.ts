@@ -127,6 +127,71 @@ export type RestockRefundState =
   | { success: string; attempt: number }
   | null;
 
+export type CorrectInspectionState =
+  | { error: string; attempt: number }
+  | { success: string; attempt: number }
+  | null;
+
+// R-05 residual (re-audit v5): the admin could call the correction RPC
+// but had no UI for it — only the shop could correct a wrong inspection
+// call, from its own case page. Same RPC, same window (approved case,
+// receipt recorded, not yet restocked); the database refuses a
+// same-value correction and re-derives the courier payer.
+export async function correctInspectionCondition(
+  prev: CorrectInspectionState,
+  formData: FormData,
+): Promise<CorrectInspectionState> {
+  const attempt = (prev?.attempt ?? 0) + 1;
+  const caseId = String(formData.get("case_id") ?? "").trim();
+  const conditionRaw = String(formData.get("condition") ?? "").trim();
+
+  if (!UUID_PATTERN.test(caseId)) {
+    return { error: "That refund case could not be found.", attempt };
+  }
+  if (
+    conditionRaw !== "good" &&
+    conditionRaw !== "wrong_item" &&
+    conditionRaw !== "damaged"
+  ) {
+    return {
+      error: "Choose what arrived: good condition, wrong item, or damaged.",
+      attempt,
+    };
+  }
+
+  const { supabase, user } = await requirePlatformAdmin();
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { error: quotaError, attempt };
+  const { error } = await supabase.rpc("correct_refund_inspection_condition", {
+    p_case_id: caseId,
+    p_condition: conditionRaw,
+  });
+
+  if (error) {
+    return {
+      error:
+        error.code === "23514" || error.code === "42501" || error.code === "22023"
+          ? error.message
+          : "The inspection could not be corrected. Refresh the page and try again.",
+      attempt,
+    };
+  }
+
+  revalidatePath("/admin/refunds");
+  revalidatePath("/vendor/refunds");
+
+  return {
+    success:
+      conditionRaw === "good"
+        ? "Inspection corrected to good condition. The customer pays the return courier and the item can be restocked after inspection."
+        : conditionRaw === "wrong_item"
+          ? "Inspection corrected to wrong item. The shop pays the return courier and the item is not restocked against this order."
+          : "Inspection corrected to damaged. The shop pays the return courier and a damaged item is never restocked.",
+    attempt,
+  };
+}
+
 // P1-04 (D-09): manual restock after the vendor confirmed receipt. The RPC
 // restocks through adjust_product_stock exactly once; a damaged item is
 // simply never restocked.

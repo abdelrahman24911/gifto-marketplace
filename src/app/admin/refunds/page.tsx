@@ -29,6 +29,7 @@ import {
 
 import { ResolveRefundForm } from "./resolve-refund-form";
 import { RestockRefundForm } from "./restock-refund-form";
+import { CorrectInspectionForm } from "./correct-inspection-form";
 
 import type { OrderStatus, RefundCaseStatus } from "@/lib/supabase/database.types";
 import type { RefundReturnPath } from "@/lib/refunds";
@@ -59,6 +60,8 @@ type RefundQueueRow = {
     | "wrong_item"
     | "damaged"
     | null;
+  inspection_corrected_by: string | null;
+  inspection_corrected_at: string | null;
   acknowledged_at: string | null;
   restocked_at: string | null;
   escalation_count: number;
@@ -115,7 +118,7 @@ export default async function AdminRefundsPage({
   let listQuery = supabase
     .from("refund_cases")
     .select(
-      "id, order_id, order_vendor_id, vendor_id, source, status, reason, requested_amount_minor, refund_amount_minor, resolution_note, created_at, resolved_at, resolved_by, return_path, received_at, receipt_note, inspection_condition, return_courier_paid_by, inspection_condition_previous, acknowledged_at, restocked_at, escalation_count, escalated_at, escalation_note, first_resolved_at, order:orders(public_reference, recipient_name, contact_phone), order_vendor:order_vendors(status, subtotal_minor, vendor:vendors(name, slug))",
+      "id, order_id, order_vendor_id, vendor_id, source, status, reason, requested_amount_minor, refund_amount_minor, resolution_note, created_at, resolved_at, resolved_by, return_path, received_at, receipt_note, inspection_condition, return_courier_paid_by, inspection_condition_previous, inspection_corrected_by, inspection_corrected_at, acknowledged_at, restocked_at, escalation_count, escalated_at, escalation_note, first_resolved_at, order:orders(public_reference, recipient_name, contact_phone), order_vendor:order_vendors(status, subtotal_minor, vendor:vendors(name, slug))",
       { count: "exact" },
     );
 
@@ -283,7 +286,9 @@ export default async function AdminRefundsPage({
 
   // N-03: who cancelled a case and when. A guest cancellation has no
   // resolver profile (resolved_by stays null by design), so it reads as
-  // "the guest".
+  // "the guest". The same lookup also resolves who corrected an
+  // inspection (inspection_corrected_by), so the corrector is a name
+  // here, not a bare UUID.
   type ResolverRow = {
     id: string;
     full_name: string | null;
@@ -292,8 +297,12 @@ export default async function AdminRefundsPage({
   const resolverIds = Array.from(
     new Set(
       cases
-        .filter((refundCase) => refundCase.status === "cancelled")
-        .map((refundCase) => refundCase.resolved_by)
+        .flatMap((refundCase) => [
+          refundCase.status === "cancelled"
+            ? refundCase.resolved_by
+            : null,
+          refundCase.inspection_corrected_by,
+        ])
         .filter((id): id is string => Boolean(id)),
     ),
   );
@@ -540,6 +549,14 @@ export default async function AdminRefundsPage({
                         {refundCase.inspection_condition_previous
                           ? ` · inspection corrected from ${refundCase.inspection_condition_previous === "good" ? "good condition" : refundCase.inspection_condition_previous === "wrong_item" ? "wrong item" : "damaged"}`
                           : null}
+                        {refundCase.inspection_condition_previous &&
+                        refundCase.inspection_corrected_by
+                          ? ` · corrected by ${resolvers.get(refundCase.inspection_corrected_by)?.full_name || resolvers.get(refundCase.inspection_corrected_by)?.email || "Gifto"}`
+                          : null}
+                        {refundCase.inspection_condition_previous &&
+                        refundCase.inspection_corrected_at
+                          ? ` on ${new Date(refundCase.inspection_corrected_at).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: BUSINESS_TIME_ZONE })}`
+                          : null}
                         {refundCase.receipt_note
                           ? ` · “${refundCase.receipt_note}”`
                           : null}
@@ -621,6 +638,16 @@ export default async function AdminRefundsPage({
                         order. Restock the actual item manually if it is
                         saleable.
                       </p>
+                    ) : null}
+                    {refundCase.status === "approved" &&
+                    refundCase.return_path === "physical_return" &&
+                    refundCase.received_at &&
+                    !refundCase.restocked_at &&
+                    refundCase.inspection_condition ? (
+                      <CorrectInspectionForm
+                        caseId={refundCase.id}
+                        currentCondition={refundCase.inspection_condition}
+                      />
                     ) : null}
 
                     {refundCase.status === "open" ? (
