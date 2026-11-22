@@ -132,10 +132,12 @@ tracked in `docs/HOSTED_STATE.md`.
 > `BYPASSRLS`, only attempts the `ALTER` when it is missing (and fails loudly
 > if that would require a superuser), and asserts that `anon`/`authenticated`
 > do not bypass RLS. The exact fresh-database path passed all 17 suites
-> locally. PR #1 head `bdcc169` ran the prior **two-job** workflow successfully
-> (`app` and `rls`: https://github.com/abdelrahman24911/gifto-marketplace/actions/runs/44951092340).
-> The **three-job** workflow, including `security-headers`, is part of the
-> uncommitted P0 remediation and has not run on GitHub yet; do not claim it has.
+> locally. All three jobs passed on the P0 remediation commit `d4e6e0e`:
+> PR run https://github.com/abdelrahman24911/gifto-marketplace/actions/runs/44966671507
+> and push run https://github.com/abdelrahman24911/gifto-marketplace/actions/runs/44966667711.
+> The push run's `rls` job needed one rerun after a Docker pull failure during
+> container setup; attempt 2 passed all three jobs. The rerun was infrastructure
+> recovery, not an RLS test failure.
 > `.gitattributes` now forces `*.sh` (and itself) to LF so Windows checkouts
 > do not feed CRLF scripts to Git Bash or Linux CI.
 

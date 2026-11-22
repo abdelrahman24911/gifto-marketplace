@@ -2,42 +2,42 @@
 
 **Date:** 2026-11-22
 **Branch:** `muse/p0-fixes`
-**Pull request:** [#1](https://github.com/abdelrahman24911/gifto-marketplace/pull/1) - open, not draft, **unmerged**, mergeable state `clean`
-**PR head:** `bdcc16979fbce1ea7d2be7bf17aeb69fc2d65344`
+**Pull request:** [#1](https://github.com/abdelrahman24911/gifto-marketplace/pull/1) - open, not draft, **unmerged**
+**Remediation commit:** `d4e6e0ea9edea10ae283138b6ef4f66426c87708`
 **Base:** `5aee2112d0e0ad8b7e907c9933a0b8f1190de3ae`
-**Working tree:** 40 uncommitted entries. The local P0 remediation is **not** on the PR head and has not been pushed.
+**Working tree:** clean at the remediation commit; the verification record below is a docs-only follow-up commit on the same branch.
 
 ## 1. Owner decision
 
-The owner approved migration 30 as intentionally forward-only with no rollback migration. This approval is limited to migration 30's irreversibility and does **not** authorize merging, pushing, deploying, or applying hosted migrations. If reversal is ever required after application, a carefully reviewed corrective forward migration must be used. The decision is recorded in `docs/DECISIONS.md` (D-10), the migration header, `docs/HOSTED_STATE.md`, `docs/review/PRODUCTION_RELEASE_CHECKLIST.md`, and `docs/launch/OWNER_INPUT_CHECKLIST.md`.
+The owner approved migration 30 as intentionally forward-only with no rollback migration. This approval is limited to migration 30's irreversibility and does **not** authorize merging, deploying, or applying hosted migrations. If reversal is ever required after application, a carefully reviewed corrective forward migration must be used. The decision is recorded in `docs/DECISIONS.md` (D-10), the migration header, `docs/HOSTED_STATE.md`, `docs/review/PRODUCTION_RELEASE_CHECKLIST.md`, and `docs/launch/OWNER_INPUT_CHECKLIST.md`.
 
 ## 2. GitHub Actions verification
 
-### 2.1 PR #1 workflow on the current PR head
+All three jobs ran on the exact remediation commit `d4e6e0e`.
 
-The workflow at PR head `bdcc169` is the **prior two-job workflow**. It does not contain the `security-headers` job; that job exists only in the uncommitted local remediation.
+### 2.1 Pull-request event
 
-**PR event run:** [CI run 44951092340](https://github.com/abdelrahman24911/gifto-marketplace/actions/runs/44951092340) - completed successfully on 2026-11-21.
-
-| Job | Result | Exact job link |
-|---|---|---|
-| `app (lint, typecheck, test, build)` | success | https://github.com/abdelrahman24911/gifto-marketplace/actions/runs/44951092340/job/136988949478 |
-| `rls (all SQL suites on disposable Postgres)` | success | https://github.com/abdelrahman24911/gifto-marketplace/actions/runs/44951092340/job/136988949617 |
-
-### 2.2 Push-event run for the same commit
-
-**Push run:** [CI run 44932163241](https://github.com/abdelrahman24911/gifto-marketplace/actions/runs/44932163241) - completed successfully on 2026-11-21.
+**Run:** [CI run 44966671507](https://github.com/abdelrahman24911/gifto-marketplace/actions/runs/44966671507) - completed successfully.
 
 | Job | Result | Exact job link |
 |---|---|---|
-| `app (lint, typecheck, test, build)` | success | https://github.com/abdelrahman24911/gifto-marketplace/actions/runs/44932163241/job/136930945983 |
-| `rls (all SQL suites on disposable Postgres)` | success | https://github.com/abdelrahman24911/gifto-marketplace/actions/runs/44932163241/job/136930945773 |
+| `security headers (Playwright)` | success | https://github.com/abdelrahman24911/gifto-marketplace/actions/runs/44966671507/job/137037150127 |
+| `rls (all SQL suites on disposable Postgres)` | success | https://github.com/abdelrahman24911/gifto-marketplace/actions/runs/44966671507/job/137037150369 |
+| `app (lint, typecheck, test, build)` | success | https://github.com/abdelrahman24911/gifto-marketplace/actions/runs/44966671507/job/137037150451 |
 
-### 2.3 Three-job verification status
+### 2.2 Push event
 
-**Not verified on GitHub.** PR #1 has only the two jobs above. The `security-headers` job is part of the uncommitted `.github/workflows/ci.yml` change and has only local evidence: `npm run test:e2e:security` passed 4/4 on 2026-11-22. The three-job workflow cannot run until the remediation is committed and pushed, and pushing is not authorized by the migration 30 approval.
+**Run:** [CI run 44966667711](https://github.com/abdelrahman24911/gifto-marketplace/actions/runs/44966667711) - completed successfully on attempt 2.
 
-The separate `Vercel Preview Comments` check also reports success, but it is not one of the three GitHub Actions jobs.
+Attempt 1 failed during `Initialize containers` for the `rls` job because the Docker pull failed; no RLS suite ran. The failed job was rerun, and attempt 2 passed all three jobs:
+
+| Job | Result | Exact job link |
+|---|---|---|
+| `rls (all SQL suites on disposable Postgres)` | success | https://github.com/abdelrahman24911/gifto-marketplace/actions/runs/44966667711/job/137038024767 |
+| `security headers (Playwright)` | success | https://github.com/abdelrahman24911/gifto-marketplace/actions/runs/44966667711/job/137038026823 |
+| `app (lint, typecheck, test, build)` | success | https://github.com/abdelrahman24911/gifto-marketplace/actions/runs/44966667711/job/137038058025 |
+
+The separate `Vercel Preview Comments` check is not one of the three GitHub Actions jobs.
 
 ## 3. Local verification evidence
 
@@ -70,10 +70,10 @@ These limitations are retained deliberately and must not be reported as resolved
 3. **Backup-restore:** no backup dump or dashboard backup/PITR access was available; no restore drill has been executed.
 4. **Migration 66 behavioral verification:** only definition-level rollback was verified; behavior-level rollback remains unverified because the RLS fixtures roll back.
 5. **Hosted state:** hosted Supabase, Vercel, production data, and production migration state remain unverified; no hosted access was used.
-6. **CI coverage:** the three-job workflow, including `security-headers`, has not run on GitHub. The successful runs above cover only the prior two-job workflow at `bdcc169`, not the local remediation.
+6. **CI durability:** the three-job workflow now passes on the exact remediation commit, but the push-event run needed one rerun after a Docker pull failure in the `rls` container setup. That was an infrastructure failure, not an RLS test failure.
 
 ## 6. Recommendation
 
-- **PR:** keep open and unmerged. Do not push, deploy, or apply hosted migrations without separate authorization.
-- **Merge gate:** owner approval to push the remediation, followed by a green GitHub Actions run of all three jobs (`app`, `security-headers`, `rls`) on the updated PR head.
+- **PR:** keep open and unmerged. No merge, deploy, or hosted migration without separate approval.
+- **Merge gate:** owner merge approval. CI is green on the exact remediation commit (`d4e6e0e`) for `app`, `security-headers`, and `rls`.
 - **Launch:** **NO-GO** until staging, SMTP, backup-restore, migration 66 behavioral verification, and hosted-state verification are closed or explicitly accepted by the owner.
