@@ -62,7 +62,15 @@ Each decision entry:
 
 ## D-09 - Delivered -> returned stock treatment
 
-- **Status:** `BLOCKED_PENDING_OWNER_APPROVAL`
+- **Status:** `DECIDED (2026-11-20, owner: 7-day return window from delivery; admin approves, vendor inspects; return courier paid by the customer unless wrong/damaged, then the vendor pays; inspect-then-restock manually, never automatic; suborder-level only for the pilot; customer can cancel their own open refund case)`
+- **Decision (2026-11-20):** return window is **7 days from delivery**. **Admin approves** the
+  return and the **vendor inspects** the item. The **return courier leg is paid by the customer,
+  unless the item is wrong or damaged — then the vendor pays**. Restock is
+  **inspect-then-restock manually** (via `adjust_product_stock` with a note), **never
+  automatic**. Returns are **suborder-level only for the pilot** (no partial / quantity-level
+  returns). A **customer can cancel their own open refund case**. A return arriving after its
+  settlement was paid is recovered by the D-08 route: clawback from the next settlement, or
+  direct repayment if there is no next settlement.
 - **Why it matters:** A return can mean a resaleable unit is back in the shop, a damaged unit that
   must not be sold, or a unit still with the customer. `products.stock` is a single sellable count
   with no quarantine/bin state, so automatic restocking can overstate inventory.
@@ -92,31 +100,35 @@ Each decision entry:
 | Returned now | unchanged | none | `returned`; unsettled commission reversed |
 | Manual resaleable return | `+quantity` | `manual_adjustment` with a note | unchanged |
 
-- **Owner input needed:** Should a return automatically restore sellable stock, or must a shop
-  inspect and manually restock? Are partial/quantity-level returns in scope (current status is
-  suborder-level only)? Should `returned_at` and a dedicated `order_returned` movement reason be added?
+- **Owner input needed (resolved 2026-11-20 — see Decision above):** inspect-then-restock
+  manually, never automatic; suborder-level only for the pilot. `returned_at` and a dedicated
+  `order_returned` movement reason were not decided and remain open.
 - **Implementation note:** If approved, implement as a separate migration with idempotency and
   RLS/ACL tests; do not fold it into the failed-delivery path.
 
 ## D-06 — Delivery fee model for multi-vendor orders
 
-- **Status:** `PARTIALLY DECIDED (2026-10-18)`
+- **Status:** `DECIDED (2026-11-20, owner: free through launch; later flat fee per shop, paid by the customer, kept by the delivering vendor; review after 100 orders)`
 - **Why it matters:** Affects checkout totals, vendor suborder amounts, and commission base (see D-02).
 - **Options considered:** flat fee per vendor; flat fee per order split across vendors; weight/area-based; free delivery.
 - **Decision (2026-10-18):** delivery is free at launch — `delivery_fee_minor` is 0 on both the
   parent order and each suborder, so the total equals the product subtotal. Fulfillment is
   per-vendor: each shop delivers its own suborder, so a multi-vendor cart becomes one parent order
   with one suborder per shop. Any fee model will be added later, configured in Supabase.
+- **Decision (2026-11-20):** delivery stays free through launch. When a fee starts, it is a
+  **flat fee per shop** (per vendor suborder), **paid by the customer** and **kept by the
+  delivering vendor**. The fee model is reviewed after 100 orders.
 - **Current schema default:** `delivery_fee_minor` exists on both `orders` and `order_vendors`;
   `vendors.delivery_coverage` (jsonb) is still unused.
 
 ## D-07 — Vendor subscription requirement and pricing
 
-- **Status:** `BLOCKED_PENDING_OWNER_APPROVAL`
+- **Status:** `DECIDED (2026-11-20, owner: no subscription at launch; commission-only; revisit after the pilot)`
 - **Why it matters:** Determines whether a vendor can sell without a subscription, and how subscription revenue is tracked separately from commission.
 - **Options considered:** subscription required to sell; optional subscription with benefits; no subscription at launch (manual management).
 - **Current schema default:** None — `vendor_subscriptions` and `subscription_plans` tables do not exist yet.
-- **Owner input needed:** Is a subscription required to sell, or optional? If optional, what are the price and billing cadence? Is it managed manually or by an automated provider?
+- **Decision (2026-11-20):** **No subscription at launch.** Vendors sell commission-only.
+  Revisit after the pilot.
 
 ---
 
@@ -142,7 +154,7 @@ Each decision entry:
 
 ## D-08 — Commission earning and settlement timing
 
-- **Status:** `DECIDED (2026-10-18, owner: earned on delivery confirmation)`
+- **Status:** `DECIDED (2026-10-18, owner: earned on delivery confirmation; settlement remainder DECIDED 2026-11-20 — see below)`
 - **Why it matters:** Determines when commission moves from `pending` to `earned` and when settlements are paid out. Affects `commission_entries`, `settlements`, `settlement_lines`.
 - **Options considered:** earned on delivery confirmation; earned on cash collection (COD); earned 14 days after delivery; earned immediately on order confirmation.
 - **Decision:** commission is earned when the suborder reaches `delivered` (COD cash is collected on
@@ -153,6 +165,12 @@ Each decision entry:
   Settlements are currently a **manual, admin-driven batch** (`create_settlement` collects a shop's
   `earned`, unsettled entries into one `open` settlement; `mark_settlement_paid` records the payout).
   Automating the cadence is deferred.
+- **Decision (2026-11-20, settlement remainder):** the **vendor holds the COD cash**. Weekly,
+  **every Sunday, for the prior week's delivered orders**, the vendor **remits Gifto's
+  commission to Gifto**. `mark_settlement_paid` attests that the **commission was received by
+  Gifto** and requires a **bank transfer reference**. A refund approved after a settlement was
+  paid is recovered by **clawback from the next settlement**, or by **direct repayment** if
+  there is no next settlement.
 
 ## D-03 — Customer identity and guest checkout
 
@@ -190,3 +208,17 @@ Each decision entry:
     owner (or platform admin) for cancellation.
 - **Current schema default:** implemented in `supabase/migrations/00000000000005_orders.sql`;
   failed-delivery extension in `supabase/migrations/00000000000013_failed_delivery.sql`.
+
+## D-10 - Migration 30 forward-only irreversibility
+
+- **Status:** `DECIDED (2026-11-22, owner: approve migration 30 as forward-only; no rollback migration)`
+- **Why it matters:** Migration 30 creates refund cases, the commission-adjustment ledger, and RPCs
+  that later migrations build on. A down migration would destroy financial and settlement history.
+- **Decision:** Migration 30 remains intentionally forward-only with no rollback migration. Do not
+  create a destructive or misleading rollback. If reversal is ever required after application, use
+  a carefully reviewed corrective forward migration.
+- **Scope limit:** This approval covers only migration 30's irreversibility. It does not authorize
+  merging, pushing, deploying, or applying hosted migrations.
+- **Implementation:** Documented in `supabase/migrations/00000000000030_refunds.sql`,
+  `docs/HOSTED_STATE.md`, `docs/review/PRODUCTION_RELEASE_CHECKLIST.md`, and
+  `docs/launch/OWNER_INPUT_CHECKLIST.md`.

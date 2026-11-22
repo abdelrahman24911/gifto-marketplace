@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 /**
  * Server-only helpers for guest checkout.
@@ -9,6 +9,9 @@ import { createHash } from "node:crypto";
  */
 
 export const GUEST_TOKEN_PATTERN = /^[0-9a-f]{64}$/;
+export const PUBLIC_REFERENCE_PATTERN = /^GFT-[0-9A-F]{12}$/;
+/** Server-side guest token lifetime, mirrored by the DB trigger (P1-02). */
+export const GUEST_TOKEN_LIFETIME_DAYS = 7;
 export const IDEMPOTENCY_KEY_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -19,9 +22,21 @@ export function sha256Hex(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
+/**
+ * Generates a fresh guest token server-side (P1-02 recovery rotation).
+ * Same shape as the browser-generated token: 32 random bytes as hex.
+ */
+export function createGuestToken(): string {
+  return randomBytes(32).toString("hex");
+}
+
 export function isValidGuestToken(value: unknown): value is string {
   return typeof value === "string" && GUEST_TOKEN_PATTERN.test(value);
 }
+
+// Re-exported from the client-safe module (S-07): the recovery confirm
+// form is a client component and cannot import this file (node:crypto).
+export { extractRecoveryToken } from "./recovery-token";
 
 export function isValidIdempotencyKey(value: unknown): value is string {
   return typeof value === "string" && IDEMPOTENCY_KEY_PATTERN.test(value);
@@ -31,9 +46,54 @@ export function isValidEmail(value: string): boolean {
   return value.length <= 254 && EMAIL_PATTERN.test(value);
 }
 
-/** One cookie per guest order, scoped to that order's confirmation path. */
+/** One cookie per guest order; the order id scopes it, not the path. */
 export function guestCookieName(orderId: string): string {
   return `gifto_guest_${orderId}`;
+}
+
+/**
+ * Guest cookies are order-scoped by name and valid across locale-prefixed
+ * URLs. A path-scoped cookie such as `/orders/<id>` is never sent to
+ * `/ar/orders/<id>`, which broke Arabic checkout and recovery.
+ */
+export const GUEST_COOKIE_PATH = "/";
+
+export function guestCookieSettings(orderId: string, token: string) {
+  return {
+    name: guestCookieName(orderId),
+    value: token,
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: GUEST_COOKIE_PATH,
+    maxAge: GUEST_COOKIE_MAX_AGE_SECONDS,
+  };
+}
+
+/**
+ * Deletion settings for the current cookie and the old path-scoped cookies
+ * created before the locale fix. Deleting the legacy paths prevents the
+ * browser from sending an old token alongside the fresh path-`/` cookie.
+ */
+export function guestCookieCleanupSettings(orderId: string): {
+  name: string;
+  path: string;
+}[] {
+  return [
+    GUEST_COOKIE_PATH,
+    `/orders/${orderId}`,
+    `/ar/orders/${orderId}`,
+  ].map((path) => ({ name: guestCookieName(orderId), path }));
+}
+
+/** Legacy paths only; used after setting a fresh path-`/` cookie. */
+export function legacyGuestCookieCleanupSettings(orderId: string): {
+  name: string;
+  path: string;
+}[] {
+  return guestCookieCleanupSettings(orderId).filter(
+    (cookie) => cookie.path !== GUEST_COOKIE_PATH,
+  );
 }
 
 /** Persisted only as a hash; never store or send a raw IP address. */
@@ -96,7 +156,9 @@ export function safeCheckoutError(message: unknown): string {
   if (
     SAFE_DB_ERROR.test(trimmed) ||
     /is no longer available\.$/.test(trimmed) ||
-    /is not accepting orders right now\.$/.test(trimmed)
+    /is not accepting orders right now\.$/.test(trimmed) ||
+    /does not deliver to this address\.$/.test(trimmed) ||
+    /^The prices you saw could not be verified/.test(trimmed)
   ) {
     return trimmed;
   }

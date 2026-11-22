@@ -8,9 +8,14 @@ import { createClient } from "@/lib/supabase/client";
 export function SignOutButton({
   className,
   onDone,
+  label = "Sign out",
+  busyLabel = "Signing out…",
 }: {
   className?: string;
   onDone?: () => void;
+  /** Storefront callers pass translated labels; admin keeps the default. */
+  label?: string;
+  busyLabel?: string;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -35,7 +40,7 @@ export function SignOutButton({
       disabled={busy}
       className={className}
     >
-      {busy ? "Signing out…" : "Sign out"}
+      {busy ? busyLabel : label}
     </button>
   );
 }

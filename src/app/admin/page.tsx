@@ -7,6 +7,7 @@ import {
   computeAdminMarketplaceMetrics,
 } from "@/lib/admin-metrics";
 import { requirePlatformAdmin } from "@/lib/auth";
+import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { formatEgp } from "@/lib/money";
 import { ORDER_STATUS_LABELS } from "@/lib/orders";
@@ -89,6 +90,7 @@ function formatDate(value: string) {
     day: "numeric",
     month: "short",
     year: "numeric",
+    timeZone: BUSINESS_TIME_ZONE,
   });
 }
 
@@ -104,6 +106,7 @@ export default async function AdminPage() {
     attentionResult,
     attentionOrdersResult,
     recentOrdersResult,
+    openRefundsResult,
   ] = await Promise.all([
     fetchAllRows<AdminOrderRecord>((from, to) =>
       supabase
@@ -157,6 +160,10 @@ export default async function AdminPage() {
       .order("created_at", { ascending: false })
       .order("id", { ascending: false })
       .limit(6),
+    supabase
+      .from("refund_cases")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "open"),
   ]);
 
   const metrics = computeAdminMarketplaceMetrics(
@@ -173,6 +180,9 @@ export default async function AdminPage() {
     (vendor) => vendor.status === "pending",
   ).length;
   const attentionCount = attentionResult.count ?? 0;
+  const openRefunds = openRefundsResult.error
+    ? null
+    : (openRefundsResult.count ?? 0);
   const attentionOrders = (attentionOrdersResult.data ?? []) as RecentOrderRow[];
   const recentOrders = (recentOrdersResult.data ?? []) as RecentOrderRow[];
   const newestShops = vendors.slice(0, 5);
@@ -180,7 +190,8 @@ export default async function AdminPage() {
     ordersResult.failed ||
     ordersResult.truncated ||
     commissionsResult.failed ||
-    commissionsResult.truncated;
+    commissionsResult.truncated ||
+    Boolean(openRefundsResult.error);
   const shopsIncomplete = vendorsResult.failed || vendorsResult.truncated;
 
   return (
@@ -342,6 +353,12 @@ export default async function AdminPage() {
               className="rounded-full border border-berry/25 bg-paper px-3 py-1.5 text-xs font-medium text-ink transition-colors hover:border-berry/50"
             >
               {pendingShops > 0 ? "Review pending shops" : "Manage shops"}
+            </Link>
+            <Link
+              href="/admin/refunds"
+              className="rounded-full border border-berry/25 bg-paper px-3 py-1.5 text-xs font-medium text-ink transition-colors hover:border-berry/50"
+            >
+              {openRefunds ? `Refund queue (${openRefunds})` : "Refund queue"}
             </Link>
             <Link
               href="/admin/support"

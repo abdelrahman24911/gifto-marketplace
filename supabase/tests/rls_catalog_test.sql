@@ -532,6 +532,135 @@ begin
   raise notice 'TEST 20B PASSED: active owner deletes own product';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST 21: P1-09 (M-06) — trigram search_products() RPC
+-- ---------------------------------------------------------------------------
+reset role;
+
+insert into public.products
+  (id, vendor_id, category_id, name, slug, description, price_minor, stock, status) values
+  ('d5000000-0000-0000-0000-000000000001', 'e1000000-0000-0000-0000-0000000000aa',
+   'f1000000-0000-0000-0000-0000000000aa', 'Ceramic Vase', 'ceramic-vase',
+   'Hand-painted ceramic for the living room', 25000, 2, 'active'),
+  ('d5000000-0000-0000-0000-000000000002', 'e1000000-0000-0000-0000-0000000000aa',
+   'f1000000-0000-0000-0000-0000000000aa', 'Rose Bouquet', 'rose-bouquet',
+   'A vase of fresh roses for birthdays', 30000, 4, 'active'),
+  ('d5000000-0000-0000-0000-000000000003', 'e1000000-0000-0000-0000-0000000000aa',
+   null, '100% Cotton Scarf', 'cotton-scarf',
+   'Soft cotton scarf', 12000, 5, 'active'),
+  ('d5000000-0000-0000-0000-000000000004', 'e1000000-0000-0000-0000-0000000000aa',
+   null, 'Hidden Vase', 'hidden-vase',
+   'A draft vase nobody should find', 9000, 0, 'draft');
+
+set role anon;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+
+-- TEST 21A: pg_trgm and both GIN indexes exist.
+do $$
+begin
+  if not exists (select 1 from pg_extension where extname = 'pg_trgm') then
+    raise exception 'TEST 21A FAILED: pg_trgm extension missing';
+  end if;
+  if not exists (select 1 from pg_indexes where indexname = 'products_name_trgm_idx') then
+    raise exception 'TEST 21A FAILED: products_name_trgm_idx missing';
+  end if;
+  if not exists (select 1 from pg_indexes where indexname = 'products_description_trgm_idx') then
+    raise exception 'TEST 21A FAILED: products_description_trgm_idx missing';
+  end if;
+  raise notice 'TEST 21A PASSED: pg_trgm and both trigram indexes exist';
+end $$;
+
+-- TEST 21B: "vase" finds both products, name match first, drafts excluded.
+do $$
+declare
+  first_id uuid;
+  total bigint;
+  c int;
+begin
+  select count(*), max(total_count) into c, total
+    from public.search_products('vase', null, null, null, 25, 0);
+  if c <> 2 or total <> 2 then
+    raise exception 'TEST 21B FAILED: vase search returned % rows, total %', c, total;
+  end if;
+
+  select id into first_id
+    from public.search_products('vase', null, null, null, 25, 0)
+    limit 1;
+  if first_id <> 'd5000000-0000-0000-0000-000000000001' then
+    raise exception 'TEST 21B FAILED: name match did not rank first, first=%', first_id;
+  end if;
+
+  if exists (
+    select 1 from public.search_products('vase', null, null, null, 25, 0)
+      where id = 'd5000000-0000-0000-0000-000000000004'
+  ) then
+    raise exception 'TEST 21B FAILED: draft product surfaced in search';
+  end if;
+  raise notice 'TEST 21B PASSED: vase search ranks the name match first, total 2';
+end $$;
+
+-- TEST 21C: description-only match ("birthdays" is only in a description).
+do $$
+declare c int;
+begin
+  select count(*) into c
+    from public.search_products('birthdays', null, null, null, 25, 0);
+  if c <> 1 then
+    raise exception 'TEST 21C FAILED: description search returned % rows', c;
+  end if;
+  if not exists (
+    select 1 from public.search_products('birthdays', null, null, null, 25, 0)
+      where id = 'd5000000-0000-0000-0000-000000000002'
+  ) then
+    raise exception 'TEST 21C FAILED: description-only product not found';
+  end if;
+  raise notice 'TEST 21C PASSED: description-only match found';
+end $$;
+
+-- TEST 21D: LIKE wildcards in input match literally (L-12).
+do $$
+declare c int;
+begin
+  select count(*) into c
+    from public.search_products('100%', null, null, null, 25, 0);
+  if c <> 1 then
+    raise exception 'TEST 21D FAILED: literal 100%% search returned % rows', c;
+  end if;
+
+  select count(*) into c
+    from public.search_products('%', null, null, null, 25, 0);
+  -- '%' is a literal character, not a wildcard: it matches only the one
+  -- product whose name actually contains '%', never the whole catalogue.
+  if c <> 1 then
+    raise exception 'TEST 21D FAILED: bare percent matched % rows', c;
+  end if;
+  if not exists (
+    select 1 from public.search_products('%', null, null, null, 25, 0)
+      where id = 'd5000000-0000-0000-0000-000000000003'
+  ) then
+    raise exception 'TEST 21D FAILED: bare percent did not match the literal-percent product';
+  end if;
+  raise notice 'TEST 21D PASSED: wildcards match literally, bare percent matches only the literal-percent product';
+end $$;
+
+-- TEST 21E: pagination keeps the filtered total (P1-08 shape).
+do $$
+declare
+  second_id uuid;
+  total bigint;
+begin
+  select id, total_count into second_id, total
+    from public.search_products('vase', null, null, null, 1, 1);
+  if second_id <> 'd5000000-0000-0000-0000-000000000002' then
+    raise exception 'TEST 21E FAILED: page 2 first row = %', second_id;
+  end if;
+  if total <> 2 then
+    raise exception 'TEST 21E FAILED: paged total = %', total;
+  end if;
+  raise notice 'TEST 21E PASSED: search pagination returns page 2 with total 2';
+end $$;
+
 reset role;
 
 rollback;

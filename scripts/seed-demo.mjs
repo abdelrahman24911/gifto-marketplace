@@ -3,12 +3,12 @@
 //
 // Seeds clearly-marked demo data into the linked Supabase project:
 //   * the 8 platform categories (same values as supabase/seed.sql)
-//   * 5 demo vendors (4 active + 1 pending review), all flagged is_demo
+//   * 6 demo vendors (5 active + 1 pending review), all flagged is_demo
 //   * one owner auth account per vendor (@demo.gifto.example — reserved TLD,
 //     can never receive real mail). New accounts get a random password that is
 //     never printed; run `npm run demo:passwords` locally to rotate and reveal
 //     fresh credentials in your own terminal when you need to sign in.
-//   * 24 products across the vendors with EGP prices and realistic stock
+//   * 36 products across the vendors with EGP prices and realistic stock
 //   * one generated gradient hero image per product in the product-images
 //     bucket (placeholder art — replace with real photos via the vendor UI)
 //
@@ -151,6 +151,8 @@ const VENDORS = [
       { slug: "pastel-peony-bouquet", name: "Pastel Peony Bouquet", category: "flowers", price_egp: 680, stock: 12, description: "Soft pink and cream peonies in a loose garden-style tie. Seasonal blooms, limited availability." },
       { slug: "dried-pampas-vase", name: "Dried Pampas Vase Arrangement", category: "flowers", price_egp: 750, stock: 10, description: "Pampas grass, bunny tails and preserved palm in a ceramic vase. Long-lasting decor that needs no water." },
       { slug: "graduation-flower-box", name: "Graduation Flower Box", category: "occasions", price_egp: 560, stock: 18, description: "Roses and chrysanthemums arranged in a tall hat-box with a congratulations ribbon. Ready to gift." },
+      { slug: "rose-chocolate-gift-box", name: "Rose & Chocolate Gift Box", category: "gift-boxes", price_egp: 780, stock: 10, description: "Six red roses paired with a box of milk-chocolate pralines in a keepsake rigid box. Our most-requested ready-made gift." },
+      { slug: "eid-celebration-bouquet", name: "Eid Celebration Bouquet", category: "occasions", price_egp: 480, stock: 20, description: "White roses, carnations and gold accents wrapped for Eid visits. Add a handwritten card at checkout." },
     ],
   },
   {
@@ -172,6 +174,9 @@ const VENDORS = [
       { slug: "molten-cake-dessert-kit", name: "Molten Cake Dessert Kit", category: "cakes-baked-goods", price_egp: 260, stock: 25, description: "Two bake-at-home chocolate lava cakes with caramel pots. Instructions and a serving tray included." },
       { slug: "luxury-chocolate-tower", name: "Luxury Chocolate Tower (3 tiers)", category: "gift-boxes", price_egp: 1450, stock: 8, description: "Three stacked boxes of assorted pralines, truffles and hazelnut squares — our show-piece corporate gift." },
       { slug: "assorted-bonbon-bag", name: "Assorted Bonbon Bag (24 pc)", category: "chocolates-sweets", price_egp: 340, stock: 30, description: "Twenty-four assorted bonbons in a resealable stand-up bag. A casual sweet treat or party favour." },
+      { slug: "honey-cake-cookies-tray", name: "Honey Cake & Cookies Tray", category: "cakes-baked-goods", price_egp: 380, stock: 22, description: "Slices of honey cake with butter cookies and a honey dip pot, arranged on a sharing tray. Serves six." },
+      { slug: "kunafa-gift-tray", name: "Kunafa Gift Tray (1 kg)", category: "cakes-baked-goods", price_egp: 460, stock: 16, description: "One kilogram of fresh kunafa with cream and pistachio, baked the morning of delivery and boxed for gifting." },
+      { slug: "corporate-chocolate-gift-hamper", name: "Corporate Chocolate Gift Hamper", category: "corporate-gifts", price_egp: 890, stock: 12, description: "A branded hamper of truffles, pralines and date confections with a company card. Volume pricing on ten or more." },
     ],
   },
   {
@@ -193,6 +198,9 @@ const VENDORS = [
       { slug: "corporate-pen-card-set", name: "Corporate Pen & Card Set", category: "corporate-gifts", price_egp: 210, stock: 50, description: "Ballpoint pen and card case engraved with a company name. Minimum order of ten sets for bulk pricing." },
       { slug: "custom-name-wooden-toy", name: "Custom Name Wooden Toy", category: "toys-kids", price_egp: 240, stock: 20, description: "A name-train or name-letters toy in sanded beech with child-safe paint. A nursery keepsake." },
       { slug: "engraved-brass-compass", name: "Engraved Brass Compass", category: "personalized-gifts", price_egp: 390, stock: 14, description: "Working brass compass in a walnut case, engraved with coordinates or a short message. A graduation favourite." },
+      { slug: "graduation-keepsake-gift-set", name: "Graduation Keepsake Gift Set", category: "occasions", price_egp: 620, stock: 14, description: "Engraved walnut pen, brass bookmark and a congratulations card in a gift box. Made for graduation day." },
+      { slug: "branded-notebook-pen-corporate-set", name: "Branded Notebook & Pen Corporate Set", category: "corporate-gifts", price_egp: 260, stock: 50, description: "Hardcover notebook and ballpoint pen debossed with a company logo. Minimum order of ten sets for bulk pricing." },
+      { slug: "personalized-family-name-sign", name: "Personalized Family Name Sign", category: "personalized-gifts", price_egp: 410, stock: 18, description: "Laser-cut wooden family name sign in walnut finish, sized for an entryway. Add the family name and year at checkout." },
     ],
   },
   {
@@ -214,6 +222,25 @@ const VENDORS = [
       { slug: "kids-art-craft-kit", name: "Kids Art & Craft Kit", category: "toys-kids", price_egp: 190, stock: 40, description: "Forty-piece craft kit: crayons, stickers, coloured paper and simple project cards. Ages 4+." },
       { slug: "rc-off-road-buggy", name: "RC Off-Road Buggy", category: "toys-kids", price_egp: 580, stock: 15, description: "Rechargeable 1:16 scale buggy with all-terrain tyres and a 30-minute battery. Controller included." },
       { slug: "interactive-globe-puzzle", name: "Interactive Globe Puzzle", category: "toys-kids", price_egp: 440, stock: 18, description: "A 300-piece puzzle of a world globe that lights up with fun facts when finished. Ages 6+." },
+    ],
+  },
+  {
+    slug: "alex-gift-atelier",
+    name: "Alexandria Gift Atelier",
+    status: "active",
+    commission_rate: 0.12,
+    city: "Alexandria",
+    governorate: "Alexandria",
+    delivery_coverage: { governorates: ["alexandria"], areas: [] },
+    contact_phone: "+20 100 000 0006",
+    owner_email: `alex-gift-atelier${DEMO_EMAIL_DOMAIN}`,
+    description:
+      "A Stanley gift-box atelier curating ready-made boxes for birthdays, weddings and Ramadan — local blooms, sweets and engraved keepsakes assembled to order. Same-day delivery across Alexandria.",
+    products: [
+      { slug: "alex-corniche-gift-box", name: "Alexandria Corniche Gift Box", category: "gift-boxes", price_egp: 650, stock: 15, description: "A seaside-inspired box: dried blooms, sea-salt caramels and a mini candle, packed in our signature navy keepsake box." },
+      { slug: "alex-ramadan-lantern-box", name: "Ramadan Lantern Gift Box", category: "gift-boxes", price_egp: 590, stock: 18, description: "A brass-effect lantern, dates and Arabic coffee in a crescent-stamped box. The ready-made Ramadan gift." },
+      { slug: "alex-wedding-congratulations-box", name: "Wedding Congratulations Gift Box", category: "occasions", price_egp: 720, stock: 12, description: "White roses, gold-dipped chocolates and a congratulations card in an ivory box. Sent with a hand-tied ribbon." },
+      { slug: "alex-engraved-name-plaque", name: "Engraved Name Plaque", category: "personalized-gifts", price_egp: 340, stock: 20, description: "A walnut name plaque engraved with a name and short message. A housewarming or newborn favourite." },
     ],
   },
   {

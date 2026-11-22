@@ -30,7 +30,7 @@ export function Pagination({
   return (
     <nav
       aria-label={label}
-      className="mt-6 flex items-center justify-between gap-3"
+      className="mt-6 flex flex-wrap items-center justify-between gap-3"
     >
       {page > 1 ? (
         <Link href={buildHref(page - 1)} rel="prev" className={linkClass}>
@@ -41,7 +41,7 @@ export function Pagination({
           Previous
         </span>
       )}
-      <p className="text-sm text-ink-soft">
+      <p className="min-w-0 flex-1 text-center text-sm text-ink-soft">
         Page {page} of {pages} · {total} total
       </p>
       {page < pages ? (

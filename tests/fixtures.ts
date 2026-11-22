@@ -1,5 +1,7 @@
 import { test as base, expect } from "@playwright/test";
 
+export type { Page } from "@playwright/test";
+
 export type BlockedRequest = {
   method: string;
   url: string;

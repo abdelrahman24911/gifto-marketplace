@@ -1,0 +1,1059 @@
+{
+  "generatedAt": "2026-11-16T11:55:52.847Z",
+  "repo": "C:/Users/bodyo/OneDrive/Desktop/gifto-marketplace",
+  "generator": "sharp 0.35.5",
+  "settings": {
+    "webp": {
+      "quality": 82,
+      "effort": 6,
+      "smartSubsample": true
+    },
+    "avif": {
+      "quality": 60,
+      "effort": 7
+    },
+    "occasionResize": {
+      "width": 1200,
+      "height": 857,
+      "fit": "inside",
+      "withoutEnlargement": true,
+      "appliesTo": "graduation only"
+    },
+    "productResize": "none (source dimensions preserved)",
+    "metadata": "stripped by encoder; EXIF orientation normalized"
+  },
+  "policy": {
+    "hostedChanges": "none in this task",
+    "upload": "create new Storage objects; do not overwrite or delete existing objects",
+    "database": "update image paths only after upload and visual verification",
+    "serving": "not copied to public/; these derivatives are owner-operated assets"
+  },
+  "summary": {
+    "sourceImages": 27,
+    "optimizedImages": 26,
+    "skippedImages": 1,
+    "allSourceBytes": 8004114,
+    "sourceBytesOptimizedSubset": 7997292,
+    "webpBytes": 711186,
+    "avifBytes": 516651,
+    "webpSavingsPct": 91.11,
+    "avifSavingsPct": 93.54,
+    "projectedWebpLibraryBytes": 718008,
+    "projectedAvifLibraryBytes": 523473,
+    "projectedWebpSavingsPct": 91.03,
+    "projectedAvifSavingsPct": 93.46
+  },
+  "files": [
+    {
+      "bucket": "product-images",
+      "sourcePath": "fab89811-3d29-4474-a09c-880c95803e5f/ff2f8ba0-5315-459d-8185-3d7bfe510e10/f64672f6-4d1d-4f07-aab8-eeaf95b6d6b2.png",
+      "entityType": "product",
+      "entityId": "ff2f8ba0-5315-459d-8185-3d7bfe510e10",
+      "productName": "Kids Art & Craft Kit",
+      "productSlug": "kids-art-craft-kit",
+      "position": 0,
+      "usage": "product card and detail gallery",
+      "originalAlt": "Screenshot 2026-10-19 193111",
+      "suggestedAlt": "Kids Art & Craft Kit",
+      "altAction": "replace",
+      "source": {
+        "format": "png",
+        "width": 923,
+        "height": 912,
+        "bytes": 1756011,
+        "sha256": "273510b8bcb9fc8659dfe90314c65b8159136691eb8c9fb8b8ad97fd314e9d87"
+      },
+      "optimized": {
+        "width": 923,
+        "height": 912,
+        "webp": {
+          "path": "optimized/webp/product-images/product_fab89811-3d29-4474-a09c-880c95803e5f_ff2f8ba0-5315-459d-8185-3d7bfe510e10_f64672f6-4d1d-4f07-aab8-eeaf95b6d6b2.webp",
+          "bytes": 226262,
+          "reductionPct": 87.12,
+          "sha256": "c136f1a1987bd97861e41e4bc7189feda9289b61627add41e917ec6643c089b0"
+        },
+        "avif": {
+          "path": "optimized/avif/product-images/product_fab89811-3d29-4474-a09c-880c95803e5f_ff2f8ba0-5315-459d-8185-3d7bfe510e10_f64672f6-4d1d-4f07-aab8-eeaf95b6d6b2.avif",
+          "bytes": 160621,
+          "reductionPct": 90.85,
+          "sha256": "e8ea77356b3e5586401aa9defc00cfe23366742cb6be5671df3d462abe20fedb"
+        }
+      },
+      "recommendation": "Upload the derivative as a new object and update the product image path; replace the screenshot filename alt text with the suggested descriptive alt.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "product-images",
+      "sourcePath": "fab89811-3d29-4474-a09c-880c95803e5f/c32215dd-e903-4d3c-9efa-ddfdde52fdb2/1d4a00a7-d1f8-4448-bc3d-ccab90e59196.png",
+      "entityType": "product",
+      "entityId": "c32215dd-e903-4d3c-9efa-ddfdde52fdb2",
+      "productName": "Interactive Globe Puzzle",
+      "productSlug": "interactive-globe-puzzle",
+      "position": 0,
+      "usage": "product card and detail gallery",
+      "originalAlt": "Screenshot 2026-10-19 192327",
+      "suggestedAlt": "Interactive Globe Puzzle",
+      "altAction": "replace",
+      "source": {
+        "format": "png",
+        "width": 947,
+        "height": 913,
+        "bytes": 1091069,
+        "sha256": "f81a00e60a2303b03a1fc84d0ceee4620371ff97a2eacfa3d3d89b089a312de5"
+      },
+      "optimized": {
+        "width": 947,
+        "height": 913,
+        "webp": {
+          "path": "optimized/webp/product-images/product_fab89811-3d29-4474-a09c-880c95803e5f_c32215dd-e903-4d3c-9efa-ddfdde52fdb2_1d4a00a7-d1f8-4448-bc3d-ccab90e59196.webp",
+          "bytes": 98232,
+          "reductionPct": 91,
+          "sha256": "ec608d6e3f1426b995421f2ff0ef487958ab3e4cb0bf6dc781fe8321a79f2b89"
+        },
+        "avif": {
+          "path": "optimized/avif/product-images/product_fab89811-3d29-4474-a09c-880c95803e5f_c32215dd-e903-4d3c-9efa-ddfdde52fdb2_1d4a00a7-d1f8-4448-bc3d-ccab90e59196.avif",
+          "bytes": 73564,
+          "reductionPct": 93.26,
+          "sha256": "d8cb9c2a82f1389ae08096f6e8b37f3e7a18be1184dfed861d648f3da88bac4e"
+        }
+      },
+      "recommendation": "Upload the derivative as a new object and update the product image path; replace the screenshot filename alt text with the suggested descriptive alt.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "product-images",
+      "sourcePath": "fab89811-3d29-4474-a09c-880c95803e5f/666bb22c-f0b1-46c4-a9e7-8ad8fc77d274/f726be28-7aa2-4bef-9d41-9c8f0cb10c22.png",
+      "entityType": "product",
+      "entityId": "666bb22c-f0b1-46c4-a9e7-8ad8fc77d274",
+      "productName": "Wooden Building Blocks Set",
+      "productSlug": "wooden-building-blocks",
+      "position": 0,
+      "usage": "product card and detail gallery",
+      "originalAlt": "Screenshot 2026-10-19 194718",
+      "suggestedAlt": "Wooden Building Blocks Set",
+      "altAction": "replace",
+      "source": {
+        "format": "png",
+        "width": 913,
+        "height": 913,
+        "bytes": 1065612,
+        "sha256": "6d5c32a73450593e4b693eb743b0e51904be4e6b9ee7580f5831f3f253eb3581"
+      },
+      "optimized": {
+        "width": 913,
+        "height": 913,
+        "webp": {
+          "path": "optimized/webp/product-images/product_fab89811-3d29-4474-a09c-880c95803e5f_666bb22c-f0b1-46c4-a9e7-8ad8fc77d274_f726be28-7aa2-4bef-9d41-9c8f0cb10c22.webp",
+          "bytes": 83980,
+          "reductionPct": 92.12,
+          "sha256": "b9c3c724ec66ef51d83fa5188e187011a6c236ef0e4f5f9b84940e368e25c1e1"
+        },
+        "avif": {
+          "path": "optimized/avif/product-images/product_fab89811-3d29-4474-a09c-880c95803e5f_666bb22c-f0b1-46c4-a9e7-8ad8fc77d274_f726be28-7aa2-4bef-9d41-9c8f0cb10c22.avif",
+          "bytes": 60086,
+          "reductionPct": 94.36,
+          "sha256": "650b35924edf09d8b2f05fa1445761a2e6814c99861ea14cca3129b65936bff0"
+        }
+      },
+      "recommendation": "Upload the derivative as a new object and update the product image path; replace the screenshot filename alt text with the suggested descriptive alt.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "product-images",
+      "sourcePath": "fab89811-3d29-4474-a09c-880c95803e5f/47927b3a-ae4a-425c-9730-d8269d44b733/c54d71fd-00f3-4598-a145-79587fb531f6.png",
+      "entityType": "product",
+      "entityId": "47927b3a-ae4a-425c-9730-d8269d44b733",
+      "productName": "Plush Dinosaur Duo",
+      "productSlug": "plush-dinosaur-duo",
+      "position": 0,
+      "usage": "product card and detail gallery",
+      "originalAlt": "Screenshot 2026-10-19 194344",
+      "suggestedAlt": "Plush Dinosaur Duo",
+      "altAction": "replace",
+      "source": {
+        "format": "png",
+        "width": 913,
+        "height": 907,
+        "bytes": 1055919,
+        "sha256": "8c464d6e406d8980f0f61b75edc74f7c3345f3099062746b96f4a9d133bb89e7"
+      },
+      "optimized": {
+        "width": 913,
+        "height": 907,
+        "webp": {
+          "path": "optimized/webp/product-images/product_fab89811-3d29-4474-a09c-880c95803e5f_47927b3a-ae4a-425c-9730-d8269d44b733_c54d71fd-00f3-4598-a145-79587fb531f6.webp",
+          "bytes": 50780,
+          "reductionPct": 95.19,
+          "sha256": "d1f1e73a63a6e1f94bfddf55b8888ceb1411734bdc320be3e33062ef2c448b42"
+        },
+        "avif": {
+          "path": "optimized/avif/product-images/product_fab89811-3d29-4474-a09c-880c95803e5f_47927b3a-ae4a-425c-9730-d8269d44b733_c54d71fd-00f3-4598-a145-79587fb531f6.avif",
+          "bytes": 41305,
+          "reductionPct": 96.09,
+          "sha256": "665a750f13a9d86b78e038e5a79751fd608b9f7c4a7db2e4ce6dc9da29b93100"
+        }
+      },
+      "recommendation": "Upload the derivative as a new object and update the product image path; replace the screenshot filename alt text with the suggested descriptive alt.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "product-images",
+      "sourcePath": "fab89811-3d29-4474-a09c-880c95803e5f/e7ee5e44-00fa-4c35-9d34-c5dbe334e46a/814c8a91-be06-4aac-a9fd-c25560671645.png",
+      "entityType": "product",
+      "entityId": "e7ee5e44-00fa-4c35-9d34-c5dbe334e46a",
+      "productName": "RC Off-Road Buggy",
+      "productSlug": "rc-off-road-buggy",
+      "position": 0,
+      "usage": "product card and detail gallery",
+      "originalAlt": "Screenshot 2026-10-19 192904",
+      "suggestedAlt": "RC Off-Road Buggy",
+      "altAction": "replace",
+      "source": {
+        "format": "png",
+        "width": 937,
+        "height": 910,
+        "bytes": 990114,
+        "sha256": "930416912d3c62e8f2bbb20519225701deb5672d978984ed6a4fd408525d6e45"
+      },
+      "optimized": {
+        "width": 937,
+        "height": 910,
+        "webp": {
+          "path": "optimized/webp/product-images/product_fab89811-3d29-4474-a09c-880c95803e5f_e7ee5e44-00fa-4c35-9d34-c5dbe334e46a_814c8a91-be06-4aac-a9fd-c25560671645.webp",
+          "bytes": 98014,
+          "reductionPct": 90.1,
+          "sha256": "aca121d386428e1c64311e6461494fd936adc3811b1c03ac66b20a1cec1160d6"
+        },
+        "avif": {
+          "path": "optimized/avif/product-images/product_fab89811-3d29-4474-a09c-880c95803e5f_e7ee5e44-00fa-4c35-9d34-c5dbe334e46a_814c8a91-be06-4aac-a9fd-c25560671645.avif",
+          "bytes": 65345,
+          "reductionPct": 93.4,
+          "sha256": "6253b78afec17c5f7f7640a93b13f45840ff78debd23ea0ddfdf08a1f4c3a899"
+        }
+      },
+      "recommendation": "Upload the derivative as a new object and update the product image path; replace the screenshot filename alt text with the suggested descriptive alt.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "occasion-images",
+      "sourcePath": "470cd5e2-ba16-4c38-921e-6d8755f214f8/33092613-0b19-4a64-9bd8-9ca4a1633ac8.jpg",
+      "entityType": "occasion",
+      "entityId": "470cd5e2-ba16-4c38-921e-6d8755f214f8",
+      "productName": null,
+      "productSlug": null,
+      "position": 0,
+      "usage": "occasion card and detail hero",
+      "originalAlt": "Graduation",
+      "suggestedAlt": "Graduation gifts from Gifto",
+      "altAction": "keep",
+      "source": {
+        "format": "jpeg",
+        "width": 3734,
+        "height": 2667,
+        "bytes": 832372,
+        "sha256": "fffc7056c662661d75ef948c781db6214028fe3279bab02cf9db98622fc69da6"
+      },
+      "optimized": {
+        "width": 1200,
+        "height": 857,
+        "webp": {
+          "path": "optimized/webp/occasion-images/occasion_graduation_33092613-0b19-4a64-9bd8-9ca4a1633ac8.webp",
+          "bytes": 43448,
+          "reductionPct": 94.78,
+          "sha256": "830a2807c8cda470bd14faf3a0a505bfd864578e905ad6569454aa816caec27e"
+        },
+        "avif": {
+          "path": "optimized/avif/occasion-images/occasion_graduation_33092613-0b19-4a64-9bd8-9ca4a1633ac8.avif",
+          "bytes": 27563,
+          "reductionPct": 96.69,
+          "sha256": "62688d09ba6735b0a9c9a3b6f0398b3c9041ad965cb718b30b46632d9afcbcd4"
+        }
+      },
+      "recommendation": "Use the 1200x857 derivative as the owner-upload source; keep the original and update the occasion image path only after approval.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "product-images",
+      "sourcePath": "fab89811-3d29-4474-a09c-880c95803e5f/36b9248f-84e7-476a-afc3-2415cde313aa/42124798-9ae6-44c4-84f1-562fe94d0844.png",
+      "entityType": "product",
+      "entityId": "36b9248f-84e7-476a-afc3-2415cde313aa",
+      "productName": "Giant Teddy Bear (90 cm)",
+      "productSlug": "giant-teddy-bear-90cm",
+      "position": 0,
+      "usage": "product card and detail gallery",
+      "originalAlt": "Screenshot 2026-10-19 195330",
+      "suggestedAlt": "Giant Teddy Bear (90 cm)",
+      "altAction": "replace",
+      "source": {
+        "format": "png",
+        "width": 560,
+        "height": 750,
+        "bytes": 505222,
+        "sha256": "82b30b50eb804725e4edc8f77241b6f79758057e06c07ae0a520595230a44782"
+      },
+      "optimized": {
+        "width": 560,
+        "height": 750,
+        "webp": {
+          "path": "optimized/webp/product-images/product_fab89811-3d29-4474-a09c-880c95803e5f_36b9248f-84e7-476a-afc3-2415cde313aa_42124798-9ae6-44c4-84f1-562fe94d0844.webp",
+          "bytes": 30048,
+          "reductionPct": 94.05,
+          "sha256": "54eee7cbe0b023285135a4402acda8cd84c1d34286bf9daf5780a9df66a2ab14"
+        },
+        "avif": {
+          "path": "optimized/avif/product-images/product_fab89811-3d29-4474-a09c-880c95803e5f_36b9248f-84e7-476a-afc3-2415cde313aa_42124798-9ae6-44c4-84f1-562fe94d0844.avif",
+          "bytes": 25573,
+          "reductionPct": 94.94,
+          "sha256": "735f7a7925b61595573281cf59deee1f12f8ac2988c58df4f39d0d3738d4da51"
+        }
+      },
+      "recommendation": "Upload the derivative as a new object and update the product image path; replace the screenshot filename alt text with the suggested descriptive alt.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "product-images",
+      "sourcePath": "fab89811-3d29-4474-a09c-880c95803e5f/666bb22c-f0b1-46c4-a9e7-8ad8fc77d274/ae87387b-d8d4-4952-8f3d-57dd85eef432.png",
+      "entityType": "product",
+      "entityId": "666bb22c-f0b1-46c4-a9e7-8ad8fc77d274",
+      "productName": "Wooden Building Blocks Set",
+      "productSlug": "wooden-building-blocks",
+      "position": 1,
+      "usage": "product card and detail gallery",
+      "originalAlt": "Screenshot 2026-10-19 194644",
+      "suggestedAlt": "Wooden Building Blocks Set",
+      "altAction": "replace",
+      "source": {
+        "format": "png",
+        "width": 793,
+        "height": 787,
+        "bytes": 433881,
+        "sha256": "bf29dcdb0ba7a8d2ee0361e0b94414ccdc978b75fce0696beae7edfe01109c64"
+      },
+      "optimized": {
+        "width": 793,
+        "height": 787,
+        "webp": {
+          "path": "optimized/webp/product-images/product_fab89811-3d29-4474-a09c-880c95803e5f_666bb22c-f0b1-46c4-a9e7-8ad8fc77d274_ae87387b-d8d4-4952-8f3d-57dd85eef432.webp",
+          "bytes": 27996,
+          "reductionPct": 93.55,
+          "sha256": "31a17adde4e4510ab62a937a34a17bc5ae4ff9532f1231248240986cad8f6804"
+        },
+        "avif": {
+          "path": "optimized/avif/product-images/product_fab89811-3d29-4474-a09c-880c95803e5f_666bb22c-f0b1-46c4-a9e7-8ad8fc77d274_ae87387b-d8d4-4952-8f3d-57dd85eef432.avif",
+          "bytes": 22708,
+          "reductionPct": 94.77,
+          "sha256": "a264e3ed4a20eea7d1e9e682ac6c18df4dd0e0ab10573ce064de94c8c56aa0be"
+        }
+      },
+      "recommendation": "Upload the derivative as a new object and update the product image path; replace the screenshot filename alt text with the suggested descriptive alt.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "product-images",
+      "sourcePath": "a59bb38c-729d-4a0e-b3fd-8e7dd46717d6/e10c701d-88f3-4baf-901b-5f557d55af6e/hero-1.png",
+      "entityType": "product",
+      "entityId": "e10c701d-88f3-4baf-901b-5f557d55af6e",
+      "productName": "Graduation Flower Box",
+      "productSlug": "graduation-flower-box",
+      "position": 0,
+      "usage": "product card and detail gallery",
+      "originalAlt": "Graduation Flower Box",
+      "suggestedAlt": "Graduation Flower Box",
+      "altAction": "keep",
+      "source": {
+        "format": "png",
+        "width": 800,
+        "height": 800,
+        "bytes": 15172,
+        "sha256": "e1be35ead41ac4b33df90befac08b2a8893da90f48d84065e2b42977a1b13068"
+      },
+      "optimized": {
+        "width": 800,
+        "height": 800,
+        "webp": {
+          "path": "optimized/webp/product-images/product_a59bb38c-729d-4a0e-b3fd-8e7dd46717d6_e10c701d-88f3-4baf-901b-5f557d55af6e_hero-1.webp",
+          "bytes": 4104,
+          "reductionPct": 72.95,
+          "sha256": "c3b6b9433b449d2e446e90eecda9db8c77bf2fedf4e67abc40a57600958b1980"
+        },
+        "avif": {
+          "path": "optimized/avif/product-images/product_a59bb38c-729d-4a0e-b3fd-8e7dd46717d6_e10c701d-88f3-4baf-901b-5f557d55af6e_hero-1.avif",
+          "bytes": 2704,
+          "reductionPct": 82.18,
+          "sha256": "dd94e2a3507a8682f796bd75d682c9dfa974f5e79bca7f255592fef6876bd78e"
+        }
+      },
+      "recommendation": "Upload the derivative as a new object and update the product image path; retain the current descriptive alt unless the image changes.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "product-images",
+      "sourcePath": "532990c6-3e99-481a-bc42-eb232c7c01c9/0a6e992c-a9e9-4e76-8056-935a80294665/hero-1.png",
+      "entityType": "product",
+      "entityId": "0a6e992c-a9e9-4e76-8056-935a80294665",
+      "productName": "Molten Cake Dessert Kit",
+      "productSlug": "molten-cake-dessert-kit",
+      "position": 0,
+      "usage": "product card and detail gallery",
+      "originalAlt": "Molten Cake Dessert Kit",
+      "suggestedAlt": "Molten Cake Dessert Kit",
+      "altAction": "keep",
+      "source": {
+        "format": "png",
+        "width": 800,
+        "height": 800,
+        "bytes": 15112,
+        "sha256": "ee37eba1da68e52433a83c93650cb6191ab9c047e91255400854be3ea64b24dc"
+      },
+      "optimized": {
+        "width": 800,
+        "height": 800,
+        "webp": {
+          "path": "optimized/webp/product-images/product_532990c6-3e99-481a-bc42-eb232c7c01c9_0a6e992c-a9e9-4e76-8056-935a80294665_hero-1.webp",
+          "bytes": 2686,
+          "reductionPct": 82.23,
+          "sha256": "57398a44f1ff8fed8ea36f0604127bb7fa27921d8af106911794046ecf946028"
+        },
+        "avif": {
+          "path": "optimized/avif/product-images/product_532990c6-3e99-481a-bc42-eb232c7c01c9_0a6e992c-a9e9-4e76-8056-935a80294665_hero-1.avif",
+          "bytes": 2169,
+          "reductionPct": 85.65,
+          "sha256": "44f4d293eb734721154545d798bc0b3c453f2688919cd48aa9655da5482b69a5"
+        }
+      },
+      "recommendation": "Upload the derivative as a new object and update the product image path; retain the current descriptive alt unless the image changes.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "product-images",
+      "sourcePath": "532990c6-3e99-481a-bc42-eb232c7c01c9/433730a7-2fac-455f-aa0e-fe07bc480ac0/hero-1.png",
+      "entityType": "product",
+      "entityId": "433730a7-2fac-455f-aa0e-fe07bc480ac0",
+      "productName": "Pistachio Baklava Tray (1 kg)",
+      "productSlug": "pistachio-baklava-tray",
+      "position": 0,
+      "usage": "product card and detail gallery",
+      "originalAlt": "Pistachio Baklava Tray (1 kg)",
+      "suggestedAlt": "Pistachio Baklava Tray (1 kg)",
+      "altAction": "keep",
+      "source": {
+        "format": "png",
+        "width": 800,
+        "height": 800,
+        "bytes": 15112,
+        "sha256": "ee37eba1da68e52433a83c93650cb6191ab9c047e91255400854be3ea64b24dc"
+      },
+      "optimized": {
+        "width": 800,
+        "height": 800,
+        "webp": {
+          "path": "optimized/webp/product-images/product_532990c6-3e99-481a-bc42-eb232c7c01c9_433730a7-2fac-455f-aa0e-fe07bc480ac0_hero-1.webp",
+          "bytes": 2686,
+          "reductionPct": 82.23,
+          "sha256": "57398a44f1ff8fed8ea36f0604127bb7fa27921d8af106911794046ecf946028"
+        },
+        "avif": {
+          "path": "optimized/avif/product-images/product_532990c6-3e99-481a-bc42-eb232c7c01c9_433730a7-2fac-455f-aa0e-fe07bc480ac0_hero-1.avif",
+          "bytes": 2169,
+          "reductionPct": 85.65,
+          "sha256": "44f4d293eb734721154545d798bc0b3c453f2688919cd48aa9655da5482b69a5"
+        }
+      },
+      "recommendation": "Upload the derivative as a new object and update the product image path; retain the current descriptive alt unless the image changes.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "product-images",
+      "sourcePath": "a59bb38c-729d-4a0e-b3fd-8e7dd46717d6/2ce1496e-fc73-4382-8db9-ad339f050838/hero-1.png",
+      "entityType": "product",
+      "entityId": "2ce1496e-fc73-4382-8db9-ad339f050838",
+      "productName": "White Lily & Gypsophila Arrangement",
+      "productSlug": "white-lily-arrangement",
+      "position": 0,
+      "usage": "product card and detail gallery",
+      "originalAlt": "White Lily & Gypsophila Arrangement",
+      "suggestedAlt": "White Lily & Gypsophila Arrangement",
+      "altAction": "keep",
+      "source": {
+        "format": "png",
+        "width": 800,
+        "height": 800,
+        "bytes": 15042,
+        "sha256": "142d9f371e6930ee787ba2c153b5612c725c869490834a6e024689748041c55b"
+      },
+      "optimized": {
+        "width": 800,
+        "height": 800,
+        "webp": {
+          "path": "optimized/webp/product-images/product_a59bb38c-729d-4a0e-b3fd-8e7dd46717d6_2ce1496e-fc73-4382-8db9-ad339f050838_hero-1.webp",
+          "bytes": 3126,
+          "reductionPct": 79.22,
+          "sha256": "1c19b2d26651330df2a118ffbdc74dd05a84e5ed616d3dc9e15caef8f11c1e23"
+        },
+        "avif": {
+          "path": "optimized/avif/product-images/product_a59bb38c-729d-4a0e-b3fd-8e7dd46717d6_2ce1496e-fc73-4382-8db9-ad339f050838_hero-1.avif",
+          "bytes": 2350,
+          "reductionPct": 84.38,
+          "sha256": "b8154e35ea3d6d729539c00a47334afdc10200a8cca5d11411937f81be433746"
+        }
+      },
+      "recommendation": "Upload the derivative as a new object and update the product image path; retain the current descriptive alt unless the image changes.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "product-images",
+      "sourcePath": "a59bb38c-729d-4a0e-b3fd-8e7dd46717d6/2dcb6c01-0d3f-4de6-8618-d1ba98a67e9f/hero-1.png",
+      "entityType": "product",
+      "entityId": "2dcb6c01-0d3f-4de6-8618-d1ba98a67e9f",
+      "productName": "Dried Pampas Vase Arrangement",
+      "productSlug": "dried-pampas-vase",
+      "position": 0,
+      "usage": "product card and detail gallery",
+      "originalAlt": "Dried Pampas Vase Arrangement",
+      "suggestedAlt": "Dried Pampas Vase Arrangement",
+      "altAction": "keep",
+      "source": {
+        "format": "png",
+        "width": 800,
+        "height": 800,
+        "bytes": 15042,
+        "sha256": "142d9f371e6930ee787ba2c153b5612c725c869490834a6e024689748041c55b"
+      },
+      "optimized": {
+        "width": 800,
+        "height": 800,
+        "webp": {
+          "path": "optimized/webp/product-images/product_a59bb38c-729d-4a0e-b3fd-8e7dd46717d6_2dcb6c01-0d3f-4de6-8618-d1ba98a67e9f_hero-1.webp",
+          "bytes": 3126,
+          "reductionPct": 79.22,
+          "sha256": "1c19b2d26651330df2a118ffbdc74dd05a84e5ed616d3dc9e15caef8f11c1e23"
+        },
+        "avif": {
+          "path": "optimized/avif/product-images/product_a59bb38c-729d-4a0e-b3fd-8e7dd46717d6_2dcb6c01-0d3f-4de6-8618-d1ba98a67e9f_hero-1.avif",
+          "bytes": 2350,
+          "reductionPct": 84.38,
+          "sha256": "b8154e35ea3d6d729539c00a47334afdc10200a8cca5d11411937f81be433746"
+        }
+      },
+      "recommendation": "Upload the derivative as a new object and update the product image path; retain the current descriptive alt unless the image changes.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "product-images",
+      "sourcePath": "a59bb38c-729d-4a0e-b3fd-8e7dd46717d6/98f6f9e1-8474-4c58-9a48-0e9b05987355/hero-1.png",
+      "entityType": "product",
+      "entityId": "98f6f9e1-8474-4c58-9a48-0e9b05987355",
+      "productName": "Sunflower Bright Bunch",
+      "productSlug": "sunflower-bright-bunch",
+      "position": 0,
+      "usage": "product card and detail gallery",
+      "originalAlt": "Sunflower Bright Bunch",
+      "suggestedAlt": "Sunflower Bright Bunch",
+      "altAction": "keep",
+      "source": {
+        "format": "png",
+        "width": 800,
+        "height": 800,
+        "bytes": 15042,
+        "sha256": "142d9f371e6930ee787ba2c153b5612c725c869490834a6e024689748041c55b"
+      },
+      "optimized": {
+        "width": 800,
+        "height": 800,
+        "webp": {
+          "path": "optimized/webp/product-images/product_a59bb38c-729d-4a0e-b3fd-8e7dd46717d6_98f6f9e1-8474-4c58-9a48-0e9b05987355_hero-1.webp",
+          "bytes": 3126,
+          "reductionPct": 79.22,
+          "sha256": "1c19b2d26651330df2a118ffbdc74dd05a84e5ed616d3dc9e15caef8f11c1e23"
+        },
+        "avif": {
+          "path": "optimized/avif/product-images/product_a59bb38c-729d-4a0e-b3fd-8e7dd46717d6_98f6f9e1-8474-4c58-9a48-0e9b05987355_hero-1.avif",
+          "bytes": 2350,
+          "reductionPct": 84.38,
+          "sha256": "b8154e35ea3d6d729539c00a47334afdc10200a8cca5d11411937f81be433746"
+        }
+      },
+      "recommendation": "Upload the derivative as a new object and update the product image path; retain the current descriptive alt unless the image changes.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "product-images",
+      "sourcePath": "a59bb38c-729d-4a0e-b3fd-8e7dd46717d6/a5fd1ae1-f6d1-444c-afe2-9566dcb7b456/hero-1.png",
+      "entityType": "product",
+      "entityId": "a5fd1ae1-f6d1-444c-afe2-9566dcb7b456",
+      "productName": "Classic Red Rose Bouquet",
+      "productSlug": "classic-red-rose-bouquet",
+      "position": 0,
+      "usage": "product card and detail gallery",
+      "originalAlt": "Classic Red Rose Bouquet",
+      "suggestedAlt": "Classic Red Rose Bouquet",
+      "altAction": "keep",
+      "source": {
+        "format": "png",
+        "width": 800,
+        "height": 800,
+        "bytes": 15042,
+        "sha256": "142d9f371e6930ee787ba2c153b5612c725c869490834a6e024689748041c55b"
+      },
+      "optimized": {
+        "width": 800,
+        "height": 800,
+        "webp": {
+          "path": "optimized/webp/product-images/product_a59bb38c-729d-4a0e-b3fd-8e7dd46717d6_a5fd1ae1-f6d1-444c-afe2-9566dcb7b456_hero-1.webp",
+          "bytes": 3126,
+          "reductionPct": 79.22,
+          "sha256": "1c19b2d26651330df2a118ffbdc74dd05a84e5ed616d3dc9e15caef8f11c1e23"
+        },
+        "avif": {
+          "path": "optimized/avif/product-images/product_a59bb38c-729d-4a0e-b3fd-8e7dd46717d6_a5fd1ae1-f6d1-444c-afe2-9566dcb7b456_hero-1.avif",
+          "bytes": 2350,
+          "reductionPct": 84.38,
+          "sha256": "b8154e35ea3d6d729539c00a47334afdc10200a8cca5d11411937f81be433746"
+        }
+      },
+      "recommendation": "Upload the derivative as a new object and update the product image path; retain the current descriptive alt unless the image changes.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "product-images",
+      "sourcePath": "a59bb38c-729d-4a0e-b3fd-8e7dd46717d6/a600a251-b710-45f7-a4f7-4b7a1320b640/hero-1.png",
+      "entityType": "product",
+      "entityId": "a600a251-b710-45f7-a4f7-4b7a1320b640",
+      "productName": "Pastel Peony Bouquet",
+      "productSlug": "pastel-peony-bouquet",
+      "position": 0,
+      "usage": "product card and detail gallery",
+      "originalAlt": "Pastel Peony Bouquet",
+      "suggestedAlt": "Pastel Peony Bouquet",
+      "altAction": "keep",
+      "source": {
+        "format": "png",
+        "width": 800,
+        "height": 800,
+        "bytes": 15042,
+        "sha256": "142d9f371e6930ee787ba2c153b5612c725c869490834a6e024689748041c55b"
+      },
+      "optimized": {
+        "width": 800,
+        "height": 800,
+        "webp": {
+          "path": "optimized/webp/product-images/product_a59bb38c-729d-4a0e-b3fd-8e7dd46717d6_a600a251-b710-45f7-a4f7-4b7a1320b640_hero-1.webp",
+          "bytes": 3126,
+          "reductionPct": 79.22,
+          "sha256": "1c19b2d26651330df2a118ffbdc74dd05a84e5ed616d3dc9e15caef8f11c1e23"
+        },
+        "avif": {
+          "path": "optimized/avif/product-images/product_a59bb38c-729d-4a0e-b3fd-8e7dd46717d6_a600a251-b710-45f7-a4f7-4b7a1320b640_hero-1.avif",
+          "bytes": 2350,
+          "reductionPct": 84.38,
+          "sha256": "b8154e35ea3d6d729539c00a47334afdc10200a8cca5d11411937f81be433746"
+        }
+      },
+      "recommendation": "Upload the derivative as a new object and update the product image path; retain the current descriptive alt unless the image changes.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "product-images",
+      "sourcePath": "532990c6-3e99-481a-bc42-eb232c7c01c9/b5bb48af-3186-410d-b0b7-3717e3b57f36/hero-1.png",
+      "entityType": "product",
+      "entityId": "b5bb48af-3186-410d-b0b7-3717e3b57f36",
+      "productName": "Luxury Chocolate Tower (3 tiers)",
+      "productSlug": "luxury-chocolate-tower",
+      "position": 0,
+      "usage": "product card and detail gallery",
+      "originalAlt": "Luxury Chocolate Tower (3 tiers)",
+      "suggestedAlt": "Luxury Chocolate Tower (3 tiers)",
+      "altAction": "keep",
+      "source": {
+        "format": "png",
+        "width": 800,
+        "height": 800,
+        "bytes": 14990,
+        "sha256": "4937f77778ef40d951f4b895d8c7783918c7020c66d625c94ce6a7579299f4a7"
+      },
+      "optimized": {
+        "width": 800,
+        "height": 800,
+        "webp": {
+          "path": "optimized/webp/product-images/product_532990c6-3e99-481a-bc42-eb232c7c01c9_b5bb48af-3186-410d-b0b7-3717e3b57f36_hero-1.webp",
+          "bytes": 3788,
+          "reductionPct": 74.73,
+          "sha256": "f9d133b00b8f0e1f6248ccaba3c51e6a28e7a5881b55cfce6642a54867295617"
+        },
+        "avif": {
+          "path": "optimized/avif/product-images/product_532990c6-3e99-481a-bc42-eb232c7c01c9_b5bb48af-3186-410d-b0b7-3717e3b57f36_hero-1.avif",
+          "bytes": 2625,
+          "reductionPct": 82.49,
+          "sha256": "430c2b85bb1b447cc719520fd46e50d409a31335c12e0e6ee8f2743d2d3c5621"
+        }
+      },
+      "recommendation": "Upload the derivative as a new object and update the product image path; retain the current descriptive alt unless the image changes.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "product-images",
+      "sourcePath": "6d0b15cb-575f-4eec-95b4-78db59ff71ac/7aab5c31-bb6f-4d2f-848f-d91d6a3c2750/hero-1.png",
+      "entityType": "product",
+      "entityId": "7aab5c31-bb6f-4d2f-848f-d91d6a3c2750",
+      "productName": "Custom Name Wooden Toy",
+      "productSlug": "custom-name-wooden-toy",
+      "position": 0,
+      "usage": "product card and detail gallery",
+      "originalAlt": "Custom Name Wooden Toy",
+      "suggestedAlt": "Custom Name Wooden Toy",
+      "altAction": "keep",
+      "source": {
+        "format": "png",
+        "width": 800,
+        "height": 800,
+        "bytes": 14944,
+        "sha256": "8d26068272ada619a6e6c76b822924bacd941050bfd842019e21c31a41bcaf8a"
+      },
+      "optimized": {
+        "width": 800,
+        "height": 800,
+        "webp": {
+          "path": "optimized/webp/product-images/product_6d0b15cb-575f-4eec-95b4-78db59ff71ac_7aab5c31-bb6f-4d2f-848f-d91d6a3c2750_hero-1.webp",
+          "bytes": 2614,
+          "reductionPct": 82.51,
+          "sha256": "dac9a0fd7d0fc4e9fe46f977262cd5d4962c63f0da00a6bf1d69806a6045183c"
+        },
+        "avif": {
+          "path": "optimized/avif/product-images/product_6d0b15cb-575f-4eec-95b4-78db59ff71ac_7aab5c31-bb6f-4d2f-848f-d91d6a3c2750_hero-1.avif",
+          "bytes": 2113,
+          "reductionPct": 85.86,
+          "sha256": "8d399691eb23690bf28e075ac8286e9b181eb46ff7c2fe7f10d883436f9d95ec"
+        }
+      },
+      "recommendation": "Upload the derivative as a new object and update the product image path; retain the current descriptive alt unless the image changes.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "product-images",
+      "sourcePath": "6d0b15cb-575f-4eec-95b4-78db59ff71ac/0b931a0b-2061-4108-b363-54ac53b5a96b/hero-1.png",
+      "entityType": "product",
+      "entityId": "0b931a0b-2061-4108-b363-54ac53b5a96b",
+      "productName": "Engraved Walnut Keepsake Box",
+      "productSlug": "engraved-walnut-keepsake-box",
+      "position": 0,
+      "usage": "product card and detail gallery",
+      "originalAlt": "Engraved Walnut Keepsake Box",
+      "suggestedAlt": "Engraved Walnut Keepsake Box",
+      "altAction": "keep",
+      "source": {
+        "format": "png",
+        "width": 800,
+        "height": 800,
+        "bytes": 14596,
+        "sha256": "5994872922cc33bf33f44ade2522e3fe580ad91944934529f64229f2cc73e0a1"
+      },
+      "optimized": {
+        "width": 800,
+        "height": 800,
+        "webp": {
+          "path": "optimized/webp/product-images/product_6d0b15cb-575f-4eec-95b4-78db59ff71ac_0b931a0b-2061-4108-b363-54ac53b5a96b_hero-1.webp",
+          "bytes": 2580,
+          "reductionPct": 82.32,
+          "sha256": "4da3c970998947a8b56f6ab853c1ef31a6960e4c5b75d8a126d43b63e7edf14b"
+        },
+        "avif": {
+          "path": "optimized/avif/product-images/product_6d0b15cb-575f-4eec-95b4-78db59ff71ac_0b931a0b-2061-4108-b363-54ac53b5a96b_hero-1.avif",
+          "bytes": 1947,
+          "reductionPct": 86.66,
+          "sha256": "69af9ae7b8b66ce30f3f7d8bf90a1aa835184438316d9907857bca0793dd7fc1"
+        }
+      },
+      "recommendation": "Upload the derivative as a new object and update the product image path; retain the current descriptive alt unless the image changes.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "product-images",
+      "sourcePath": "6d0b15cb-575f-4eec-95b4-78db59ff71ac/46c2751c-49ca-47ab-9d2a-671ffc4546c7/hero-1.png",
+      "entityType": "product",
+      "entityId": "46c2751c-49ca-47ab-9d2a-671ffc4546c7",
+      "productName": "Monogram Leather Journal",
+      "productSlug": "monogram-leather-journal",
+      "position": 0,
+      "usage": "product card and detail gallery",
+      "originalAlt": "Monogram Leather Journal",
+      "suggestedAlt": "Monogram Leather Journal",
+      "altAction": "keep",
+      "source": {
+        "format": "png",
+        "width": 800,
+        "height": 800,
+        "bytes": 14596,
+        "sha256": "5994872922cc33bf33f44ade2522e3fe580ad91944934529f64229f2cc73e0a1"
+      },
+      "optimized": {
+        "width": 800,
+        "height": 800,
+        "webp": {
+          "path": "optimized/webp/product-images/product_6d0b15cb-575f-4eec-95b4-78db59ff71ac_46c2751c-49ca-47ab-9d2a-671ffc4546c7_hero-1.webp",
+          "bytes": 2580,
+          "reductionPct": 82.32,
+          "sha256": "4da3c970998947a8b56f6ab853c1ef31a6960e4c5b75d8a126d43b63e7edf14b"
+        },
+        "avif": {
+          "path": "optimized/avif/product-images/product_6d0b15cb-575f-4eec-95b4-78db59ff71ac_46c2751c-49ca-47ab-9d2a-671ffc4546c7_hero-1.avif",
+          "bytes": 1947,
+          "reductionPct": 86.66,
+          "sha256": "69af9ae7b8b66ce30f3f7d8bf90a1aa835184438316d9907857bca0793dd7fc1"
+        }
+      },
+      "recommendation": "Upload the derivative as a new object and update the product image path; retain the current descriptive alt unless the image changes.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "product-images",
+      "sourcePath": "6d0b15cb-575f-4eec-95b4-78db59ff71ac/619b2807-1172-4ab2-8679-915326ee599f/hero-1.png",
+      "entityType": "product",
+      "entityId": "619b2807-1172-4ab2-8679-915326ee599f",
+      "productName": "Engraved Brass Compass",
+      "productSlug": "engraved-brass-compass",
+      "position": 0,
+      "usage": "product card and detail gallery",
+      "originalAlt": "Engraved Brass Compass",
+      "suggestedAlt": "Engraved Brass Compass",
+      "altAction": "keep",
+      "source": {
+        "format": "png",
+        "width": 800,
+        "height": 800,
+        "bytes": 14596,
+        "sha256": "5994872922cc33bf33f44ade2522e3fe580ad91944934529f64229f2cc73e0a1"
+      },
+      "optimized": {
+        "width": 800,
+        "height": 800,
+        "webp": {
+          "path": "optimized/webp/product-images/product_6d0b15cb-575f-4eec-95b4-78db59ff71ac_619b2807-1172-4ab2-8679-915326ee599f_hero-1.webp",
+          "bytes": 2580,
+          "reductionPct": 82.32,
+          "sha256": "4da3c970998947a8b56f6ab853c1ef31a6960e4c5b75d8a126d43b63e7edf14b"
+        },
+        "avif": {
+          "path": "optimized/avif/product-images/product_6d0b15cb-575f-4eec-95b4-78db59ff71ac_619b2807-1172-4ab2-8679-915326ee599f_hero-1.avif",
+          "bytes": 1947,
+          "reductionPct": 86.66,
+          "sha256": "69af9ae7b8b66ce30f3f7d8bf90a1aa835184438316d9907857bca0793dd7fc1"
+        }
+      },
+      "recommendation": "Upload the derivative as a new object and update the product image path; retain the current descriptive alt unless the image changes.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "product-images",
+      "sourcePath": "6d0b15cb-575f-4eec-95b4-78db59ff71ac/93437f30-0175-43f9-82e7-b5d79cc5ae17/hero-1.png",
+      "entityType": "product",
+      "entityId": "93437f30-0175-43f9-82e7-b5d79cc5ae17",
+      "productName": "Personalized Photo Frame (Oak)",
+      "productSlug": "personalized-photo-frame",
+      "position": 0,
+      "usage": "product card and detail gallery",
+      "originalAlt": "Personalized Photo Frame (Oak)",
+      "suggestedAlt": "Personalized Photo Frame (Oak)",
+      "altAction": "keep",
+      "source": {
+        "format": "png",
+        "width": 800,
+        "height": 800,
+        "bytes": 14596,
+        "sha256": "5994872922cc33bf33f44ade2522e3fe580ad91944934529f64229f2cc73e0a1"
+      },
+      "optimized": {
+        "width": 800,
+        "height": 800,
+        "webp": {
+          "path": "optimized/webp/product-images/product_6d0b15cb-575f-4eec-95b4-78db59ff71ac_93437f30-0175-43f9-82e7-b5d79cc5ae17_hero-1.webp",
+          "bytes": 2580,
+          "reductionPct": 82.32,
+          "sha256": "4da3c970998947a8b56f6ab853c1ef31a6960e4c5b75d8a126d43b63e7edf14b"
+        },
+        "avif": {
+          "path": "optimized/avif/product-images/product_6d0b15cb-575f-4eec-95b4-78db59ff71ac_93437f30-0175-43f9-82e7-b5d79cc5ae17_hero-1.avif",
+          "bytes": 1947,
+          "reductionPct": 86.66,
+          "sha256": "69af9ae7b8b66ce30f3f7d8bf90a1aa835184438316d9907857bca0793dd7fc1"
+        }
+      },
+      "recommendation": "Upload the derivative as a new object and update the product image path; retain the current descriptive alt unless the image changes.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "product-images",
+      "sourcePath": "532990c6-3e99-481a-bc42-eb232c7c01c9/36815eb6-6a28-4012-8a01-23c5d8c8e6e7/hero-1.png",
+      "entityType": "product",
+      "entityId": "36815eb6-6a28-4012-8a01-23c5d8c8e6e7",
+      "productName": "Belgian Dark Truffle Box (16 pc)",
+      "productSlug": "belgian-dark-truffle-box",
+      "position": 0,
+      "usage": "product card and detail gallery",
+      "originalAlt": "Belgian Dark Truffle Box (16 pc)",
+      "suggestedAlt": "Belgian Dark Truffle Box (16 pc)",
+      "altAction": "keep",
+      "source": {
+        "format": "png",
+        "width": 800,
+        "height": 800,
+        "bytes": 14568,
+        "sha256": "03161495cd08afc20320638dc8233504409374aacea6abbf8bbf490e5f27bf3e"
+      },
+      "optimized": {
+        "width": 800,
+        "height": 800,
+        "webp": {
+          "path": "optimized/webp/product-images/product_532990c6-3e99-481a-bc42-eb232c7c01c9_36815eb6-6a28-4012-8a01-23c5d8c8e6e7_hero-1.webp",
+          "bytes": 2738,
+          "reductionPct": 81.21,
+          "sha256": "e102c2fcfda2b0ff982dfa4bfbdbabf737466f5585ff2b51a55f1f679a1be0eb"
+        },
+        "avif": {
+          "path": "optimized/avif/product-images/product_532990c6-3e99-481a-bc42-eb232c7c01c9_36815eb6-6a28-4012-8a01-23c5d8c8e6e7_hero-1.avif",
+          "bytes": 2265,
+          "reductionPct": 84.45,
+          "sha256": "5bb32fbf610fbfdc1f995e9c3d10b6c0fd59ad0eff3b204e7c420a432f32368c"
+        }
+      },
+      "recommendation": "Upload the derivative as a new object and update the product image path; retain the current descriptive alt unless the image changes.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "product-images",
+      "sourcePath": "532990c6-3e99-481a-bc42-eb232c7c01c9/5273a63b-839b-48f9-8955-2b0917144b48/hero-1.png",
+      "entityType": "product",
+      "entityId": "5273a63b-839b-48f9-8955-2b0917144b48",
+      "productName": "Assorted Bonbon Bag (24 pc)",
+      "productSlug": "assorted-bonbon-bag",
+      "position": 0,
+      "usage": "product card and detail gallery",
+      "originalAlt": "Assorted Bonbon Bag (24 pc)",
+      "suggestedAlt": "Assorted Bonbon Bag (24 pc)",
+      "altAction": "keep",
+      "source": {
+        "format": "png",
+        "width": 800,
+        "height": 800,
+        "bytes": 14568,
+        "sha256": "03161495cd08afc20320638dc8233504409374aacea6abbf8bbf490e5f27bf3e"
+      },
+      "optimized": {
+        "width": 800,
+        "height": 800,
+        "webp": {
+          "path": "optimized/webp/product-images/product_532990c6-3e99-481a-bc42-eb232c7c01c9_5273a63b-839b-48f9-8955-2b0917144b48_hero-1.webp",
+          "bytes": 2738,
+          "reductionPct": 81.21,
+          "sha256": "e102c2fcfda2b0ff982dfa4bfbdbabf737466f5585ff2b51a55f1f679a1be0eb"
+        },
+        "avif": {
+          "path": "optimized/avif/product-images/product_532990c6-3e99-481a-bc42-eb232c7c01c9_5273a63b-839b-48f9-8955-2b0917144b48_hero-1.avif",
+          "bytes": 2265,
+          "reductionPct": 84.45,
+          "sha256": "5bb32fbf610fbfdc1f995e9c3d10b6c0fd59ad0eff3b204e7c420a432f32368c"
+        }
+      },
+      "recommendation": "Upload the derivative as a new object and update the product image path; retain the current descriptive alt unless the image changes.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "product-images",
+      "sourcePath": "532990c6-3e99-481a-bc42-eb232c7c01c9/ac17fb96-12ea-4ed8-bda2-c1ced565b0e9/hero-1.png",
+      "entityType": "product",
+      "entityId": "ac17fb96-12ea-4ed8-bda2-c1ced565b0e9",
+      "productName": "Egyptian Date & Chocolate Gift Box",
+      "productSlug": "date-chocolate-gift-box",
+      "position": 0,
+      "usage": "product card and detail gallery",
+      "originalAlt": "Egyptian Date & Chocolate Gift Box",
+      "suggestedAlt": "Egyptian Date & Chocolate Gift Box",
+      "altAction": "keep",
+      "source": {
+        "format": "png",
+        "width": 800,
+        "height": 800,
+        "bytes": 14568,
+        "sha256": "03161495cd08afc20320638dc8233504409374aacea6abbf8bbf490e5f27bf3e"
+      },
+      "optimized": {
+        "width": 800,
+        "height": 800,
+        "webp": {
+          "path": "optimized/webp/product-images/product_532990c6-3e99-481a-bc42-eb232c7c01c9_ac17fb96-12ea-4ed8-bda2-c1ced565b0e9_hero-1.webp",
+          "bytes": 2738,
+          "reductionPct": 81.21,
+          "sha256": "e102c2fcfda2b0ff982dfa4bfbdbabf737466f5585ff2b51a55f1f679a1be0eb"
+        },
+        "avif": {
+          "path": "optimized/avif/product-images/product_532990c6-3e99-481a-bc42-eb232c7c01c9_ac17fb96-12ea-4ed8-bda2-c1ced565b0e9_hero-1.avif",
+          "bytes": 2265,
+          "reductionPct": 84.45,
+          "sha256": "5bb32fbf610fbfdc1f995e9c3d10b6c0fd59ad0eff3b204e7c420a432f32368c"
+        }
+      },
+      "recommendation": "Upload the derivative as a new object and update the product image path; retain the current descriptive alt unless the image changes.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "product-images",
+      "sourcePath": "6d0b15cb-575f-4eec-95b4-78db59ff71ac/1a6733ac-4539-4110-93d1-3f4fa5496c2e/hero-1.png",
+      "entityType": "product",
+      "entityId": "1a6733ac-4539-4110-93d1-3f4fa5496c2e",
+      "productName": "Corporate Pen & Card Set",
+      "productSlug": "corporate-pen-card-set",
+      "position": 0,
+      "usage": "product card and detail gallery",
+      "originalAlt": "Corporate Pen & Card Set",
+      "suggestedAlt": "Corporate Pen & Card Set",
+      "altAction": "keep",
+      "source": {
+        "format": "png",
+        "width": 800,
+        "height": 800,
+        "bytes": 14464,
+        "sha256": "23bdb6ff4c6c2be06efe2e8180fd8c54fe3cfaa9d99bb2c4b7e003d5a4677e5a"
+      },
+      "optimized": {
+        "width": 800,
+        "height": 800,
+        "webp": {
+          "path": "optimized/webp/product-images/product_6d0b15cb-575f-4eec-95b4-78db59ff71ac_1a6733ac-4539-4110-93d1-3f4fa5496c2e_hero-1.webp",
+          "bytes": 2384,
+          "reductionPct": 83.52,
+          "sha256": "11222664bfe1c4d0a91fc3b117d3e2ebd48ce0e30b3b108a1c8e008362e5ba7f"
+        },
+        "avif": {
+          "path": "optimized/avif/product-images/product_6d0b15cb-575f-4eec-95b4-78db59ff71ac_1a6733ac-4539-4110-93d1-3f4fa5496c2e_hero-1.avif",
+          "bytes": 1773,
+          "reductionPct": 87.74,
+          "sha256": "713ae60c6a88287e48832a52ddcb41cd44cd4d5803a2b59ab21388e38a818126"
+        }
+      },
+      "recommendation": "Upload the derivative as a new object and update the product image path; retain the current descriptive alt unless the image changes.",
+      "ownerAction": "Upload derivative to a new Storage object, update the image record, then verify the page before deleting the old object."
+    },
+    {
+      "bucket": "occasion-images",
+      "sourcePath": "1bc8f8f7-9e4a-486b-9d53-3fc07617892e/88a24034-6d16-48aa-a209-630f9bc397ac.webp",
+      "entityType": "occasion",
+      "entityId": "1bc8f8f7-9e4a-486b-9d53-3fc07617892e",
+      "productName": null,
+      "productSlug": null,
+      "position": 0,
+      "usage": "occasion card and detail hero",
+      "originalAlt": "Ramdan Night",
+      "suggestedAlt": "Ramadan Night gifts from Gifto",
+      "altAction": "replace",
+      "source": {
+        "format": "webp",
+        "width": 354,
+        "height": 234,
+        "bytes": 6822,
+        "sha256": "78acc86545cbc6d2726105f40aa82e733c4efabcd7844d211688870a1c8e34ed"
+      },
+      "optimized": null,
+      "recommendation": "Do not replace yet: source is only 354x234 and the re-encoded files are larger; obtain a source at least 1200x800.",
+      "ownerAction": "Replace source image with a higher-resolution image before launch; update the display slug/redirect separately."
+    }
+  ]
+}

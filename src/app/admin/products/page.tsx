@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Pagination } from "@/components/pagination";
 import { Breadcrumb, EmptyState } from "@/components/ui/section";
 import { requirePlatformAdmin } from "@/lib/auth";
+import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { formatEgp } from "@/lib/money";
 import {
@@ -95,8 +96,12 @@ export default async function AdminProductsPage({
   const params = await searchParams;
   const { supabase } = await requirePlatformAdmin();
 
+  // R-06: strip LIKE pattern characters before the ilike search, like the
+  // orders, logistics, support and occasion-picker lists — a backslash is
+  // Postgres LIKE's escape character, so leaving it in lets it swallow
+  // the following character instead of matching literally.
   const query = (params.q ?? "")
-    .replace(/[%_]/g, "")
+    .replace(/[%_\\]/g, "")
     .trim()
     .slice(0, 80);
   const statusFilter = isProductStatus(params.status) ? params.status : "all";
@@ -424,6 +429,7 @@ export default async function AdminProductsPage({
                       day: "numeric",
                       month: "short",
                       year: "numeric",
+                      timeZone: BUSINESS_TIME_ZONE,
                     })}
                   </div>
                 </li>

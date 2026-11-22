@@ -1,3 +1,5 @@
+import { normalizeGovernorate } from "@/lib/governorates";
+
 import type { Json } from "@/lib/supabase/database.types";
 
 /**
@@ -37,6 +39,17 @@ export const WORKING_DAY_LABELS: Record<WorkingDay, string> = {
   thu: "Thursday",
   fri: "Friday",
   sat: "Saturday",
+};
+
+/** Arabic day names for the storefront's Arabic slice (P1-10, H-15). */
+export const WORKING_DAY_LABELS_AR: Record<WorkingDay, string> = {
+  sun: "الأحد",
+  mon: "الاثنين",
+  tue: "الثلاثاء",
+  wed: "الأربعاء",
+  thu: "الخميس",
+  fri: "الجمعة",
+  sat: "السبت",
 };
 
 export type WorkingHours = Partial<
@@ -126,14 +139,17 @@ export function validateWorkingHours(hours: WorkingHours): string | null {
 
 export function formatWorkingHours(
   hours: WorkingHours,
+  locale: "en" | "ar" = "en",
 ): Array<{ day: WorkingDay; label: string; value: string }> {
+  const labels =
+    locale === "ar" ? WORKING_DAY_LABELS_AR : WORKING_DAY_LABELS;
   return WORKING_DAYS.flatMap((day) => {
     const slot = hours[day];
     if (!slot) return [];
     return [
       {
         day,
-        label: WORKING_DAY_LABELS[day],
+        label: labels[day],
         value: `${slot.open}–${slot.close}`,
       },
     ];
@@ -143,22 +159,45 @@ export function formatWorkingHours(
 export function formatPrepTime(
   minDays: number | null,
   maxDays: number | null,
+  locale: "en" | "ar" = "en",
 ): string | null {
   if (minDays === null && maxDays === null) return null;
 
   if (minDays !== null && maxDays !== null) {
     if (minDays === maxDays) {
-      return minDays === 0 ? "Same day" : formatDays(minDays);
+      return minDays === 0
+        ? locale === "ar"
+          ? "نفس اليوم"
+          : "Same day"
+        : formatDays(minDays, locale);
     }
-    if (minDays === 0) return `Up to ${formatDays(maxDays)}`;
-    return `${minDays}–${formatDays(maxDays)}`;
+    if (minDays === 0)
+      return locale === "ar"
+        ? `حتى ${formatDays(maxDays, locale)}`
+        : `Up to ${formatDays(maxDays, locale)}`;
+    return `${formatCount(minDays, locale)}–${formatDays(maxDays, locale)}`;
   }
 
   const value = minDays ?? maxDays;
-  return value === 0 ? "Same day" : formatDays(value ?? 0);
+  return value === 0
+    ? locale === "ar"
+      ? "نفس اليوم"
+      : "Same day"
+    : formatDays(value ?? 0, locale);
 }
 
-function formatDays(days: number): string {
+/** Arabic-Indic digits for Arabic phrases, Western digits otherwise. */
+function formatCount(n: number, locale: "en" | "ar"): string {
+  return locale === "ar"
+    ? new Intl.NumberFormat("ar-EG").format(n)
+    : String(n);
+}
+
+function formatDays(days: number, locale: "en" | "ar" = "en"): string {
+  if (locale === "ar") {
+    if (days === 1) return "يوم واحد";
+    return `${formatCount(days, locale)} أيام`;
+  }
   return `${days} ${days === 1 ? "day" : "days"}`;
 }
 
@@ -218,6 +257,62 @@ export function coverageToJson(coverage: DeliveryCoverage): Json {
 
 export function formatCoverageList(values: string[]): string {
   return values.join(", ");
+}
+
+function normalizeCoverageValue(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+/**
+ * Mirrors the database trigger that guards checkout. Empty lists mean the shop
+ * has not configured coverage, so the address is allowed for backwards
+ * compatibility. Governorates must match exactly; areas may match the city or
+ * appear in the street address.
+ *
+ * P1-06: governorate comparison uses the same normalisation as
+ * delivery_coverage_allows() (migration 37) — trim, case, a trailing
+ * "Governorate" suffix or a leading "محافظة" prefix, Arabic
+ * orthography — with the plain trimmed comparison as fallback for
+ * values the normaliser cannot map. Areas use String.includes, which
+ * is already literal; the DB escapes LIKE wildcards.
+ */
+export function deliveryCoverageAllows(
+  coverage: DeliveryCoverage,
+  address: { city: string; governorate: string; addressLine: string },
+): boolean {
+  const governorates = coverage.governorates
+    .map(normalizeCoverageValue)
+    .filter(Boolean);
+  const areas = coverage.areas.map(normalizeCoverageValue).filter(Boolean);
+
+  if (governorates.length === 0 && areas.length === 0) return true;
+
+  const city = normalizeCoverageValue(address.city);
+  const governorate = normalizeCoverageValue(address.governorate);
+  // Canonical form of the order's governorate, or null when it cannot
+  // be mapped — compared against each stored value's canonical form,
+  // exactly like normalize_governorate_name() in the database.
+  const governorateCanonical = normalizeGovernorate(address.governorate);
+  const addressLine = normalizeCoverageValue(address.addressLine);
+
+  if (
+    governorates.length > 0 &&
+    !governorates.includes(governorate) &&
+    !(
+      governorateCanonical !== null &&
+      governorates.some(
+        (stored) => normalizeGovernorate(stored) === governorateCanonical,
+      )
+    )
+  ) {
+    return false;
+  }
+
+  if (areas.length > 0 && !areas.includes(city)) {
+    if (!areas.some((area) => addressLine.includes(area))) return false;
+  }
+
+  return true;
 }
 
 /**

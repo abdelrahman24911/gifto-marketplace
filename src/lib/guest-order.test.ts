@@ -1,12 +1,20 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  GUEST_COOKIE_MAX_AGE_SECONDS,
+  GUEST_COOKIE_PATH,
+  GUEST_TOKEN_LIFETIME_DAYS,
+  PUBLIC_REFERENCE_PATTERN,
   checkoutRateBucket,
   clientIpFromHeaders,
+  createGuestToken,
+  guestCookieCleanupSettings,
   guestCookieName,
+  guestCookieSettings,
   isValidEmail,
   isValidGuestToken,
   isValidIdempotencyKey,
+  legacyGuestCookieCleanupSettings,
   safeCheckoutError,
   sha256Hex,
 } from "./guest-order";
@@ -77,6 +85,36 @@ describe("guestCookieName", () => {
   });
 });
 
+describe("guest cookie settings", () => {
+  it("scopes the cookie by order name at the locale-independent root path", () => {
+    const settings = guestCookieSettings("abc-123", "a".repeat(64));
+    expect(GUEST_COOKIE_PATH).toBe("/");
+    expect(settings).toMatchObject({
+      name: "gifto_guest_abc-123",
+      path: "/",
+      httpOnly: true,
+      sameSite: "lax",
+      maxAge: GUEST_COOKIE_MAX_AGE_SECONDS,
+    });
+    expect(settings.secure).toBe(process.env.NODE_ENV === "production");
+  });
+
+  it("cleans the current path and both legacy order paths", () => {
+    expect(guestCookieCleanupSettings("abc-123")).toEqual([
+      { name: "gifto_guest_abc-123", path: "/" },
+      { name: "gifto_guest_abc-123", path: "/orders/abc-123" },
+      { name: "gifto_guest_abc-123", path: "/ar/orders/abc-123" },
+    ]);
+  });
+
+  it("does not delete the fresh root cookie when only clearing legacy paths", () => {
+    expect(legacyGuestCookieCleanupSettings("abc-123")).toEqual([
+      { name: "gifto_guest_abc-123", path: "/orders/abc-123" },
+      { name: "gifto_guest_abc-123", path: "/ar/orders/abc-123" },
+    ]);
+  });
+});
+
 describe("checkoutRateBucket", () => {
   it("hashes the address and never stores the raw value", () => {
     const bucket = checkoutRateBucket("203.0.113.7");
@@ -144,5 +182,27 @@ describe("safeCheckoutError", () => {
     expect(safeCheckoutError("").length).toBeGreaterThan(0);
     expect(safeCheckoutError(undefined)).toBe(generic);
     expect(safeCheckoutError({ message: "boom" })).toBe(generic);
+  });
+});
+
+describe("guest token expiry and recovery (P1-02)", () => {
+  it("generates a valid 64-hex guest token, different every time", () => {
+    const first = createGuestToken();
+    const second = createGuestToken();
+    expect(isValidGuestToken(first)).toBe(true);
+    expect(isValidGuestToken(second)).toBe(true);
+    expect(first).not.toBe(second);
+    expect(sha256Hex(first)).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("keeps the 7-day token lifetime", () => {
+    expect(GUEST_TOKEN_LIFETIME_DAYS).toBe(7);
+  });
+
+  it("validates public references (GFT- + 12 hex)", () => {
+    expect(PUBLIC_REFERENCE_PATTERN.test("GFT-ABCDEF123456")).toBe(true);
+    expect(PUBLIC_REFERENCE_PATTERN.test("GFT-abcdef123456")).toBe(false);
+    expect(PUBLIC_REFERENCE_PATTERN.test("GFT-ABC123")).toBe(false);
+    expect(PUBLIC_REFERENCE_PATTERN.test("ABCDEF123456")).toBe(false);
   });
 });

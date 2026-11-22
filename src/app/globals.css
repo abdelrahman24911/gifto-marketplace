@@ -4,6 +4,11 @@
  * Gifto design tokens — warm ivory paper, deep berry accents, gold detail.
  * Neighbouring neutrals are tinted toward the same warm hue so the whole
  * surface reads as one material rather than "white with a red button".
+ *
+ * Theme decision (UX Batch 1, 2026-11-20, recorded in docs/HOSTED_STATE.md):
+ * Gifto ships LIGHT-ONLY. There is no dark mode, no `dark:` variant, and no
+ * theme toggle. Do not add a half-finished dark theme; a dark theme is a
+ * separate, owner-approved piece of work if it is ever wanted.
  */
 @theme {
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
@@ -17,7 +22,7 @@
 
   --color-ink: oklch(0.28 0.03 40);
   --color-ink-soft: oklch(0.45 0.025 45);
-  --color-ink-mute: oklch(0.58 0.02 50);
+  --color-ink-mute: oklch(0.52 0.02 50);
 
   --color-berry: oklch(0.45 0.16 12);
   --color-berry-deep: oklch(0.33 0.13 12);
@@ -64,6 +69,19 @@ body {
   font-family: var(--font-sans);
 }
 
+/*
+ * Arabic slice (P1-10, H-15): in RTL the Latin faces have no Arabic glyphs,
+ * so the body and display faces switch to IBM Plex Sans Arabic. Latin
+ * characters inside Arabic text still fall back through the stack.
+ */
+html[dir="rtl"] body {
+  font-family: var(--font-arabic-sans), var(--font-sans);
+}
+
+html[dir="rtl"] .font-display {
+  font-family: var(--font-arabic-sans), var(--font-display);
+}
+
 ::selection {
   background: var(--color-berry-tint);
   color: var(--color-berry-deep);
@@ -72,6 +90,15 @@ body {
 @media (prefers-reduced-motion: no-preference) {
   html {
     scroll-behavior: smooth;
+  }
+}
+
+@keyframes gifto-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
   }
 }
 

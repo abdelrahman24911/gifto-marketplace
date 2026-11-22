@@ -109,6 +109,30 @@ export function ChevronRightIcon(props: IconProps) {
   );
 }
 
+export function ChevronDownIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="m6 9.5 6 6 6-6" />
+    </svg>
+  );
+}
+
+export function PauseIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M8 5v14M16 5v14" />
+    </svg>
+  );
+}
+
+export function PlayIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="m7 4 12 8-12 8V4Z" />
+    </svg>
+  );
+}
+
 export function ExpandIcon(props: IconProps) {
   return (
     <svg {...base} {...props}>

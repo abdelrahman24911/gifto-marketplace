@@ -12,6 +12,7 @@ import {
   type TagInputValues,
 } from "@/lib/tagging";
 import { requireVendorRole } from "@/lib/vendor";
+import { checkMutationQuota } from "@/lib/rate-limit";
 
 export type ProductTagAssignmentState = {
   attempt: number;
@@ -76,10 +77,13 @@ export async function saveProductTags(
     };
   }
 
-  const { supabase, access, canManage } = await requireVendorRole(
+  const { supabase, access, canManage, user } = await requireVendorRole(
     formData.get("vendor") as string | null,
     { verifyWithAuthServer: true },
   );
+
+  const quotaError = await checkMutationQuota("vendor", user.id);
+  if (quotaError) return { error: quotaError, attempt };
 
   if (!canManage) {
     return {
@@ -187,10 +191,13 @@ export async function suggestProductTag(
     };
   }
 
-  const { supabase, access, canManage } = await requireVendorRole(
+  const { supabase, access, canManage, user } = await requireVendorRole(
     formData.get("vendor") as string | null,
     { verifyWithAuthServer: true },
   );
+
+  const quotaError = await checkMutationQuota("vendor", user.id);
+  if (quotaError) return { error: quotaError, attempt };
 
   if (!canManage) {
     return {

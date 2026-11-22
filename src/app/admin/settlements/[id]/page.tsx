@@ -2,11 +2,15 @@ import { notFound } from "next/navigation";
 
 import { Breadcrumb } from "@/components/ui/section";
 import { requirePlatformAdmin } from "@/lib/auth";
+import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
 import {
   commissionEntriesById,
+  settlementAdjustmentsMinor,
+  settlementEarnedCommissionMinor,
   settlementEffectiveStatus,
   settlementLineGrossMinor,
   settlementTotalsResult,
+  TRANSFER_METHOD_LABELS,
 } from "@/lib/finance";
 import { formatEgp } from "@/lib/money";
 
@@ -16,7 +20,7 @@ import {
   AdminPageHeader,
   AdminStatStrip,
 } from "../../ui";
-import { SettlementPaidButton } from "./settlement-paid-button";
+import { SettlementPaidForm } from "./settlement-paid-form";
 import { SettlementVoidButton } from "./settlement-void-button";
 
 import type {
@@ -31,6 +35,7 @@ type SettlementDetailRow = {
   vendor_id: string;
   status: SettlementRecord["status"];
   total_minor: number;
+  clawback_minor: number;
   note: string | null;
   created_at: string;
   paid_at: string | null;
@@ -39,6 +44,10 @@ type SettlementDetailRow = {
   voided_at: string | null;
   voided_by: string | null;
   void_reason: string | null;
+  paid_amount_minor: number | null;
+  transfer_method: SettlementRecord["transfer_method"];
+  transfer_reference: string | null;
+  proof_note: string | null;
   vendor: { name: string; slug: string } | null;
   settlement_lines: {
     commission_entry_id: string;
@@ -55,8 +64,28 @@ type DetailCommissionEntry = CommissionEntryRecord & {
 
 type OrderVendorRow = {
   id: string;
+  delivered_at: string | null;
   order: { public_reference: string | null } | { public_reference: string | null }[] | null;
   order_items: { product_name: string; quantity: number }[] | null;
+};
+
+type ClawbackApplicationRow = {
+  id: string;
+  amount_minor: number;
+  created_at: string;
+  clawback: {
+    id: string;
+    refund_case_id: string;
+    amount_minor: number;
+    status: string;
+  } | null;
+};
+
+type ClawbackCaseRow = {
+  id: string;
+  order_vendor:
+    | { order: { public_reference: string | null } | { public_reference: string | null }[] | null }
+    | null;
 };
 
 type ActorRow = {
@@ -65,6 +94,14 @@ type ActorRow = {
   email: string;
 };
 
+function clawbackOrderReference(row: ClawbackCaseRow | undefined) {
+  if (!row?.order_vendor?.order) return "Order reference unavailable";
+  const order = Array.isArray(row.order_vendor.order)
+    ? row.order_vendor.order[0]
+    : row.order_vendor.order;
+  return order?.public_reference ?? "Order reference unavailable";
+}
+
 function formatDate(value: string) {
   return new Date(value).toLocaleString("en-GB", {
     year: "numeric",
@@ -72,6 +109,7 @@ function formatDate(value: string) {
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: BUSINESS_TIME_ZONE,
   });
 }
 
@@ -99,11 +137,12 @@ export default async function SettlementDetailPage({
 }) {
   const { id } = await params;
   const { supabase } = await requirePlatformAdmin();
+  const now = new Date();
 
   const { data: settlementData, error: settlementError } = await supabase
     .from("settlements")
     .select(
-      "id, vendor_id, status, total_minor, note, created_at, paid_at, created_by, paid_by, voided_at, voided_by, void_reason, vendor:vendors(name, slug), settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
+      "id, vendor_id, status, total_minor, clawback_minor, note, created_at, paid_at, created_by, paid_by, voided_at, voided_by, void_reason, paid_amount_minor, transfer_method, transfer_reference, proof_note, vendor:vendors(name, slug), settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -116,6 +155,7 @@ export default async function SettlementDetailPage({
     vendor_id: row.vendor_id,
     status: row.status,
     total_minor: row.total_minor,
+    clawback_minor: row.clawback_minor,
     note: row.note,
     created_at: row.created_at,
     paid_at: row.paid_at,
@@ -124,6 +164,10 @@ export default async function SettlementDetailPage({
     voided_at: row.voided_at,
     voided_by: row.voided_by,
     void_reason: row.void_reason,
+    paid_amount_minor: row.paid_amount_minor,
+    transfer_method: row.transfer_method,
+    transfer_reference: row.transfer_reference,
+    proof_note: row.proof_note,
     settlement_lines: row.settlement_lines ?? [],
   };
 
@@ -150,6 +194,13 @@ export default async function SettlementDetailPage({
     failed: Boolean(entryError),
   });
   const totals = totalsResult.totals;
+  // P1-05: the commission due breaks down into commission earned on
+  // delivery, less refund adjustments already baked into the lines.
+  const earnedCommissionMinor = settlementEarnedCommissionMinor(
+    settlement,
+    entriesById,
+  );
+  const adjustmentsMinor = settlementAdjustmentsMinor(settlement, entriesById);
 
   const orderVendorIds = Array.from(
     new Set(detailEntries.map((entry) => entry.order_vendor_id)),
@@ -158,7 +209,7 @@ export default async function SettlementDetailPage({
   const { data: orderVendorData } = orderVendorIds.length
     ? await supabase
         .from("order_vendors")
-        .select("id, order:orders(public_reference), order_items(product_name, quantity)")
+        .select("id, delivered_at, order:orders(public_reference), order_items(product_name, quantity)")
         .in("id", orderVendorIds)
     : { data: [] };
 
@@ -168,6 +219,45 @@ export default async function SettlementDetailPage({
       suborder,
     ]),
   );
+
+  // P0-07 (returns-before-payout rule): the payout check for this batch.
+  // The 7-day D-09 return window runs from each suborder's delivered_at; the
+  // batch is safe to pay only when every window has closed AND no refund
+  // case is open on any of its lines. A paid settlement can never be voided;
+  // a refund approved on its lines afterwards no longer blocks — it records
+  // a clawback against the shop's next settlement (D-08, N-01) — so this
+  // panel warns instead of blocking, and the runbook holds the rule.
+  const RETURN_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+  const deliveredAts = [...orderVendors.values()]
+    .map((suborder) => suborder.delivered_at)
+    .filter((value): value is string => Boolean(value))
+    .map((value) => new Date(value).getTime());
+  const earliestDeliveredAt =
+    deliveredAts.length > 0 ? new Date(Math.min(...deliveredAts)) : null;
+  const latestDeliveredAt =
+    deliveredAts.length > 0 ? new Date(Math.max(...deliveredAts)) : null;
+  const returnWindowClosesAt =
+    latestDeliveredAt === null
+      ? null
+      : new Date(latestDeliveredAt.getTime() + RETURN_WINDOW_MS);
+  const returnWindowOpen =
+    returnWindowClosesAt !== null &&
+    returnWindowClosesAt.getTime() > now.getTime();
+  // A line with no delivered date cannot prove its window has closed; the
+  // runbook treats that as open.
+  const missingDeliveredAt =
+    orderVendorIds.length > 0 && deliveredAts.length < orderVendorIds.length;
+
+  const { data: openRefundCaseData } = orderVendorIds.length
+    ? await supabase
+        .from("refund_cases")
+        .select("id")
+        .eq("status", "open")
+        .in("order_vendor_id", orderVendorIds)
+    : { data: [] };
+  const openRefundCaseCount = (openRefundCaseData ?? []).length;
+  const payoutAtRisk =
+    returnWindowOpen || missingDeliveredAt || openRefundCaseCount > 0;
 
   const actorIds = Array.from(
     new Set(
@@ -189,6 +279,38 @@ export default async function SettlementDetailPage({
 
   const actors = new Map(
     ((actorData ?? []) as ActorRow[]).map((actor) => [actor.id, actor]),
+  );
+
+  // N-01 (D-08): paid-return clawbacks netted against this batch, with
+  // the refund case's order reference for the audit trail.
+  const { data: clawbackApplicationData } = await supabase
+    .from("clawback_applications")
+    .select(
+      "id, amount_minor, created_at, clawback:commission_clawbacks(id, refund_case_id, amount_minor, status)",
+    )
+    .eq("settlement_id", id)
+    .order("created_at", { ascending: true });
+
+  const clawbackApplications = (
+    (clawbackApplicationData ?? []) as unknown as ClawbackApplicationRow[]
+  ).filter((application) => application.clawback !== null);
+  const clawbackCaseIds = Array.from(
+    new Set(
+      clawbackApplications
+        .map((application) => application.clawback?.refund_case_id)
+        .filter((caseId): caseId is string => Boolean(caseId)),
+    ),
+  );
+  const { data: clawbackCaseData } = clawbackCaseIds.length
+    ? await supabase
+        .from("refund_cases")
+        .select("id, order_vendor:order_vendors(order:orders(public_reference))")
+        .in("id", clawbackCaseIds)
+    : { data: [] };
+  const clawbackCases = new Map(
+    ((clawbackCaseData ?? []) as unknown as ClawbackCaseRow[]).map(
+      (refundCase) => [refundCase.id, refundCase],
+    ),
   );
 
   const lines = [...settlement.settlement_lines].sort((a, b) => {
@@ -276,7 +398,7 @@ export default async function SettlementDetailPage({
                 totals.netMinor === null
                   ? "Unavailable"
                   : formatEgp(totals.netMinor),
-              hint: "Amount due to the shop",
+              hint: "What the shop keeps from the COD cash",
               emphasis: "positive",
             },
             {
@@ -318,12 +440,53 @@ export default async function SettlementDetailPage({
                   ? formatDate(row.paid_at)
                   : "Payment date not recorded"}
               </p>
+              <dl className="mt-3 space-y-1 text-xs">
+                {row.paid_amount_minor === 0 && row.transfer_method === null ? (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-ink-mute">Transfer</dt>
+                    <dd className="font-medium text-ink">
+                      No transfer — fully offset by paid-return clawbacks
+                    </dd>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-ink-mute">Amount received</dt>
+                      <dd className="font-medium tabular-nums text-ink">
+                        {row.paid_amount_minor === null
+                          ? "Not recorded"
+                          : formatEgp(row.paid_amount_minor)}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-ink-mute">Transfer method</dt>
+                      <dd className="font-medium text-ink">
+                        {row.transfer_method
+                          ? TRANSFER_METHOD_LABELS[row.transfer_method]
+                          : "Not recorded"}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-ink-mute">Transfer reference</dt>
+                      <dd className="font-medium text-ink">
+                        {row.transfer_reference ?? "Not recorded"}
+                      </dd>
+                    </div>
+                  </>
+                )}
+                {row.proof_note ? (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-ink-mute">Proof note</dt>
+                    <dd className="font-medium text-ink">{row.proof_note}</dd>
+                  </div>
+                ) : null}
+              </dl>
             </>
           ) : (
             <p className="mt-1.5 text-ink-soft">
               {effectiveStatus === "voided"
                 ? "This batch was voided before payment."
-                : "Not paid yet. Confirm the external payout before recording it."}
+                : "Not paid yet. Record the commission Gifto received from the shop below."}
             </p>
           )}
         </div>
@@ -358,20 +521,100 @@ export default async function SettlementDetailPage({
 
       {effectiveStatus === "open" ? (
         <section className="mt-6 rounded-2xl border border-success/25 bg-success-soft p-5">
-          <h2 className="font-display text-2xl text-ink">Record payout</h2>
+          <h2 className="font-display text-2xl text-ink">
+            Record commission received
+          </h2>
           <p className="mt-1 text-sm leading-relaxed text-ink-soft">
-            Transfer or hand over{" "}
+            Under D-08 the shop holds the COD cash and remits Gifto&apos;s
+            commission to Gifto every Sunday for the prior week&apos;s
+            delivered orders. Record the transfer Gifto received here — the
+            amount must match the net commission due{" "}
             <strong className="text-ink">
-              {totals.netMinor === null
-                ? "an unavailable amount"
-                : formatEgp(totals.netMinor)}
-            </strong>{" "}
-            to the shop. Marking this paid records the external payout; it does
-            not move money.
+              {totals.complete
+                ? formatEgp(row.total_minor)
+                : "once the commission statement is complete"}
+            </strong>
+            . Marking this paid records the receipt; it does not move money.
+            {row.clawback_minor > 0
+              ? " Paid-return clawbacks have already been netted against this batch — the amount due is the lines' commission less those clawbacks."
+              : ""}
           </p>
           {totals.complete ? (
+            <dl className="mt-3 space-y-1 rounded-xl border border-line bg-paper-soft px-4 py-3 text-sm">
+              <div className="flex justify-between gap-3">
+                <dt className="text-ink-mute">Delivered gross</dt>
+                <dd className="font-medium tabular-nums text-ink">
+                  {totals.grossMinor === null
+                    ? "Unavailable"
+                    : formatEgp(totals.grossMinor)}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-ink-mute">Commission earned</dt>
+                <dd className="font-medium tabular-nums text-ink">
+                  {earnedCommissionMinor === null
+                    ? "Unavailable"
+                    : formatEgp(earnedCommissionMinor)}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-ink-mute">Refund adjustments</dt>
+                <dd className="font-medium tabular-nums text-ink">
+                  {adjustmentsMinor === null
+                    ? "Unavailable"
+                    : formatEgp(adjustmentsMinor)}
+                </dd>
+              </div>
+              {row.clawback_minor > 0 ? (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-ink-mute">Paid-return clawbacks</dt>
+                  <dd className="font-medium tabular-nums text-ink">
+                    −{formatEgp(row.clawback_minor)}
+                  </dd>
+                </div>
+              ) : null}
+              <div className="flex justify-between gap-3 border-t border-line pt-1">
+                <dt className="font-medium text-ink">Net commission due</dt>
+                <dd className="font-semibold tabular-nums text-ink">
+                  {formatEgp(row.total_minor)}
+                </dd>
+              </div>
+            </dl>
+          ) : null}
+          {totals.complete ? (
             <div className="mt-3">
-              <SettlementPaidButton settlementId={row.id} />
+              {payoutAtRisk ? (
+                <AdminNotice tone="warning" role="alert">
+                  <strong>Do not mark this paid yet.</strong>{" "}
+                  {openRefundCaseCount > 0
+                    ? `There ${openRefundCaseCount === 1 ? "is" : "are"} ${openRefundCaseCount} open refund case${openRefundCaseCount === 1 ? "" : "s"} on this batch — resolve ${openRefundCaseCount === 1 ? "it" : "them"} first (see /admin/refunds). `
+                    : null}
+                  {returnWindowOpen && returnWindowClosesAt !== null
+                    ? `The 7-day return window is still open — it closes ${formatDate(returnWindowClosesAt.toISOString())} (latest delivery ${latestDeliveredAt !== null ? formatDate(latestDeliveredAt.toISOString()) : "unknown"}). Wait, or exclude the affected entries and settle them in a later batch. `
+                    : null}
+                  {missingDeliveredAt
+                    ? "At least one line has no delivered date recorded, so its return window cannot be proven closed. Confirm the delivery date by hand before paying. "
+                    : null}
+                  A paid settlement can never be voided; a refund approved
+                  on its lines afterwards records a clawback against the
+                  shop&apos;s next settlement (D-08). See
+                  docs/RUNBOOK_RETURNS_AND_SETTLEMENTS.md.
+                </AdminNotice>
+              ) : (
+                <AdminNotice tone="success" role="status">
+                  Return-window check: earliest delivery{" "}
+                  {earliestDeliveredAt !== null
+                    ? formatDate(earliestDeliveredAt.toISOString())
+                    : "unknown"}
+                  , window closed; no open refund cases on this batch.
+                </AdminNotice>
+              )}
+              <div className="mt-3">
+                <SettlementPaidForm
+                  settlementId={row.id}
+                  commissionDueMinor={row.total_minor}
+                />
+              </div>
             </div>
           ) : (
             <p className="mt-3 text-sm text-warning">
@@ -390,6 +633,49 @@ export default async function SettlementDetailPage({
               <SettlementVoidButton settlementId={row.id} />
             </div>
           </div>
+        </section>
+      ) : null}
+
+      {clawbackApplications.length > 0 ? (
+        <section className="mt-8">
+          <h2 className="font-display text-2xl text-ink">
+            Paid-return clawbacks ({clawbackApplications.length})
+          </h2>
+          <p className="mt-1 text-xs text-ink-mute">
+            Commission Gifto had already paid out and the shop owes back,
+            netted against this batch under D-08. The paid settlements they
+            came from were never edited.
+          </p>
+          <ul className="mt-3 flex flex-col divide-y divide-line overflow-hidden rounded-2xl border border-line bg-paper-soft">
+            {clawbackApplications.map((application) => {
+              const clawback = application.clawback;
+              const refundCase = clawback
+                ? clawbackCases.get(clawback.refund_case_id)
+                : undefined;
+              return (
+                <li key={application.id} className="px-5 py-4 text-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium text-ink">
+                        {clawbackOrderReference(refundCase)}
+                      </p>
+                      <p className="mt-1 text-xs text-ink-mute">
+                        Clawback of {formatEgp(Math.abs(clawback?.amount_minor ?? 0))} ·{" "}
+                        {clawback?.status === "consumed"
+                          ? "consumed by this batch"
+                          : clawback?.status === "direct_repayment"
+                            ? "repaid directly"
+                            : "outstanding"}
+                      </p>
+                    </div>
+                    <p className="font-medium tabular-nums text-ink">
+                      −{formatEgp(application.amount_minor)}
+                    </p>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         </section>
       ) : null}
 

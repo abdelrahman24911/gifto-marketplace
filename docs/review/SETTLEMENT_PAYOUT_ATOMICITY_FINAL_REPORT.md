@@ -2,17 +2,22 @@
 
 ## 1. Final verdict
 
-**FAIL — blocking issues remain.**
+**PASS — two-session concurrency test executed and passed (P0-03, 2026-11-20).**
 
-The deterministic TEST 17 defect was corrected locally, and application-level
-validation passes. Migration 25 and its rollback were reviewed against the
-actual migration history. However, the disposable PostgreSQL/Supabase
-validation and two-session concurrency tests could not run because Docker
-Desktop is unavailable. The Supabase CLI is linked to the hosted project, so
-no database command was run.
+FIN-001 (settlement payout atomicity) is closed for the tested definition:
+`mark_settlement_paid()` as redefined by migration 30 (per-line validation),
+run on a disposable local PostgreSQL 16 database with migrations 1–30
+applied. Two concurrent calls on the same settlement: exactly one succeeded;
+the other raised "This settlement is already paid." (23514). Mismatch and
+zero-value cases also passed, and `rls_commissions_test.sql` passed
+afterwards. See §6 for the per-session record.
 
-This is a local development result only. It is not production approval and no
-deployment is authorized by this report.
+Scope note: only the two-payouts concurrency scenario was executed. The
+other scenarios in §6's table (payout vs return, payout vs creation,
+creation vs return) remain code-inspection reasoning, and the rollback was
+not executed in this run (see §8 and §10). This report is a local
+development result only. It is not production approval and no deployment is
+authorized by this report.
 
 ## 2. Changes made
 
@@ -122,11 +127,33 @@ The existing application-level guard remains in
 
 ### Actual two-session execution
 
-**NOT RUN.** Docker Desktop was unavailable:
+**RUN — 2026-11-20 (P0-03).** Environment: disposable local PostgreSQL 16
+(Ubuntu, `gifto_conc_test` database), migrations 1–30 applied, storage stub
+applied, Supabase `auth` schema emulated by `scripts/auth-emulation.sql`
+(plain Postgres has no `auth` schema). Runner:
+`scripts/run-settlement-concurrency.mjs`; fixtures:
+`supabase/tests/concurrency_mark_settlement_paid.sql`. No hosted or remote
+database was used.
 
-`failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine`
+- Setup: vendor A (8%) earned 800, vendor B (15%) earned 1125, vendor C
+  (15%) earned 1500 — one delivered order each; one open settlement per
+  vendor.
+- Session A: `mark_settlement_paid()` on the vendor-A settlement — **success**
+  (exit 0).
+- Session B: same call, same settlement, concurrently — **rejected** with
+  `ERROR: This settlement is already paid.` (SQLSTATE 23514,
+  `mark_settlement_paid` line 31).
+- Final state: settlement `paid` exactly once, `paid_at` and `paid_by`
+  stamped with the admin id; commission entry still `earned` (1 line).
+- Sequential mismatch case: line amount +1 → rejected (23514), settlement
+  stayed `open`.
+- Sequential zero-value case: entry and line zeroed after creation (the
+  TEST 17 method — `create_settlement` refuses zero totals) → paid,
+  `paid_at`/`paid_by` stamped.
+- Afterwards: `supabase/tests/rls_commissions_test.sql` — **PASS**.
 
-No hosted or remote database was used.
+Runner output tail: `FIN-001 RESULT: PASS — mark_settlement_paid() is
+atomic under two concurrent calls.`
 
 ## 7. SQL/RLS results
 
@@ -139,19 +166,21 @@ database, `psql`, and the safety GUC
 
 ### Actual result
 
-- Database target: **none; SQL execution was not run**.
-- Local Supabase CLI: available, version 2.120.0.
-- Docker: installed but Docker Desktop daemon unavailable.
-- `psql`: unavailable.
-- Hosted project link: detected by `supabase status`; no remote command was run.
-- Migration count: statically verified at 25 files.
-- SQL test count: not executed.
-- Full RLS suite: **NOT RUN**.
-- Transaction rollback behavior: reviewed in the SQL source, not executed.
+- Database target: disposable local PostgreSQL 16 (`gifto_conc_test` and
+  `gifto_rls_test`), 2026-11-20 (P0-02/P0-03).
+- `psql`: available (PostgreSQL 16 client).
+- Hosted project: not touched; no remote command was run.
+- Migration count: 30 files applied in order, 1–30.
+- SQL test count: all 13 RLS suites executed — **13 passed, 0 failed**
+  (`scripts/run-rls-suites.sh`, ~29s).
+- Two-session concurrency: **executed and passed** (see §6).
+- Transaction rollback behavior: the suites end with `rollback`; the
+  migration-25 rollback file itself was **not** executed (see §8).
 
 ## 8. Rollback results
 
-Rollback was not executed because no disposable database was available.
+Rollback was not executed in the P0-03 run (no isolated rollback comparison
+was part of that prompt). It remains an open item.
 
 Static review confirms that
 `supabase/rollbacks/00000000000025_atomic_settlement_payout_rollback.sql`
@@ -182,9 +211,10 @@ had passed before the SQL-test-only changes.
 
 ### Medium
 
-- Migration 25 has not been executed against disposable PostgreSQL/Supabase.
-- No two-session concurrency test has been executed.
 - Rollback has not been executed and compared in an isolated database.
+- Only the two-payouts concurrency scenario was executed; payout vs return,
+  payout vs creation, and creation vs return remain code-inspection
+  reasoning in §6.
 
 ### Low
 
@@ -197,18 +227,17 @@ had passed before the SQL-test-only changes.
 
 ## 11. Production readiness
 
-Migration 25 is **not ready for production review yet** because the required
-disposable-database validation is blocked.
+Migration 25's disposable-database validation and two-session payout test
+are done (P0-02/P0-03, 2026-11-20). Before production review, the remaining
+items are:
 
-Before production review:
-
-1. Start a demonstrably local Supabase/PostgreSQL environment.
-2. Apply migrations 1-25 locally.
-3. Run all SQL/RLS tests, including corrected TEST 17 and TEST 18.
-4. Run the four two-session concurrency scenarios.
-5. Apply and compare the rollback only in a separate disposable database.
-6. Re-run the application validation, including `npm run build`.
-7. Review the final diff and migration output.
+1. Apply and compare the rollback only in a separate disposable database.
+2. Execute the remaining two-session concurrency scenarios (payout vs
+   return, payout vs creation, creation vs return) if they are required
+   evidence — they were not part of P0-03.
+3. Re-run the application validation, including `npm run build` (passed
+   2026-11-20 in P0-02 after the sitemap was made dynamic).
+4. Review the final diff and migration output.
 
 ## 12. Safety confirmation
 

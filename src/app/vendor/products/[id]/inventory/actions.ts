@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { CATALOG_TAGS, revalidatePublicCatalog } from "@/lib/catalog-cache";
 import { requireVendorRole } from "@/lib/vendor";
+import { checkMutationQuota } from "@/lib/rate-limit";
 
 const NOTE_MAX = 280;
 const DELTA_MAX = 1_000_000;
@@ -48,10 +49,13 @@ export async function adjustStock(
     return { error: `A note must be ${NOTE_MAX} characters or fewer.`, attempt };
   }
 
-  const { supabase, access, canManage } = await requireVendorRole(
+  const { supabase, access, canManage, user } = await requireVendorRole(
     formData.get("vendor") as string | null,
     { verifyWithAuthServer: true },
   );
+
+  const quotaError = await checkMutationQuota("vendor", user.id);
+  if (quotaError) return { error: quotaError, attempt };
 
   if (!canManage) {
     return {

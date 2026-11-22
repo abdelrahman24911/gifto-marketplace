@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import {
   ChevronLeftIcon,
@@ -22,6 +23,7 @@ export function ProductGallery({
   images: GalleryImage[];
   name: string;
 }) {
+  const t = useTranslations("product");
   const [activeIndex, setActiveIndex] = useState(0);
   const previewRef = useRef<HTMLDialogElement>(null);
 
@@ -56,8 +58,8 @@ export function ProductGallery({
           <button
             type="button"
             onClick={openPreview}
-            className="absolute right-3 top-3 inline-flex h-10 w-10 items-center justify-center rounded-full border border-line bg-paper/90 text-ink shadow-sm backdrop-blur transition-colors hover:bg-paper hover:text-berry focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
-            aria-label="View full-size image"
+            className="absolute end-3 top-3 inline-flex h-10 w-10 items-center justify-center rounded-full border border-line bg-paper/90 text-ink shadow-sm backdrop-blur transition-colors hover:bg-paper hover:text-berry focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
+            aria-label={t("viewFullSize")}
           >
             <ExpandIcon className="h-5 w-5" />
           </button>
@@ -68,18 +70,18 @@ export function ProductGallery({
             <button
               type="button"
               onClick={() => move(-1)}
-              className="absolute left-3 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-line bg-paper/90 text-ink shadow-sm backdrop-blur transition-colors hover:bg-paper hover:text-berry focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
-              aria-label="Previous image"
+              className="absolute start-3 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-line bg-paper/90 text-ink shadow-sm backdrop-blur transition-colors hover:bg-paper hover:text-berry focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
+              aria-label={t("previousImage")}
             >
-              <ChevronLeftIcon className="h-5 w-5" />
+              <ChevronLeftIcon className="h-5 w-5 rtl:-scale-x-100" />
             </button>
             <button
               type="button"
               onClick={() => move(1)}
-              className="absolute right-3 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-line bg-paper/90 text-ink shadow-sm backdrop-blur transition-colors hover:bg-paper hover:text-berry focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
-              aria-label="Next image"
+              className="absolute end-3 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-line bg-paper/90 text-ink shadow-sm backdrop-blur transition-colors hover:bg-paper hover:text-berry focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
+              aria-label={t("nextImage")}
             >
-              <ChevronRightIcon className="h-5 w-5" />
+              <ChevronRightIcon className="h-5 w-5 rtl:-scale-x-100" />
             </button>
           </>
         ) : null}
@@ -87,13 +89,13 @@ export function ProductGallery({
 
       <p aria-live="polite" className="sr-only">
         {wouldWrap
-          ? `Image ${activeIndex + 1} of ${gallery.length}`
-          : "Product image"}
+          ? t("imageCount", { index: activeIndex + 1, total: gallery.length })
+          : t("productImage")}
       </p>
 
       {wouldWrap ? (
         <ul
-          aria-label="Product images"
+          aria-label={t("productImages")}
           className="-mx-1 mt-3 flex gap-3 overflow-x-auto px-1 pb-1"
         >
           {gallery.map((image, index) => {
@@ -103,7 +105,10 @@ export function ProductGallery({
                 <button
                   type="button"
                   onClick={() => setActiveIndex(index)}
-                  aria-label={`Show image ${index + 1} of ${gallery.length}`}
+                  aria-label={t("showImage", {
+                    index: index + 1,
+                    total: gallery.length,
+                  })}
                   aria-pressed={selected}
                   className={`block overflow-hidden rounded-2xl border-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry ${
                     selected
@@ -128,7 +133,7 @@ export function ProductGallery({
 
       <dialog
         ref={previewRef}
-        aria-label={`${name} full-size preview`}
+        aria-label={t("fullSizePreview", { name })}
         onClick={(event) => {
           if (event.target === previewRef.current) previewRef.current?.close();
         }}
@@ -138,8 +143,8 @@ export function ProductGallery({
           <button
             type="button"
             onClick={() => previewRef.current?.close()}
-            className="absolute right-5 top-5 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-line bg-paper/95 text-ink shadow-sm transition-colors hover:text-berry focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
-            aria-label="Close image preview"
+            className="absolute end-5 top-5 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-line bg-paper/95 text-ink shadow-sm transition-colors hover:text-berry focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
+            aria-label={t("closePreview")}
           >
             <CloseIcon className="h-5 w-5" />
           </button>
@@ -159,18 +164,18 @@ export function ProductGallery({
               <button
                 type="button"
                 onClick={() => move(-1)}
-                className="absolute left-5 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-line bg-paper/95 text-ink shadow-sm transition-colors hover:text-berry focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
-                aria-label="Previous image"
+                className="absolute start-5 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-line bg-paper/95 text-ink shadow-sm transition-colors hover:text-berry focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
+                aria-label={t("previousImage")}
               >
-                <ChevronLeftIcon className="h-5 w-5" />
+                <ChevronLeftIcon className="h-5 w-5 rtl:-scale-x-100" />
               </button>
               <button
                 type="button"
                 onClick={() => move(1)}
-                className="absolute right-5 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-line bg-paper/95 text-ink shadow-sm transition-colors hover:text-berry focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
-                aria-label="Next image"
+                className="absolute end-5 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-line bg-paper/95 text-ink shadow-sm transition-colors hover:text-berry focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
+                aria-label={t("nextImage")}
               >
-                <ChevronRightIcon className="h-5 w-5" />
+                <ChevronRightIcon className="h-5 w-5 rtl:-scale-x-100" />
               </button>
             </>
           ) : null}

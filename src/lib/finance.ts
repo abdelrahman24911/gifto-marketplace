@@ -22,11 +22,33 @@ export type SettlementLineRecord = {
   release_reason: string | null;
 };
 
+// P1-05 (D-08): how the vendor transferred Gifto's commission. The
+// settlement itself stores no bank account numbers — only the transfer
+// reference the vendor gives Gifto, which is shown to both parties.
+export const TRANSFER_METHODS = ["bank_transfer", "cash", "other"] as const;
+export type TransferMethod = (typeof TRANSFER_METHODS)[number];
+
+export const TRANSFER_METHOD_LABELS: Record<TransferMethod, string> = {
+  bank_transfer: "Bank transfer",
+  cash: "Cash",
+  other: "Other",
+};
+
+export function isTransferMethod(value: unknown): value is TransferMethod {
+  return (
+    typeof value === "string" &&
+    (TRANSFER_METHODS as readonly string[]).includes(value)
+  );
+}
+
 export type SettlementRecord = {
   id: string;
   vendor_id: string;
   status: SettlementStatus;
   total_minor: number;
+  // N-01 (D-08): piastres of outstanding paid-return clawbacks netted
+  // against this batch. total_minor = sum(lines) - clawback_minor.
+  clawback_minor: number;
   note: string | null;
   created_at: string;
   paid_at: string | null;
@@ -35,6 +57,13 @@ export type SettlementRecord = {
   voided_at: string | null;
   voided_by: string | null;
   void_reason: string | null;
+  // P1-05 payout proof: the exact amount Gifto received, how it was
+  // transferred, the vendor's transfer reference, and an optional note.
+  // Set exactly when the settlement is paid; never edited afterwards.
+  paid_amount_minor: number | null;
+  transfer_method: TransferMethod | null;
+  transfer_reference: string | null;
+  proof_note: string | null;
   settlement_lines: SettlementLineRecord[];
 };
 
@@ -82,6 +111,68 @@ export type SettlementLineLookup = Map<
   string,
   { settlementId: string; status: ActiveSettlementStatus }
 >;
+
+// N-01 (D-08): a paid-return clawback — commission Gifto already paid out
+// that the vendor owes back, carried into the next settlement (or repaid
+// directly when there is no next settlement).
+export type CommissionClawbackStatus =
+  | "outstanding"
+  | "consumed"
+  | "direct_repayment";
+
+export type CommissionClawbackRecord = {
+  id: string;
+  commission_entry_id: string;
+  refund_case_id: string;
+  vendor_id: string;
+  amount_minor: number;
+  reason: string | null;
+  status: CommissionClawbackStatus;
+  direct_repayment_reference: string | null;
+  created_at: string;
+  consumed_at: string | null;
+};
+
+export type ClawbackApplicationRecord = {
+  id: string;
+  clawback_id: string;
+  settlement_id: string;
+  amount_minor: number;
+  created_at: string;
+};
+
+/**
+ * N-01: the net commission due on a settlement is its lines' snapshot
+ * less the paid-return clawbacks applied to the batch. The stored
+ * total_minor must equal this figure, and the payout proof amount must
+ * equal it too — never the gross lines total.
+ */
+export function settlementNetDueMinor(
+  linesTotalMinor: number,
+  clawbackMinor: number,
+): number {
+  return linesTotalMinor - clawbackMinor;
+}
+
+/**
+ * R-02 (D-08, N-01): what a vendor still owes on one outstanding
+ * paid-return clawback — its full amount less any partial applications
+ * already netted against earlier settlements. A clawback that was fully
+ * applied is consumed, never outstanding, so an outstanding clawback
+ * always has a positive remainder.
+ */
+export function clawbackRemainingMinor(
+  clawback: Pick<CommissionClawbackRecord, "amount_minor">,
+  applications: readonly Pick<ClawbackApplicationRecord, "amount_minor">[],
+): number {
+  return (
+    Math.abs(clawback.amount_minor) -
+    applications.reduce(
+      (applied, application) => applied + application.amount_minor,
+      0,
+    )
+  );
+}
 
 export const FINANCE_ENTRY_STATE_LABELS: Record<FinanceEntryState, string> = {
   unsettled: "Unsettled",
@@ -249,6 +340,42 @@ export function settlementTotalsResult(
   }
   if (!totals.complete) return { totals, state: "missing_entries" };
   return { totals, state: "complete" };
+}
+
+/**
+ * P1-05: the refund adjustments baked into the settlement's net lines —
+ * sum(line amount − entry amount) over the matched lines. Null when any
+ * line's entry is missing, so a caller never presents an incomplete
+ * adjustment as exact. Zero when the settlement has no adjustments.
+ */
+export function settlementAdjustmentsMinor(
+  settlement: Pick<SettlementRecord, "settlement_lines">,
+  entriesById: ReadonlyMap<string, CommissionEntryRecord>,
+): number | null {
+  let adjustments = 0;
+  for (const line of settlement.settlement_lines) {
+    const entry = entriesById.get(line.commission_entry_id);
+    if (!entry) return null;
+    adjustments += line.amount_minor - entry.amount_minor;
+  }
+  return adjustments;
+}
+
+/**
+ * P1-05: the commission earned before refund adjustments — sum of the
+ * matched entries' amounts. Null when any line's entry is missing.
+ */
+export function settlementEarnedCommissionMinor(
+  settlement: Pick<SettlementRecord, "settlement_lines">,
+  entriesById: ReadonlyMap<string, CommissionEntryRecord>,
+): number | null {
+  let earned = 0;
+  for (const line of settlement.settlement_lines) {
+    const entry = entriesById.get(line.commission_entry_id);
+    if (!entry) return null;
+    earned += entry.amount_minor;
+  }
+  return earned;
 }
 
 export function commissionEntriesById(

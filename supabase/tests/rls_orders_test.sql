@@ -104,12 +104,16 @@ begin
     null;
   end;
   begin
-    perform public.place_order('[]'::jsonb, 'A', '123456', 'Street 1', 'Alex', 'Alex');
-    raise exception 'TEST 2 FAILED: anon called place_order';
+    -- R-03: the only signed-in checkout RPC is place_order_with_price_check;
+    -- anon has no EXECUTE on it (the legacy place_order was dropped).
+    perform public.place_order_with_price_check(
+      '[]'::jsonb, 'A', '123456', null, 'Street 1', 'Alex', 'Alex', null,
+      gen_random_uuid(), null, null);
+    raise exception 'TEST 2 FAILED: anon called place_order_with_price_check';
   exception when insufficient_privilege then
     null;
   end;
-  raise notice 'TEST 2 PASSED: anon cannot read orders or call place_order';
+  raise notice 'TEST 2 PASSED: anon cannot read orders or call place_order_with_price_check';
 end $$;
 
 -- ---------------------------------------------------------------------------
@@ -121,9 +125,12 @@ set request.jwt.claims = '{}';
 do $$
 begin
   begin
-    perform public.place_order(
+    -- R-03: the legacy place_order is dropped; the price-check RPC rejects
+    -- a caller with no session (auth.uid() is null) with 42501.
+    perform public.place_order_with_price_check(
       '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
-      'A Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria');
+      'A Buyer', '01001112233', null, '12 Main Street', 'Alexandria', 'Alexandria', null,
+      gen_random_uuid(), null, null);
     raise exception 'TEST 3 FAILED: placed an order without a session';
   exception when insufficient_privilege then
     raise notice 'TEST 3 PASSED: checkout rejected for a caller with no session';
@@ -145,7 +152,7 @@ declare
   v_items   int;
   v_rate    numeric;
 begin
-  v_oid := public.place_order(
+  v_oid := gifto_test.place_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":2},
       {"product_id":"51100000-0000-0000-0000-000000000004","quantity":1}]'::jsonb,
     'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria', null);
@@ -470,7 +477,7 @@ begin
   select id into v_ov from public.order_vendors
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000002';
 
-  update public.order_vendors set status = 'confirmed' where id = v_ov;
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
 
   select status, confirmed_at into v_status, v_at
     from public.order_vendors where id = v_ov;
@@ -496,7 +503,7 @@ begin
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000002';
 
   begin
-    update public.order_vendors set status = 'delivered' where id = v_ov;
+    perform public.set_order_vendor_status(v_ov, 'delivered', 'confirmed');
     raise exception 'TEST 8 FAILED: jumped confirmed -> delivered';
   exception when check_violation then
     raise notice 'TEST 8 PASSED: invalid status transition rejected';
@@ -531,13 +538,18 @@ begin
   select id into v_ov from public.order_vendors
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000001';
 
-  update public.order_vendors set status = 'cancelled' where id = v_ov;
+  begin
+    perform public.set_order_vendor_status(v_ov, 'cancelled', 'placed');
+    raise exception 'TEST 10 FAILED: shop B cancelled shop A''s suborder';
+  exception when insufficient_privilege then
+    null;
+  end;
 
   select status into v_status from public.order_vendors where id = v_ov;
   if v_status <> 'placed' then
     raise exception 'TEST 10 FAILED: shop B changed shop A''s suborder to %', v_status;
   end if;
-  raise notice 'TEST 10 PASSED: cross-vendor status update had no effect';
+  raise notice 'TEST 10 PASSED: cross-vendor status update was denied';
 end $$;
 
 set request.jwt.claim.sub = '21100000-0000-0000-0000-000000000002';
@@ -549,7 +561,12 @@ begin
   select id into v_ov from public.order_vendors
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000001';
 
-  update public.order_vendors set status = 'confirmed' where id = v_ov;
+  begin
+    perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+    raise exception 'TEST 10 FAILED: staff member advanced the suborder';
+  exception when insufficient_privilege then
+    null;
+  end;
 
   select status into v_status from public.order_vendors where id = v_ov;
   if v_status <> 'placed' then
@@ -568,7 +585,7 @@ declare v_msg text;
 begin
   -- insufficient stock (A Two has 2)
   begin
-    perform public.place_order(
+    perform gifto_test.place_order(
       '[{"product_id":"51100000-0000-0000-0000-000000000002","quantity":3}]'::jsonb,
       'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria');
     raise exception 'TEST 11 FAILED: ordered more than stock';
@@ -582,7 +599,7 @@ begin
 
   -- a draft product
   begin
-    perform public.place_order(
+    perform gifto_test.place_order(
       '[{"product_id":"51100000-0000-0000-0000-000000000003","quantity":1}]'::jsonb,
       'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria');
     raise exception 'TEST 11 FAILED: ordered a draft product';
@@ -594,7 +611,7 @@ begin
 
   -- a product belonging to a pending vendor
   begin
-    perform public.place_order(
+    perform gifto_test.place_order(
       '[{"product_id":"51100000-0000-0000-0000-000000000005","quantity":1}]'::jsonb,
       'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria');
     raise exception 'TEST 11 FAILED: ordered from a pending vendor';
@@ -606,7 +623,7 @@ begin
 
   -- empty cart
   begin
-    perform public.place_order(
+    perform gifto_test.place_order(
       '[]'::jsonb, 'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria');
     raise exception 'TEST 11 FAILED: accepted an empty cart';
   exception when others then
@@ -617,7 +634,7 @@ begin
 
   -- duplicate lines
   begin
-    perform public.place_order(
+    perform gifto_test.place_order(
       '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1},
         {"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
       'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria');
@@ -630,7 +647,7 @@ begin
 
   -- missing address
   begin
-    perform public.place_order(
+    perform gifto_test.place_order(
       '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
       'Sara Buyer', '01001112233', '', 'Alexandria', 'Alexandria');
     raise exception 'TEST 11 FAILED: accepted an empty address';
@@ -688,9 +705,9 @@ begin
   select id into v_ov from public.order_vendors
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000001';
 
-  update public.order_vendors set status = 'confirmed' where id = v_ov;
-  update public.order_vendors set status = 'shipped' where id = v_ov;
-  update public.order_vendors set status = 'delivered' where id = v_ov;
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', 'TRK-0001');
+  perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
 
   select delivered_at into v_at from public.order_vendors where id = v_ov;
   if v_at is null then
@@ -712,8 +729,8 @@ begin
   select id into v_ov from public.order_vendors
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000002';
 
-  update public.order_vendors set status = 'shipped' where id = v_ov;
-  update public.order_vendors set status = 'delivered' where id = v_ov;
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', 'TRK-0001');
+  perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
 
   select status into v_parent from public.orders where id = v_oid;
   if v_parent <> 'delivered' then
@@ -731,7 +748,7 @@ do $$
 declare v_second uuid; v_third uuid; v_stock int;
 begin
   -- second order, still cancellable
-  v_second := public.place_order(
+  v_second := gifto_test.place_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
     'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria');
   perform set_config('gifto_test.second_order_id', v_second::text, false);
@@ -754,7 +771,7 @@ begin
     raise exception 'TEST 15 FAILED: stock not restored (expected 3, got %)', v_stock;
   end if;
   -- third order, confirmed by a vendor -> no longer cancellable
-  v_third := public.place_order(
+  v_third := gifto_test.place_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000004","quantity":1}]'::jsonb,
     'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria');
   perform set_config('gifto_test.third_order_id', v_third::text, false);
@@ -779,11 +796,12 @@ end $$;
 set request.jwt.claim.sub = '21100000-0000-0000-0000-000000000003';
 set request.jwt.claims = '{"sub":"21100000-0000-0000-0000-000000000003"}';
 do $$
-declare v_third uuid;
+declare v_third uuid; v_ov uuid;
 begin
   v_third := current_setting('gifto_test.third_order_id')::uuid;
-  update public.order_vendors set status = 'confirmed'
+  select id into v_ov from public.order_vendors
    where order_id = v_third and vendor_id = '41100000-0000-0000-0000-000000000002';
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
 end $$;
 
 set request.jwt.claim.sub = '11100000-0000-0000-0000-000000000001';
@@ -822,7 +840,7 @@ set request.jwt.claims = '{"sub":"11100000-0000-0000-0000-000000000001"}';
 do $$
 declare v_oid uuid;
 begin
-  v_oid := public.place_order(
+  v_oid := gifto_test.place_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1},
       {"product_id":"51100000-0000-0000-0000-000000000004","quantity":1}]'::jsonb,
     'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria');
@@ -839,9 +857,9 @@ begin
   select id into v_ov from public.order_vendors
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000001';
 
-  update public.order_vendors set status = 'confirmed' where id = v_ov;
-  update public.order_vendors set status = 'shipped' where id = v_ov;
-  update public.order_vendors set status = 'delivered' where id = v_ov;
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', 'TRK-0001');
+  perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
 end $$;
 
 -- Shop B dispatches, then the COD delivery fails.
@@ -860,13 +878,14 @@ begin
   select id into v_ov from public.order_vendors
    where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000002';
 
-  update public.order_vendors set status = 'confirmed' where id = v_ov;
-  update public.order_vendors set status = 'shipped' where id = v_ov;
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', 'TRK-0001');
 
   select stock into v_stock_before from public.products
    where id = '51100000-0000-0000-0000-000000000004';
 
-  update public.order_vendors set status = 'cancelled' where id = v_ov;
+  perform public.set_order_vendor_status(
+    v_ov, 'cancelled', 'shipped', 'unreachable');
 
   select stock into v_stock_after from public.products
    where id = '51100000-0000-0000-0000-000000000004';
@@ -885,8 +904,13 @@ begin
     raise exception 'TEST 16 FAILED: mixed parent status is % (expected partially_completed)', v_parent;
   end if;
 
-  -- A repeated status write must not restock twice.
-  update public.order_vendors set status = 'cancelled' where id = v_ov;
+  -- A repeated cancellation must not restock twice.
+  begin
+    perform public.set_order_vendor_status(v_ov, 'cancelled', 'cancelled');
+    raise exception 'TEST 16 FAILED: repeated cancellation was accepted';
+  exception when check_violation then
+    null;
+  end;
   select stock into v_stock_after from public.products
    where id = '51100000-0000-0000-0000-000000000004';
   if v_stock_after <> v_stock_before + 1 then
@@ -909,6 +933,670 @@ begin
     raise exception 'TEST 16 FAILED: failed-delivery restock movement not recorded once';
   end if;
   raise notice 'TEST 16 PASSED: failed-delivery restock logged exactly one movement';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 17: price-change consent on the signed-in path (P1-03)
+-- ---------------------------------------------------------------------------
+-- Restore known stock/prices first: earlier tests bought against these rows.
+reset role;
+update public.products set stock = 5, price_minor = 10000
+ where id = '51100000-0000-0000-0000-000000000001';
+
+set role authenticated;
+set request.jwt.claim.sub = '11100000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"11100000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_oid uuid;
+  v_orders_before int;
+  v_orders_after int;
+  v_blocked boolean := false;
+  v_total int;
+begin
+  -- (a) Unchanged prices place normally.
+  v_oid := public.place_order_with_price_check(
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Sara Buyer', '01001112233', 'buyer@orders.gifto.test',
+    '12 Main Street', 'Alexandria', 'Alexandria', null,
+    gen_random_uuid(),
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":10000}]'::jsonb,
+    10000);
+  if v_oid is null then
+    raise exception 'TEST 17 FAILED: unchanged prices did not place';
+  end if;
+  select total_minor into v_total from public.orders where id = v_oid;
+  if v_total <> 10000 then
+    raise exception 'TEST 17 FAILED: placed total is % not 10000', v_total;
+  end if;
+  raise notice 'TEST 17a PASSED: unchanged prices place normally';
+end $$;
+
+-- The vendor changes the price between cart and submit (as superuser;
+-- authenticated holds no UPDATE on products).
+reset role;
+update public.products set price_minor = 12000
+ where id = '51100000-0000-0000-0000-000000000001';
+
+set role authenticated;
+set request.jwt.claim.sub = '11100000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"11100000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_oid uuid;
+  v_orders_before int;
+  v_orders_after int;
+  v_blocked boolean := false;
+  v_total int;
+begin
+  -- (b) A price changed between cart and submit blocks the order.
+  select count(*) into v_orders_before from public.orders;
+  begin
+    perform public.place_order_with_price_check(
+      '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+      'Sara Buyer', '01001112233', 'buyer@orders.gifto.test',
+      '12 Main Street', 'Alexandria', 'Alexandria', null,
+      gen_random_uuid(),
+      '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":10000}]'::jsonb,
+      10000);
+  exception when check_violation then
+    if sqlerrm like 'PRICE_CHANGED:%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 17 FAILED: wrong error for a price change: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 17 FAILED: changed price did not block the order';
+  end if;
+  select count(*) into v_orders_after from public.orders;
+  if v_orders_after <> v_orders_before then
+    raise exception 'TEST 17 FAILED: blocked order still created a row';
+  end if;
+  if (select stock from public.products where id = '51100000-0000-0000-0000-000000000001') <> 4 then
+    raise exception 'TEST 17 FAILED: blocked order changed stock';
+  end if;
+  raise notice 'TEST 17b PASSED: changed price blocks with PRICE_CHANGED, nothing created';
+
+  -- (c) Re-confirming with the new expected prices places at the new price.
+  v_oid := public.place_order_with_price_check(
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Sara Buyer', '01001112233', 'buyer@orders.gifto.test',
+    '12 Main Street', 'Alexandria', 'Alexandria', null,
+    gen_random_uuid(),
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":12000}]'::jsonb,
+    12000);
+  if v_oid is null then
+    raise exception 'TEST 17 FAILED: re-confirm did not place';
+  end if;
+  select total_minor into v_total from public.orders where id = v_oid;
+  if v_total <> 12000 then
+    raise exception 'TEST 17 FAILED: re-confirmed total is % not 12000', v_total;
+  end if;
+  raise notice 'TEST 17c PASSED: re-confirm places at the new price';
+
+  -- (d) A wrong expected total blocks even when unit prices match.
+  v_blocked := false;
+  begin
+    perform public.place_order_with_price_check(
+      '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+      'Sara Buyer', '01001112233', 'buyer@orders.gifto.test',
+      '12 Main Street', 'Alexandria', 'Alexandria', null,
+      gen_random_uuid(),
+      '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":12000}]'::jsonb,
+      10000);
+  exception when check_violation then
+    if sqlerrm like 'PRICE_CHANGED:%' then
+      v_blocked := true;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 17 FAILED: wrong expected total did not block';
+  end if;
+  raise notice 'TEST 17d PASSED: wrong expected total blocks with PRICE_CHANGED';
+
+  -- (f) S-01: null expected prices for a priceable cart are refused, not
+  -- treated as "no check". A signed-in caller reaching the public RPC
+  -- directly via PostgREST with p_expected_prices = null must not be
+  -- able to order at live prices with no consent. Stock is 3 here
+  -- (17a and 17c placed, 17b/17d blocked); the live price is 12000.
+  select count(*) into v_orders_before from public.orders;
+  v_blocked := false;
+  begin
+    perform public.place_order_with_price_check(
+      '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+      'Sara Buyer', '01001112233', 'buyer@orders.gifto.test',
+      '12 Main Street', 'Alexandria', 'Alexandria', null,
+      gen_random_uuid(),
+      null,
+      null);
+  exception when data_exception then
+    if sqlerrm like '%could not be verified%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 17 FAILED: wrong error for null expected prices: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 17 FAILED: null expected prices did not block the order';
+  end if;
+  select count(*) into v_orders_after from public.orders;
+  if v_orders_after <> v_orders_before then
+    raise exception 'TEST 17 FAILED: null-price order still created a row';
+  end if;
+  if (select stock from public.products where id = '51100000-0000-0000-0000-000000000001') <> 3 then
+    raise exception 'TEST 17 FAILED: null-price attempt changed stock';
+  end if;
+  raise notice 'TEST 17f PASSED: null expected prices refused, nothing created';
+
+  -- (g) S-01: a null expected total with real expected prices is refused
+  -- the same way — the total is part of the consent, not optional.
+  select count(*) into v_orders_before from public.orders;
+  v_blocked := false;
+  begin
+    perform public.place_order_with_price_check(
+      '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+      'Sara Buyer', '01001112233', 'buyer@orders.gifto.test',
+      '12 Main Street', 'Alexandria', 'Alexandria', null,
+      gen_random_uuid(),
+      '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":12000}]'::jsonb,
+      null);
+  exception when data_exception then
+    if sqlerrm like '%could not be verified%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 17 FAILED: wrong error for null expected total: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 17 FAILED: null expected total did not block the order';
+  end if;
+  select count(*) into v_orders_after from public.orders;
+  if v_orders_after <> v_orders_before then
+    raise exception 'TEST 17 FAILED: null-total order still created a row';
+  end if;
+  if (select stock from public.products where id = '51100000-0000-0000-0000-000000000001') <> 3 then
+    raise exception 'TEST 17 FAILED: null-total attempt changed stock';
+  end if;
+  raise notice 'TEST 17g PASSED: null expected total refused, nothing created';
+
+  -- (e) R-03: the legacy no-check wrapper is gone. An authenticated caller
+  -- can no longer reach place_order_with_idempotency at all — the function
+  -- does not exist (42883) — and no order is created by the attempt. The
+  -- only signed-in checkout path is place_order_with_price_check, covered
+  -- in (a)–(d) above.
+  select count(*) into v_orders_before from public.orders;
+  v_blocked := false;
+  begin
+    perform public.place_order_with_idempotency(
+      '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+      'Sara Buyer', '01001112233', 'buyer@orders.gifto.test',
+      '12 Main Street', 'Alexandria', 'Alexandria', null,
+      gen_random_uuid());
+  exception when undefined_function then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 17 FAILED: legacy place_order_with_idempotency is still callable';
+  end if;
+  select count(*) into v_orders_after from public.orders;
+  if v_orders_after <> v_orders_before then
+    raise exception 'TEST 17 FAILED: legacy checkout attempt created an order';
+  end if;
+  raise notice 'TEST 17 PASSED: signed-in price consent blocks, re-confirms, and totals are checked';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 18 (P1-15, H-08): shipping records courier, tracking reference and
+-- handover time; shipping without them fails; clients cannot write the
+-- handover columns directly.
+-- ---------------------------------------------------------------------------
+set role authenticated;
+set request.jwt.claim.sub = '11100000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"11100000-0000-0000-0000-000000000001"}';
+do $$
+declare v_oid uuid;
+begin
+  v_oid := gifto_test.place_order(
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria', null);
+  perform set_config('gifto_test.courier_order_id', v_oid::text, false);
+end $$;
+
+reset role;
+do $$
+begin
+  -- The new columns are not client-writable: the RPC is the only write path.
+  if has_column_privilege('authenticated', 'public.order_vendors', 'courier_name', 'update')
+     or has_column_privilege('authenticated', 'public.order_vendors', 'tracking_ref', 'update')
+     or has_column_privilege('authenticated', 'public.order_vendors', 'handed_over_at', 'update') then
+    raise exception 'TEST 18 FAILED: handover columns are directly updatable';
+  end if;
+  if has_function_privilege('anon', 'public.set_order_vendor_status(uuid, public.order_status, public.order_status, text, text, text, text)', 'execute')
+     or not has_function_privilege('authenticated', 'public.set_order_vendor_status(uuid, public.order_status, public.order_status, text, text, text, text)', 'execute') then
+    raise exception 'TEST 18 FAILED: transition RPC grants are wrong';
+  end if;
+  raise notice 'TEST 18 PASSED: handover columns are RPC-only';
+end $$;
+
+set role authenticated;
+set request.jwt.claim.sub = '21100000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"21100000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_oid uuid;
+  v_ov uuid;
+  v_row public.order_vendors;
+begin
+  v_oid := current_setting('gifto_test.courier_order_id')::uuid;
+  select id into v_ov from public.order_vendors
+   where order_id = v_oid and vendor_id = '41100000-0000-0000-0000-000000000001';
+
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+
+  -- Shipping without courier/tracking fails and changes nothing.
+  begin
+    perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed');
+    raise exception 'TEST 18 FAILED: shipping without courier was accepted';
+  exception when check_violation then
+    null;
+  end;
+
+  begin
+    perform public.set_order_vendor_status(
+      v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', null);
+    raise exception 'TEST 18 FAILED: shipping without a tracking reference was accepted';
+  exception when check_violation then
+    null;
+  end;
+
+  if (select status from public.order_vendors where id = v_ov) <> 'confirmed' then
+    raise exception 'TEST 18 FAILED: rejected shipment changed the status';
+  end if;
+
+  -- Shipping with courier + tracking stores the handover record.
+  perform public.set_order_vendor_status(
+    v_ov, 'shipped', 'confirmed', null, null, 'Bosta', 'BST-77881');
+
+  select * into v_row from public.order_vendors where id = v_ov;
+  if v_row.status <> 'shipped'
+     or v_row.courier_name <> 'Bosta'
+     or v_row.tracking_ref <> 'BST-77881'
+     or v_row.handed_over_at is null then
+    raise exception 'TEST 18 FAILED: handover record was not stored (status=%, courier=%, tracking=%, handed_over_at=%)',
+      v_row.status, v_row.courier_name, v_row.tracking_ref, v_row.handed_over_at;
+  end if;
+  raise notice 'TEST 18 PASSED: shipping without courier/tracking fails; with them it records the handover';
+
+  -- Courier/tracking passed to a non-ship transition are ignored, never stored.
+  perform public.set_order_vendor_status(
+    v_ov, 'delivered', 'shipped', null, null, 'Other Courier', 'OTHER-1');
+  select * into v_row from public.order_vendors where id = v_ov;
+  if v_row.courier_name <> 'Bosta' or v_row.tracking_ref <> 'BST-77881' then
+    raise exception 'TEST 18 FAILED: a later transition overwrote the handover record';
+  end if;
+  raise notice 'TEST 18 PASSED: handover survives the delivery transition unchanged';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 19 (R-03): the legacy no-check checkout RPCs are retired
+-- ---------------------------------------------------------------------------
+-- Migration 51 dropped place_order, place_order_with_idempotency and
+-- place_guest_order. No API role can execute them (they do not exist), and
+-- the price-check RPCs are the only checkout paths left.
+reset role;
+do $$
+begin
+  if to_regprocedure('public.place_order(jsonb,text,text,text,text,text,text)') is not null
+     or to_regprocedure('public.place_order_with_idempotency(jsonb,text,text,text,text,text,text,text,uuid)') is not null
+     or to_regprocedure('public.place_guest_order(jsonb,text,text,text,text,text,text,text,uuid,text)') is not null then
+    raise exception 'TEST 19 FAILED: a legacy no-check checkout RPC still exists';
+  end if;
+
+  if not has_function_privilege('authenticated', 'public.place_order_with_price_check(jsonb,text,text,text,text,text,text,text,uuid,jsonb,int,boolean,text,date,text)', 'execute')
+     or has_function_privilege('anon', 'public.place_order_with_price_check(jsonb,text,text,text,text,text,text,text,uuid,jsonb,int,boolean,text,date,text)', 'execute') then
+    raise exception 'TEST 19 FAILED: place_order_with_price_check grants are wrong';
+  end if;
+
+  if not has_function_privilege('service_role', 'public.place_guest_order_with_price_check(jsonb,text,text,text,text,text,text,text,uuid,text,jsonb,int,boolean,text,date,text)', 'execute')
+     or has_function_privilege('authenticated', 'public.place_guest_order_with_price_check(jsonb,text,text,text,text,text,text,text,uuid,text,jsonb,int,boolean,text,date,text)', 'execute') then
+    raise exception 'TEST 19 FAILED: place_guest_order_with_price_check grants are wrong';
+  end if;
+
+  raise notice 'TEST 19 PASSED: legacy no-check checkout RPCs are gone; only the price-check RPCs remain';
+end $$;
+
+-- TEST 20 (migration 62): the price consent is recorded append-only,
+-- once per order, for signed-in and guest checkout alike
+-- ---------------------------------------------------------------------------
+reset role;
+update public.products set stock = 5, price_minor = 10000
+ where id = '51100000-0000-0000-0000-000000000001';
+
+set role authenticated;
+set request.jwt.claim.sub = '11100000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"11100000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_oid uuid;
+  v_key uuid := gen_random_uuid();
+  v_blocked boolean := false;
+  v_count int;
+begin
+  -- (a) A signed-in order records its consent: who, what prices, what
+  -- was charged (expected total = live total by construction).
+  v_oid := public.place_order_with_price_check(
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Sara Buyer', '01001112233', 'buyer@orders.gifto.test',
+    '12 Main Street', 'Alexandria', 'Alexandria', null,
+    v_key,
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":10000}]'::jsonb,
+    10000);
+  if v_oid is null then
+    raise exception 'TEST 20 FAILED: signed-in order did not place';
+  end if;
+
+  if not exists (
+    select 1 from public.price_consent_events
+     where order_id = v_oid
+       and user_id = '11100000-0000-0000-0000-000000000001'
+       and guest_token_hash is null
+       and expected_total_minor = 10000
+       and live_total_minor = 10000
+       and expected_prices @> '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":10000}]'::jsonb
+  ) then
+    raise exception 'TEST 20 FAILED: signed-in consent was not recorded (who/what/charged)';
+  end if;
+  raise notice 'TEST 20a PASSED: signed-in consent recorded with expected and charged totals';
+
+  -- (b) An idempotency retry returns the same order and records the
+  -- consent exactly once.
+  if public.place_order_with_price_check(
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Sara Buyer', '01001112233', 'buyer@orders.gifto.test',
+    '12 Main Street', 'Alexandria', 'Alexandria', null,
+    v_key,
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":10000}]'::jsonb,
+    10000) <> v_oid then
+    raise exception 'TEST 20 FAILED: idempotency retry did not return the same order';
+  end if;
+
+  select count(*) into v_count from public.price_consent_events where order_id = v_oid;
+  if v_count <> 1 then
+    raise exception 'TEST 20 FAILED: idempotency retry recorded % consent rows, expected 1', v_count;
+  end if;
+  raise notice 'TEST 20b PASSED: idempotency retry records the consent exactly once';
+end $$;
+
+-- (c) A guest order records the consent keyed by the token hash, with
+-- no user id.
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_hash text := encode(digest('guest-token-consent', 'sha256'), 'hex');
+  v_oid uuid;
+begin
+  v_oid := gifto_test.place_guest_order(
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Nour Guest', '01001112233', 'nour@orders.gifto.test',
+    '12 Main Street', 'Alexandria', 'Alexandria', null,
+    gen_random_uuid(), v_hash);
+
+  if v_oid is null then
+    raise exception 'TEST 20 FAILED: guest order did not place';
+  end if;
+
+  if not exists (
+    select 1 from public.price_consent_events
+     where order_id = v_oid
+       and user_id is null
+       and guest_token_hash = v_hash
+       and expected_total_minor = 10000
+       and live_total_minor = 10000
+  ) then
+    raise exception 'TEST 20 FAILED: guest consent was not recorded by token hash';
+  end if;
+  raise notice 'TEST 20c PASSED: guest consent recorded by token hash, no user id';
+end $$;
+
+-- (d) The trail is append-only: no API role can write it directly, and
+-- the internal recorder is not executable by authenticated users.
+set role authenticated;
+set request.jwt.claim.sub = '11100000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"11100000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_blocked boolean := false;
+  v_oid uuid := (select order_id from public.price_consent_events limit 1);
+begin
+  begin
+    insert into public.price_consent_events
+      (order_id, user_id, expected_prices, expected_total_minor, live_total_minor)
+    values (v_oid, '11100000-0000-0000-0000-000000000001', '[]'::jsonb, 0, 0);
+  exception when insufficient_privilege then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 20 FAILED: an authenticated user inserted a consent row';
+  end if;
+
+  v_blocked := false;
+  begin
+    update public.price_consent_events set live_total_minor = 0 where order_id = v_oid;
+  exception when insufficient_privilege then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 20 FAILED: an authenticated user updated a consent row';
+  end if;
+
+  v_blocked := false;
+  begin
+    delete from public.price_consent_events where order_id = v_oid;
+  exception when insufficient_privilege then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 20 FAILED: an authenticated user deleted a consent row';
+  end if;
+
+  if has_function_privilege('authenticated', 'public._record_price_consent_event(uuid,uuid,text,jsonb,int)', 'execute') then
+    raise exception 'TEST 20 FAILED: _record_price_consent_event is executable by authenticated users';
+  end if;
+  raise notice 'TEST 20d PASSED: consent trail is append-only; the recorder is not API-callable';
+end $$;
+
+-- (e) A PRICE_CHANGED refusal records no consent row — but (migration
+-- 64, S-08) it DOES record a refusal row, in a separate transaction:
+-- the refusing transaction rolls back, so the refusal is recorded by
+-- the checkout server action through _record_price_consent_refusal,
+-- which the suite calls here as service_role to simulate it. The old
+-- invariant ("a refused order records nothing anywhere") is replaced
+-- intentionally: a refused attempt must be auditable.
+reset role;
+update public.products set price_minor = 12000
+ where id = '51100000-0000-0000-0000-000000000001';
+
+set role authenticated;
+set request.jwt.claim.sub = '11100000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"11100000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_before int;
+  v_after int;
+  v_key uuid := gen_random_uuid();
+  v_blocked boolean := false;
+begin
+  select count(*) into v_before from public.price_consent_events;
+
+  begin
+    perform public.place_order_with_price_check(
+      '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+      'Sara Buyer', '01001112233', 'buyer@orders.gifto.test',
+      '12 Main Street', 'Alexandria', 'Alexandria', null,
+      v_key,
+      '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":10000}]'::jsonb,
+      10000);
+  exception when check_violation then
+    if sqlerrm like 'PRICE_CHANGED:%' then
+      v_blocked := true;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 20 FAILED: changed price did not block the order';
+  end if;
+
+  select count(*) into v_after from public.price_consent_events;
+  if v_after <> v_before then
+    raise exception 'TEST 20 FAILED: a refused order recorded a consent row';
+  end if;
+  raise notice 'TEST 20e PASSED: a PRICE_CHANGED refusal records no consent row';
+end $$;
+
+-- The refusal itself is recorded by the service-role recorder, in its
+-- own transaction — exactly what the checkout server action does after
+-- catching the PRICE_CHANGED error.
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_count int;
+begin
+  -- No refusal row exists yet for this attempt: the RPC refused the
+  -- order, it did not record anything itself.
+  select count(*) into v_count from public.price_consent_refusals;
+  if v_count <> 0 then
+    raise exception 'TEST 20 FAILED: a refusal row existed before recording';
+  end if;
+end $$;
+
+-- Re-run the refused attempt's key through the recorder: the suite
+-- cannot reuse the v_key variable across blocks, so record with a fresh
+-- key for the same cart/prices and assert on that key instead.
+do $$
+declare
+  v_key uuid := gen_random_uuid();
+  v_count int;
+begin
+  perform public._record_price_consent_refusal(
+    v_key,
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    '11100000-0000-0000-0000-000000000001',
+    null,
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":10000}]'::jsonb,
+    10000);
+
+  if not exists (
+    select 1 from public.price_consent_refusals
+     where idempotency_key = v_key
+       and user_id = '11100000-0000-0000-0000-000000000001'
+       and guest_token_hash is null
+       and expected_total_minor = 10000
+       and live_total_minor = 12000
+       and expected_prices @> '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":10000}]'::jsonb
+  ) then
+    raise exception 'TEST 20 FAILED: refusal was not recorded (who/what/expected/live)';
+  end if;
+
+  -- A retried recording for the same attempt is a no-op.
+  perform public._record_price_consent_refusal(
+    v_key,
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    '11100000-0000-0000-0000-000000000001',
+    null,
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":10000}]'::jsonb,
+    10000);
+  select count(*) into v_count from public.price_consent_refusals
+   where idempotency_key = v_key;
+  if v_count <> 1 then
+    raise exception 'TEST 20 FAILED: retried recording recorded % refusal rows, expected 1', v_count;
+  end if;
+  raise notice 'TEST 20e PASSED: a PRICE_CHANGED refusal records exactly one refusal row (expected 10000, live 12000)';
+end $$;
+
+-- (f) The refusal trail is append-only and the recorder is
+-- self-validating: no API role can write it, it is not executable by
+-- authenticated users, and a call with matching prices records nothing.
+set role authenticated;
+set request.jwt.claim.sub = '11100000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"11100000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  v_blocked boolean := false;
+  v_key uuid := (select idempotency_key from public.price_consent_refusals limit 1);
+begin
+  begin
+    insert into public.price_consent_refusals
+      (idempotency_key, user_id, expected_prices, expected_total_minor, live_total_minor)
+    values (gen_random_uuid(), '11100000-0000-0000-0000-000000000001', '[]'::jsonb, 0, 0);
+  exception when insufficient_privilege then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 20 FAILED: an authenticated user inserted a refusal row';
+  end if;
+
+  v_blocked := false;
+  begin
+    delete from public.price_consent_refusals where idempotency_key = v_key;
+  exception when insufficient_privilege then
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 20 FAILED: an authenticated user deleted a refusal row';
+  end if;
+
+  if has_function_privilege('authenticated', 'public._record_price_consent_refusal(uuid,jsonb,uuid,text,jsonb,int)', 'execute') then
+    raise exception 'TEST 20 FAILED: _record_price_consent_refusal is executable by authenticated users';
+  end if;
+  raise notice 'TEST 20f PASSED: refusal trail is append-only; the recorder is not API-callable';
+end $$;
+
+-- (f, continued) A recording with matching prices is refused: the
+-- recorder only records genuine mismatches.
+reset role;
+update public.products set price_minor = 10000
+ where id = '51100000-0000-0000-0000-000000000001';
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_before int;
+  v_after int;
+  v_refused boolean := false;
+begin
+  select count(*) into v_before from public.price_consent_refusals;
+
+  begin
+    perform public._record_price_consent_refusal(
+      gen_random_uuid(),
+      '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+      '11100000-0000-0000-0000-000000000001',
+      null,
+      '[{"product_id":"51100000-0000-0000-0000-000000000001","unit_price_minor":10000}]'::jsonb,
+      10000);
+  exception when invalid_parameter_value then
+    -- The recorder refuses with 22023, not 23514: "No price mismatch
+    -- to record." (and its validation refusals share the same code).
+    if sqlerrm like 'No price mismatch%' then
+      v_refused := true;
+    end if;
+  end;
+  if not v_refused then
+    raise exception 'TEST 20 FAILED: a matching-prices recording was not refused';
+  end if;
+
+  select count(*) into v_after from public.price_consent_refusals;
+  if v_after <> v_before then
+    raise exception 'TEST 20 FAILED: a matching-prices call recorded a refusal row';
+  end if;
+  raise notice 'TEST 20f PASSED: a matching-prices recording is refused and records nothing';
+  raise notice 'TEST 20 PASSED: price consent is recorded append-only, once per order';
 end $$;
 
 reset role;

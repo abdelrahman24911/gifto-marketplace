@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requirePlatformAdmin } from "@/lib/auth";
+import { checkMutationQuota } from "@/lib/rate-limit";
 import { CATALOG_TAGS, revalidatePublicCatalog } from "@/lib/catalog-cache";
 import { fetchAllRows } from "@/lib/fetch-all";
 import {
@@ -169,7 +170,7 @@ export async function saveOccasion(
   previous: OccasionFormState,
   formData: FormData,
 ): Promise<OccasionFormState> {
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
   const attempt = nextAttempt(previous);
   const occasionIdRaw = String(formData.get("occasion_id") ?? "").trim();
   const occasionId = occasionIdRaw || undefined;
@@ -189,6 +190,9 @@ export async function saveOccasion(
       validation.fieldErrors,
     );
   }
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return formError(attempt, values, quotaError);
 
   const imageFile = readImage(formData);
   let image: Extract<
@@ -467,8 +471,11 @@ export async function removeOccasionImage(
   previous: OccasionSimpleState,
   formData: FormData,
 ): Promise<OccasionSimpleState> {
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
   const attempt = nextAttempt(previous);
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { attempt, error: quotaError };
   const occasionId = String(formData.get("occasion_id") ?? "").trim();
 
   if (!isUuid(occasionId)) {
@@ -553,8 +560,11 @@ export async function deleteOccasion(
   previous: OccasionSimpleState,
   formData: FormData,
 ): Promise<OccasionSimpleState> {
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
   const attempt = nextAttempt(previous);
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { attempt, error: quotaError };
   const occasionId = String(formData.get("occasion_id") ?? "").trim();
 
   if (!isUuid(occasionId)) {
@@ -632,8 +642,11 @@ export async function setOccasionVisibility(
   previous: OccasionSimpleState,
   formData: FormData,
 ): Promise<OccasionSimpleState> {
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
   const attempt = nextAttempt(previous);
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { attempt, error: quotaError };
   const occasionId = String(formData.get("occasion_id") ?? "").trim();
   const nextState = String(formData.get("next_state") ?? "");
 
@@ -684,8 +697,11 @@ export async function moveOccasion(
   previous: OccasionSimpleState,
   formData: FormData,
 ): Promise<OccasionSimpleState> {
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
   const attempt = nextAttempt(previous);
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { attempt, error: quotaError };
   const occasionId = String(formData.get("occasion_id") ?? "").trim();
   const direction = String(formData.get("direction") ?? "") as MoveDirection;
 
@@ -892,8 +908,11 @@ export async function saveOccasionProducts(
   previous: OccasionProductsState,
   formData: FormData,
 ): Promise<OccasionProductsState> {
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
   const attempt = nextAttempt(previous);
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { attempt, error: quotaError };
   const occasionId = String(formData.get("occasion_id") ?? "").trim();
 
   if (!isUuid(occasionId)) {
@@ -934,8 +953,11 @@ export async function saveOccasionMatchingRules(
   previous: OccasionMatchingRulesState,
   formData: FormData,
 ): Promise<OccasionMatchingRulesState> {
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
   const attempt = nextAttempt(previous);
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { attempt, error: quotaError };
   const occasionId = String(formData.get("occasion_id") ?? "").trim();
 
   if (!isUuid(occasionId)) {

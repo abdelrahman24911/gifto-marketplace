@@ -67,6 +67,28 @@ export function CategoryGridSkeleton({ count = 6 }: { count?: number }) {
   );
 }
 
+export function GiftFinderSkeleton() {
+  return (
+    <div className="grid gap-8 rounded-[2rem] border border-line bg-paper-soft p-6 lg:grid-cols-[0.9fr_1.1fr] lg:p-10">
+      <div>
+        <Skeleton className="h-3 w-24" />
+        <Skeleton className="mt-4 h-10 w-4/5" />
+        <Skeleton className="mt-3 h-4 w-full" />
+        <Skeleton className="mt-2 h-4 w-3/4" />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div key={index} className="flex flex-col gap-2">
+            <Skeleton className="h-3 w-20" />
+            <Skeleton className="h-11 w-full rounded-xl" />
+          </div>
+        ))}
+        <Skeleton className="h-11 w-full rounded-full sm:col-span-3" />
+      </div>
+    </div>
+  );
+}
+
 export function OccasionGridSkeleton({ count = 6 }: { count?: number }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { createClient } from "@/lib/supabase/client";
+import { useToast } from "@/components/toast-provider";
 
 const inputClass =
   "w-full rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900";
@@ -13,6 +14,7 @@ type Status = "loading" | "ready" | "invalid";
 
 export function AcceptInviteForm() {
   const router = useRouter();
+  const { flash } = useToast();
   const [status, setStatus] = useState<Status>("loading");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -121,6 +123,9 @@ export function AcceptInviteForm() {
         return;
       }
 
+      // R-08: setting the password ends in a navigation to /account,
+      // so the confirmation is flashed — the path that survives it.
+      flash("Your password is set — welcome to Gifto.", "success");
       router.replace("/account");
       router.refresh();
     } catch {

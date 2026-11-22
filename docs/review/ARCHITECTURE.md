@@ -1,3 +1,5 @@
+> **HISTORICAL — 2026-11-20 (P0-08).** Dated snapshot of a past verification (see the date in the file). Its numbers and hosted-state claims were true when written and are not current. Current state: `README.md`, `docs/HOSTED_STATE.md` (single hosted-state table), `docs/DECISIONS.md`. Kept as a record; its findings were not edited.
+
 # Gifto — Architecture (as implemented today)
 
 Review date: 2026-11-09. Read-only review: nothing outside `docs/review/` was modified.
@@ -141,7 +143,9 @@ Service-role key is read only from `process.env.SUPABASE_SERVICE_ROLE_KEY` (not 
 View: `public_vendors` (active shops only; public-safe columns). Detail on RLS, RPCs, triggers and indexes is in `PRODUCTION_READINESS.md` (Phase 2).
 
 ### Key functions / triggers
-RPCs: `place_order`, `place_order_with_idempotency`, `place_guest_order` (service-role only), `get_guest_order`, `cancel_order`, `adjust_product_stock`, `create_settlement`, `mark_settlement_paid`, void RPC, `create_vendor_for_owner` (service-role only), `consume_checkout_quota`. Triggers: `order_vendors_assert_transition` (state machine), `order_vendors_restock_on_cancel`, `order_vendors_sync_parent`, commission record/reverse on delivered/returned, `profiles_protect_platform_admin`, `vendors_guard_finance_fields`, `vendor_members_guard_last_owner`, `*_set_updated_at`.
+RPCs: `place_order`, `place_order_with_idempotency`, `place_guest_order` (service-role only), `get_guest_order`, `cancel_order`, `adjust_product_stock`, `create_settlement`, `mark_settlement_paid`, void RPC, `create_vendor_for_owner` (service-role only), `consume_checkout_quota`. Triggers: `order_vendors_assert_transition` (state machine), `order_vendors_restock_on_cancel`, `order_vendors_parent_sync` (renamed from
+`order_vendors_sync_parent` in migration 31, P0-04, so it fires before the
+audit trigger — see the migration comment), commission record/reverse on delivered/returned, `profiles_protect_platform_admin`, `vendors_guard_finance_fields`, `vendor_members_guard_last_owner`, `*_set_updated_at`.
 
 ### ER diagram
 ```mermaid

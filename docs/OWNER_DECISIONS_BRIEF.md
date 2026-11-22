@@ -1,3 +1,6 @@
+> **SUPERSEDED — 2026-11-20 (P0-08).** This file describes the pre-Phase-2 system (before migrations 28–32). Its claims about refunds, the order audit trail, delivery coverage, the admin order detail page, legal pages, SEO, tags, and settlements no longer describe the current system. Current state: `README.md` (features and counts), `docs/HOSTED_STATE.md` (hosted state — the single source), `docs/DECISIONS.md` (owner decisions). Kept as a dated record; its findings were not edited.
+
+> **P0-08 note (2026-11-20):** the three decisions this brief asked about (D-06 remainder, D-07, D-08 remainder, plus D-09) were decided by the owner 2026-11-20 and recorded in `docs/DECISIONS.md`. Nothing in this brief is a decision.
 # Gifto Marketplace — Owner Decisions Brief
 
 **Date:** 2026-10-19  

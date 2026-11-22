@@ -8,11 +8,11 @@ How the Gifto demo catalog is deployed, inspected, edited, re-seeded, and remove
 | --- | --- |
 | Supabase project ref | `hqusykdyjpruysxezsrn` (`gifto`, `eu-central-1`) |
 | Remote migrations applied | `00000000000001` – `00000000000013` |
-| Demo vendors | 5 (4 `active`, 1 `pending`) |
-| Demo products | 24 (all `active`, all `is_demo = true`) |
+| Demo vendors | 6 (5 `active`, 1 `pending`) |
+| Demo products | 36 (all `active`, all `is_demo = true`) |
 | Platform categories | 8 (shared, not demo-only) |
-| Demo owner accounts | 5 (`@demo.gifto.example`) |
-| Product images | 24 generated PNGs in the public `product-images` bucket |
+| Demo owner accounts | 6 (`@demo.gifto.example`) |
+| Product images | 36 generated PNGs in the public `product-images` bucket |
 | Demo orders | none (intentional — see Limitations) |
 
 Everything seeded by this workflow is tagged with `is_demo = true` on `vendors`
@@ -23,10 +23,11 @@ admin tooling and cleanup can identify seeded rows safely.
 
 | Vendor | Slug | City | Status | Commission | Products |
 | --- | --- | --- | --- | --- | --- |
-| Nile Blossoms | `nile-blossoms` | Alexandria | active | 12% | 6 |
-| Cairo Cocoa & Confections | `cairo-cocoa` | Cairo | active | 15% | 6 |
-| Legacy Engraving Studio | `legacy-engraving` | Luxor | active | 10% | 6 |
+| Nile Blossoms | `nile-blossoms` | Alexandria | active | 12% | 8 |
+| Cairo Cocoa & Confections | `cairo-cocoa` | Cairo | active | 15% | 9 |
+| Legacy Engraving Studio | `legacy-engraving` | Luxor | active | 10% | 9 |
 | Alexandria Toy Corner | `alex-toy-corner` | Alexandria | active | 12% | 6 |
+| Alexandria Gift Atelier | `alex-gift-atelier` | Alexandria | active | 12% | 4 |
 | Delta Dried Flowers | `delta-dried-flowers` | Damietta | pending | 10% | 0 |
 
 - Prices are stored in **piastres** (`price_minor = EGP × 100`); seeded prices
@@ -34,6 +35,9 @@ admin tooling and cleanup can identify seeded rows safely.
 - Stock ranges from 8 to 50 units per product.
 - `delta-dried-flowers` is deliberately submitted as `pending` with no products
   so the platform-admin vendor review queue has a realistic item to action.
+- `alex-gift-atelier` (Alexandria Gift Atelier) is a local Alexandria gift-box
+  shop added to give the demo a neighbourhood atelier: ready-made gift boxes
+  for birthdays, weddings and Ramadan, plus an engraved keepsake.
 - The eight categories come from `supabase/seed.sql` and are shared platform
   data, not demo-flagged. Cleanup never removes them.
 - Each product has one generated 800×800 gradient placeholder at
@@ -49,6 +53,7 @@ real mail can ever be delivered:
 - `cairo-cocoa@demo.gifto.example`
 - `legacy-engraving@demo.gifto.example`
 - `alex-toy-corner@demo.gifto.example`
+- `alex-gift-atelier@demo.gifto.example`
 - `delta-dried-flowers@demo.gifto.example`
 
 ### Getting a password
@@ -68,7 +73,7 @@ script again — the old passwords stop working immediately.
 
 ## Where to look in the app
 
-- `/shops` — storefront directory; shows the 4 `active` demo vendors.
+- `/shops` — storefront directory; shows the 5 `active` demo vendors.
 - `/admin` — vendor approval queue; `Delta Dried Flowers` appears as `pending`.
 - `/vendor` — vendor dashboard for the signed-in owner (products, images,
   inventory). This is the supported path for editing demo products; the admin
@@ -131,7 +136,7 @@ select
      where bucket_id = 'product-images')                                   as stored_images;
 ```
 
-Expected: `8, 5, 4, 1, 24, 0, 0, 24, 5, 24`.
+Expected: `8, 6, 5, 1, 36, 0, 0, 36, 6, 36`.
 
 Public visibility check (anon key, no service role):
 
@@ -139,7 +144,7 @@ Public visibility check (anon key, no service role):
 curl "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/public_vendors?select=slug"
 ```
 
-Expected: the four active slugs only — `delta-dried-flowers` must not appear.
+Expected: the five active slugs only — `delta-dried-flowers` must not appear.
 
 Image check: open any public URL of the form
 `{SUPABASE_URL}/storage/v1/object/public/product-images/{vendor_id}/{product_id}/hero-1.png`.
@@ -201,7 +206,7 @@ Environment variables used by the scripts (names only — values live in
   happened. Create orders through the real checkout flow if you need them.
 - **Placeholder art.** The gradient PNGs are generated locally (no external
   fetches) and are meant to be replaced with real photography.
-- **Five owner accounts, not four.** The pending vendor needs an owner to be
+- **Six owner accounts, not five.** The pending vendor needs an owner to be
   reviewable and editable after approval; this is the only deviation from the
   originally discussed four.
 - **`.example` addresses cannot receive mail.** Password reset emails will not

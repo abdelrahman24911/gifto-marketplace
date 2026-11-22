@@ -6,10 +6,12 @@ import {
   ADMIN_ANALYTICS_RANGES,
   adminAnalyticsWindowStart,
   computeAdminMarketplaceMetrics,
+  computeAdminProductPerformance,
   computeAdminShopPerformance,
   parseAdminAnalyticsRange,
 } from "@/lib/admin-metrics";
 import { requirePlatformAdmin } from "@/lib/auth";
+import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { formatEgp } from "@/lib/money";
 import { ORDER_STATUS_LABELS } from "@/lib/orders";
@@ -26,6 +28,7 @@ import type {
   AdminAnalyticsRange,
   AdminCommissionRecord,
   AdminOrderRecord,
+  AdminProductLineRecord,
   AdminShopLineRecord,
 } from "@/lib/admin-metrics";
 import type { OrderStatus } from "@/lib/supabase/database.types";
@@ -39,6 +42,20 @@ type ShopLineQueryRow = {
   subtotal_minor: number;
   created_at: string;
   vendor: { name: string } | null;
+};
+
+type DeliveredItemsQueryRow = {
+  id: string;
+  delivered_at: string | null;
+  order_items:
+    | Array<{
+        id: string;
+        product_id: string | null;
+        product_name: string;
+        quantity: number;
+        line_total_minor: number;
+      }>
+    | null;
 };
 
 const STATUS_ORDER: OrderStatus[] = [
@@ -63,9 +80,9 @@ function formatWindow(start: string, end: string) {
     day: "numeric",
     month: "short",
     year: "numeric",
-    timeZone: "UTC",
+    timeZone: BUSINESS_TIME_ZONE,
   });
-  return `${formatter.format(new Date(start))} – ${formatter.format(new Date(end))} (UTC)`;
+  return `${formatter.format(new Date(start))} – ${formatter.format(new Date(end))} (Cairo)`;
 }
 
 function formatPercent(value: number, total: number) {
@@ -84,7 +101,8 @@ export default async function AdminAnalyticsPage({
   const ninetyDayStart = adminAnalyticsWindowStart("90d", now);
   const { supabase } = await requirePlatformAdmin();
 
-  const [ordersResult, commissionsResult, linesResult] = await Promise.all([
+  const [ordersResult, commissionsResult, linesResult, deliveredItemsResult] =
+    await Promise.all([
     fetchAllRows<AdminOrderRecord>((from, to) =>
       supabase
         .from("orders")
@@ -119,6 +137,19 @@ export default async function AdminAnalyticsPage({
         .range(from, to)
         .returns<ShopLineQueryRow[]>(),
     ),
+    fetchAllRows<DeliveredItemsQueryRow>((from, to) =>
+      supabase
+        .from("order_vendors")
+        .select(
+          "id, delivered_at, order_items(id, product_id, product_name, quantity, line_total_minor)",
+        )
+        .eq("status", "delivered")
+        .gte("delivered_at", ninetyDayStart.toISOString())
+        .order("delivered_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to)
+        .returns<DeliveredItemsQueryRow[]>(),
+    ),
   ]);
 
   const metrics = computeAdminMarketplaceMetrics(
@@ -137,11 +168,34 @@ export default async function AdminAnalyticsPage({
   }));
   const shops = computeAdminShopPerformance(shopLines, range, now).slice(0, 8);
 
+  const deliveredProductLines: AdminProductLineRecord[] =
+    deliveredItemsResult.rows.flatMap((suborder) => {
+      if (!suborder.delivered_at) return [];
+      return (suborder.order_items ?? []).map((item) => ({
+        id: item.id,
+        order_vendor_id: suborder.id,
+        product_id: item.product_id,
+        product_name: item.product_name,
+        quantity: item.quantity,
+        line_total_minor: item.line_total_minor,
+        delivered_at: suborder.delivered_at!,
+      }));
+    });
+  const products = computeAdminProductPerformance(
+    deliveredProductLines,
+    range,
+    now,
+  ).slice(0, 8);
+
   const ordersFailed = ordersResult.failed;
   const commissionsFailed = commissionsResult.failed;
   const linesFailed = linesResult.failed;
+  const productsFailed = deliveredItemsResult.failed;
   const readsIncomplete =
-    ordersResult.truncated || commissionsResult.truncated || linesResult.truncated;
+    ordersResult.truncated ||
+    commissionsResult.truncated ||
+    linesResult.truncated ||
+    deliveredItemsResult.truncated;
   const maxShopGross = Math.max(1, ...shops.map((shop) => shop.grossMinor));
 
   return (
@@ -183,7 +237,11 @@ export default async function AdminAnalyticsPage({
         </p>
       </div>
 
-      {ordersFailed || commissionsFailed || linesFailed || readsIncomplete ? (
+      {ordersFailed ||
+      commissionsFailed ||
+      linesFailed ||
+      productsFailed ||
+      readsIncomplete ? (
         <div className="mt-4">
           <AdminNotice tone="warning" role="alert">
             Part of the analytics read did not complete. Figures marked below
@@ -233,7 +291,7 @@ export default async function AdminAnalyticsPage({
           including every order status and excluding delivery fees. Commission
           is the snapshotted amount earned when a suborder is delivered, grouped
           by its earned date; reversed entries are excluded. The selected range
-          starts at midnight UTC.
+          starts at midnight Cairo business time.
         </AdminNotice>
       </div>
 
@@ -452,6 +510,71 @@ export default async function AdminAnalyticsPage({
               </li>
             ))}
           </ol>
+        )}
+      </section>
+
+      <section className="mt-8">
+        <div>
+          <h2 className="font-display text-2xl text-ink">Product performance</h2>
+          <p className="mt-1 text-xs text-ink-mute">
+            Delivered item value in this period · top eight products
+          </p>
+        </div>
+
+        {productsFailed ? (
+          <div className="mt-4">
+            <AdminNotice tone="danger" role="alert">
+              Delivered product data could not be loaded.
+            </AdminNotice>
+          </div>
+        ) : products.length === 0 ? (
+          <div className="mt-4">
+            <EmptyState title="No delivered products">
+              Product rankings appear once suborders are delivered in this
+              period.
+            </EmptyState>
+          </div>
+        ) : (
+          <div className="mt-4 overflow-x-auto rounded-2xl border border-line bg-paper-soft">
+            <table className="w-full min-w-[34rem] text-left text-sm">
+              <thead>
+                <tr className="border-b border-line text-xs uppercase tracking-wide text-ink-mute">
+                  <th scope="col" className="px-5 py-3 font-medium">
+                    Product
+                  </th>
+                  <th scope="col" className="px-3 py-3 text-right font-medium">
+                    Units
+                  </th>
+                  <th scope="col" className="px-3 py-3 text-right font-medium">
+                    Orders
+                  </th>
+                  <th scope="col" className="px-5 py-3 text-right font-medium">
+                    Delivered value
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {products.map((product) => (
+                  <tr key={product.key}>
+                    <td className="max-w-[18rem] px-5 py-3">
+                      <p className="truncate font-medium text-ink">
+                        {product.name}
+                      </p>
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums text-ink-soft">
+                      {product.units}
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums text-ink-soft">
+                      {product.orderCount}
+                    </td>
+                    <td className="px-5 py-3 text-right font-medium tabular-nums text-ink">
+                      {formatEgp(product.revenueMinor)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
     </div>

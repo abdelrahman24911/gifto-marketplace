@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 
 import { requirePlatformAdmin } from "@/lib/auth";
+import { checkMutationQuota } from "@/lib/rate-limit";
+import { notifySupportRequestStatusChanged } from "@/lib/mail";
 import { isSupportStatus } from "@/lib/support-requests";
 
 import type { SupportRequestStatus } from "@/lib/supabase/database.types";
@@ -34,7 +36,10 @@ export async function updateSupportRequestStatus(
     return { error: "Choose a valid support status.", attempt };
   }
 
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { error: quotaError, attempt };
   const { data, error } = await supabase
     .from("support_requests")
     .update({ status })
@@ -57,6 +62,10 @@ export async function updateSupportRequestStatus(
 
   revalidatePath("/admin/support");
   revalidatePath("/vendor/support");
+
+  // P1-01: vendor status email. A failed send never rolls the update back.
+  await notifySupportRequestStatusChanged(id, status);
+
   return {
     success: "Support status updated.",
     status,

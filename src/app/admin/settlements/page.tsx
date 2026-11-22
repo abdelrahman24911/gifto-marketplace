@@ -1,16 +1,26 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
+import { Pagination } from "@/components/pagination";
 import { Breadcrumb, EmptyState } from "@/components/ui/section";
 import { requirePlatformAdmin } from "@/lib/auth";
+import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
 import { fetchAllRows } from "@/lib/fetch-all";
 import {
   buildSettlementLineLookup,
+  clawbackRemainingMinor,
   commissionEntriesById,
   settlementTotalsResult,
   totalsForEntries,
   totalsForFinanceState,
 } from "@/lib/finance";
 import { formatEgp } from "@/lib/money";
+import {
+  DEFAULT_PAGE_SIZE,
+  clampPage,
+  pageWindow,
+  parsePage,
+} from "@/lib/pagination";
 
 import {
   AdminActionLink,
@@ -20,6 +30,7 @@ import {
   AdminStatStrip,
 } from "../ui";
 import { CreateSettlementForm } from "./settlement-create-form";
+import { ClawbackRepaymentForm } from "./clawback-repayment-form";
 
 import type {
   CommissionEntryRecord,
@@ -38,6 +49,24 @@ type VendorQueryRow = {
   slug: string;
 };
 
+type OutstandingClawbackRow = {
+  id: string;
+  refund_case_id: string;
+  vendor_id: string;
+  amount_minor: number;
+  status: string;
+  created_at: string;
+  vendor: { name: string; slug: string } | null;
+  clawback_applications: { amount_minor: number }[];
+};
+
+type ClawbackCaseRow = {
+  id: string;
+  order_vendor: {
+    order: { public_reference: string | null } | null;
+  } | null;
+};
+
 type ActorRow = {
   id: string;
   full_name: string | null;
@@ -51,6 +80,7 @@ function formatDate(value: string) {
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: BUSINESS_TIME_ZONE,
   });
 }
 
@@ -63,55 +93,93 @@ function actorLabel(
   return actor?.full_name || actor?.email || "Removed administrator";
 }
 
-export default async function AdminSettlementsPage() {
-  const { supabase } = await requirePlatformAdmin();
+function settlementsHref({
+  paidPage = 1,
+  voidedPage = 1,
+}: {
+  paidPage?: number;
+  voidedPage?: number;
+}) {
+  const params = new URLSearchParams();
+  if (paidPage > 1) params.set("paidPage", String(paidPage));
+  if (voidedPage > 1) params.set("voidedPage", String(voidedPage));
+  const search = params.toString();
+  return search ? `/admin/settlements?${search}` : "/admin/settlements";
+}
 
-  const [
-    settlementsResult,
-    entriesResult,
-    { data: vendorData, error: vendorsError },
-  ] = await Promise.all([
-    fetchAllRows<SettlementQueryRow>((from, to) =>
-      supabase
-        .from("settlements")
-        .select(
-          "id, vendor_id, status, total_minor, note, created_at, paid_at, created_by, paid_by, voided_at, voided_by, void_reason, vendor:vendors(name, slug), settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
-        )
-        .order("created_at", { ascending: false })
-        .order("id", { ascending: false })
-        .range(from, to)
-        .returns<SettlementQueryRow[]>(),
-    ),
-    fetchAllRows<CommissionEntryRecord>((from, to) =>
-      supabase
-        .from("commission_entries")
-        .select(
-          "id, vendor_id, status, rate, base_minor, amount_minor, earned_at, reversed_at",
-        )
-        .order("earned_at", { ascending: false })
-        .order("id", { ascending: false })
-        .range(from, to)
-        .returns<CommissionEntryRecord[]>(),
-    ),
-    supabase
-      .from("vendors")
-      .select("id, name, slug")
-      .eq("status", "active")
-      .order("name", { ascending: true }),
-  ]);
+export default async function AdminSettlementsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ paidPage?: string; voidedPage?: string }>;
+}) {
+  const params = await searchParams;
+  const { supabase } = await requirePlatformAdmin();
+  const requestedPaidPage = parsePage(params.paidPage);
+  const requestedVoidedPage = parsePage(params.voidedPage);
+
+  const [settlementsResult, entriesResult, vendorsResult, clawbacksResult] =
+    await Promise.all([
+      fetchAllRows<SettlementQueryRow>((from, to) =>
+        supabase
+          .from("settlements")
+          .select(
+            "id, vendor_id, status, total_minor, clawback_minor, note, created_at, paid_at, created_by, paid_by, voided_at, voided_by, void_reason, paid_amount_minor, transfer_method, transfer_reference, proof_note, vendor:vendors(name, slug), settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
+          )
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, to)
+          .returns<SettlementQueryRow[]>(),
+      ),
+      fetchAllRows<CommissionEntryRecord>((from, to) =>
+        supabase
+          .from("commission_entries")
+          .select(
+            "id, vendor_id, status, rate, base_minor, amount_minor, earned_at, reversed_at",
+          )
+          .order("earned_at", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, to)
+          .returns<CommissionEntryRecord[]>(),
+      ),
+      fetchAllRows<VendorQueryRow>((from, to) =>
+        supabase
+          .from("vendors")
+          .select("id, name, slug")
+          .eq("status", "active")
+          .order("name", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to)
+          .returns<VendorQueryRow[]>(),
+      ),
+      // R-02 (D-08, N-01): outstanding paid-return clawbacks — the
+      // direct-repayment fallback needs a caller on this page.
+      fetchAllRows<OutstandingClawbackRow>((from, to) =>
+        supabase
+          .from("commission_clawbacks")
+          .select(
+            "id, refund_case_id, vendor_id, amount_minor, status, created_at, vendor:vendors(name, slug), clawback_applications(amount_minor)",
+          )
+          .eq("status", "outstanding")
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to)
+          .returns<OutstandingClawbackRow[]>(),
+      ),
+    ]);
 
   const settlements = settlementsResult.rows;
   const settlementsById = new Map(
     settlements.map((settlement) => [settlement.id, settlement]),
   );
   const entries = entriesResult.rows;
-  const vendors = (vendorData ?? []) as VendorQueryRow[];
+  const vendors = vendorsResult.rows;
 
   const records: SettlementRecord[] = settlements.map((settlement) => ({
     id: settlement.id,
     vendor_id: settlement.vendor_id,
     status: settlement.status,
     total_minor: settlement.total_minor,
+    clawback_minor: settlement.clawback_minor,
     note: settlement.note,
     created_at: settlement.created_at,
     paid_at: settlement.paid_at,
@@ -120,6 +188,10 @@ export default async function AdminSettlementsPage() {
     voided_at: settlement.voided_at,
     voided_by: settlement.voided_by,
     void_reason: settlement.void_reason,
+    paid_amount_minor: settlement.paid_amount_minor,
+    transfer_method: settlement.transfer_method,
+    transfer_reference: settlement.transfer_reference,
+    proof_note: settlement.proof_note,
     settlement_lines: settlement.settlement_lines ?? [],
   }));
 
@@ -147,9 +219,58 @@ export default async function AdminSettlementsPage() {
   const openSettlements = records.filter(
     (record) => record.status === "open" && !record.voided_at,
   );
+
+  // R-02 (D-08, N-01): outstanding paid-return clawbacks, with what each
+  // vendor still owes after any partial applications. A clawback that was
+  // fully applied is consumed, so an outstanding one always has a
+  // positive remainder; the filter guards a stale row either way.
+  const outstandingClawbacks = clawbacksResult.rows
+    .map((clawback) => ({
+      ...clawback,
+      clawback_applications: clawback.clawback_applications ?? [],
+      remainingMinor: clawbackRemainingMinor(
+        clawback,
+        clawback.clawback_applications ?? [],
+      ),
+    }))
+    .filter((clawback) => clawback.remainingMinor > 0);
+
+  const clawbackCaseIds = Array.from(
+    new Set(
+      outstandingClawbacks.map((clawback) => clawback.refund_case_id),
+    ),
+  );
+  const { data: clawbackCaseData } = clawbackCaseIds.length
+    ? await supabase
+        .from("refund_cases")
+        .select(
+          "id, order_vendor:order_vendors(order:orders(public_reference))",
+        )
+        .in("id", clawbackCaseIds)
+    : { data: [] };
+  const clawbackCases = new Map(
+    ((clawbackCaseData ?? []) as unknown as ClawbackCaseRow[]).map(
+      (refundCase) => [refundCase.id, refundCase],
+    ),
+  );
+  const clawbacksFailed =
+    clawbacksResult.failed || clawbacksResult.truncated;
   const paidSettlements = records.filter((record) => record.status === "paid");
   const voidedSettlements = records.filter(
     (record) => record.status === "voided" || record.voided_at,
+  );
+
+  const paidPage = clampPage(requestedPaidPage, paidSettlements.length);
+  const voidedPage = clampPage(requestedVoidedPage, voidedSettlements.length);
+  const paidWindow = pageWindow(paidPage);
+  const voidedWindow = pageWindow(voidedPage);
+  const visiblePaid = paidSettlements.slice(
+    paidWindow.from,
+    paidWindow.to + 1,
+  );
+  const visibleVoided = voidedSettlements.slice(
+    voidedWindow.from,
+    voidedWindow.to + 1,
   );
 
   const actorIds = Array.from(
@@ -174,14 +295,30 @@ export default async function AdminSettlementsPage() {
     ((actorData ?? []) as ActorRow[]).map((actor) => [actor.id, actor]),
   );
 
-  const loadError =
-    settlementsResult.failed || entriesResult.failed || vendorsError;
+  const settlementsFailed = settlementsResult.failed;
+  const entriesFailed = entriesResult.failed;
+  const vendorsFailed = vendorsResult.failed;
+  const financeStateAvailable =
+    !settlementsResult.failed &&
+    !settlementsResult.truncated &&
+    !entriesResult.failed &&
+    !entriesResult.truncated;
+  const vendorsIncomplete = vendorsResult.failed || vendorsResult.truncated;
   const totalsIncomplete =
     settlementsResult.truncated || entriesResult.truncated;
   const entryRead = {
     failed: entriesResult.failed,
     truncated: entriesResult.truncated,
   };
+
+  if (
+    !settlementsFailed &&
+    (requestedPaidPage !== paidPage || requestedVoidedPage !== voidedPage)
+  ) {
+    redirect(
+      settlementsHref({ paidPage, voidedPage }),
+    );
+  }
 
   return (
     <div className="w-full">
@@ -205,10 +342,22 @@ export default async function AdminSettlementsPage() {
         />
       </div>
 
-      {loadError ? (
+      {settlementsFailed || entriesFailed ? (
         <div className="mt-4">
           <AdminNotice tone="danger" role="alert">
-            Settlement data could not be loaded. Refresh the page to try again.
+            {settlementsFailed
+              ? "Settlement and commission state could not be loaded. Refresh the page to try again."
+              : "Commission entries could not be loaded, so settlement balances are unavailable. Refresh the page to try again."}
+          </AdminNotice>
+        </div>
+      ) : null}
+
+      {!settlementsFailed && !entriesFailed && vendorsFailed ? (
+        <div className="mt-4">
+          <AdminNotice tone="warning" role="alert">
+            The shop list could not be loaded. Existing settlements remain
+            visible, but opening a new one is unavailable until the shop list
+            loads.
           </AdminNotice>
         </div>
       ) : null}
@@ -216,9 +365,18 @@ export default async function AdminSettlementsPage() {
       {totalsIncomplete ? (
         <div className="mt-4">
           <AdminNotice tone="warning" role="status">
-            This shop network has more settlement history than can be summed in
-            one page. The balances below are incomplete; use individual shop
+            This shop network has more settlement history than can be summed
+            reliably. The balances below are incomplete; use individual shop
             finance pages for exact statements.
+          </AdminNotice>
+        </div>
+      ) : null}
+
+      {vendorsResult.truncated ? (
+        <div className="mt-4">
+          <AdminNotice tone="warning" role="status">
+            The active shop list is larger than the current read, so the
+            settlement form may omit shops.
           </AdminNotice>
         </div>
       ) : null}
@@ -228,26 +386,45 @@ export default async function AdminSettlementsPage() {
           items={[
             {
               label: "Unsettled commission",
-              value: formatEgp(unsettled.commissionMinor),
-              hint: `${unsettled.count} suborders · ${formatEgp(unsettled.netMinor)} shop net`,
-              emphasis: unsettled.count > 0 ? "warning" : "default",
+              value: financeStateAvailable
+                ? formatEgp(unsettled.commissionMinor)
+                : "—",
+              hint: financeStateAvailable
+                ? `${unsettled.count} suborders · ${formatEgp(unsettled.netMinor)} shop net`
+                : "Unavailable until the ledger reads in full",
+              emphasis:
+                financeStateAvailable && unsettled.count > 0
+                  ? "warning"
+                  : "default",
             },
             {
               label: "In open batches",
-              value: formatEgp(inOpenBatches.commissionMinor),
-              hint: `${inOpenBatches.count} suborders · awaiting payout`,
+              value: financeStateAvailable
+                ? formatEgp(inOpenBatches.commissionMinor)
+                : "—",
+              hint: financeStateAvailable
+                ? `${inOpenBatches.count} suborders · awaiting payout`
+                : "Unavailable until the ledger reads in full",
               emphasis: "accent",
             },
             {
               label: "Paid to date",
-              value: formatEgp(paid.commissionMinor),
-              hint: `${paid.count} suborders · ${formatEgp(paid.netMinor)} shop net`,
+              value: financeStateAvailable
+                ? formatEgp(paid.commissionMinor)
+                : "—",
+              hint: financeStateAvailable
+                ? `${paid.count} suborders · ${formatEgp(paid.netMinor)} shop net`
+                : "Unavailable until the ledger reads in full",
               emphasis: "positive",
             },
             {
               label: "Earned lifetime",
-              value: formatEgp(earnedLifetime.commissionMinor),
-              hint: `${reversed.count} reversed · ${formatEgp(reversed.commissionMinor)} excluded`,
+              value: financeStateAvailable
+                ? formatEgp(earnedLifetime.commissionMinor)
+                : "—",
+              hint: financeStateAvailable
+                ? `${reversed.count} reversed · ${formatEgp(reversed.commissionMinor)} excluded`
+                : "Unavailable until the ledger reads in full",
             },
           ]}
         />
@@ -259,11 +436,71 @@ export default async function AdminSettlementsPage() {
           description="Available commission is snapshotted into a new batch. A shop can have only one open settlement at a time."
         />
         <div className="mt-4">
-          <CreateSettlementForm vendors={activeVendors} />
+          {financeStateAvailable && !vendorsIncomplete ? (
+            <CreateSettlementForm vendors={activeVendors} />
+          ) : (
+            <AdminNotice tone="warning" role="status">
+              {!financeStateAvailable
+                ? "Opening a settlement is unavailable until commission and settlement history can be read in full."
+                : "Opening a settlement is unavailable until the active shop list loads completely."}
+            </AdminNotice>
+          )}
         </div>
       </section>
 
-      <section className="mt-8">
+      {clawbacksFailed || outstandingClawbacks.length > 0 ? (
+        <section className="mt-8 rounded-2xl border border-line bg-paper-soft p-5">
+          <AdminSectionHeading
+            title={`Outstanding paid-return clawbacks (${outstandingClawbacks.length})`}
+            description="Commission Gifto already paid out that a shop owes back after a paid return (D-08). A clawback is netted against the shop's next settlement automatically; when a shop has no new commission to settle, record the direct repayment here instead — the shop repays Gifto directly and the reference is the proof. A clawback already being recovered through an open settlement cannot be repaid directly until that settlement is paid or voided."
+          />
+          {clawbacksFailed ? (
+            <div className="mt-4">
+              <AdminNotice tone="warning" role="alert">
+                Outstanding clawbacks could not be loaded in full. Refresh
+                the page to try again.
+              </AdminNotice>
+            </div>
+          ) : null}
+          {outstandingClawbacks.length === 0 ? null : (
+            <ul className="mt-4 flex flex-col gap-4">
+              {outstandingClawbacks.map((clawback) => {
+                const refundCase = clawbackCases.get(
+                  clawback.refund_case_id,
+                );
+                const orderReference =
+                  refundCase?.order_vendor?.order?.public_reference;
+                return (
+                  <li
+                    key={clawback.id}
+                    className="rounded-2xl border border-line-strong bg-paper p-5"
+                  >
+                    <div>
+                      <p className="text-lg font-medium text-ink">
+                        {clawback.vendor?.name ?? "Unknown shop"} —{" "}
+                        {formatEgp(clawback.remainingMinor)} owed
+                      </p>
+                      <p className="mt-1 text-xs text-ink-mute">
+                        Opened {formatDate(clawback.created_at)}
+                        {orderReference
+                          ? ` · Refund case for order ${orderReference}`
+                          : ""}
+                      </p>
+                    </div>
+                    <ClawbackRepaymentForm
+                      clawbackId={clawback.id}
+                      remainingMinor={clawback.remainingMinor}
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      ) : null}
+
+      {!settlementsFailed ? (
+        <section className="mt-8">
         <AdminSectionHeading
           title={`Open settlements (${openSettlements.length})`}
           description="Batches waiting for an external payout"
@@ -363,9 +600,11 @@ export default async function AdminSettlementsPage() {
             })}
           </ul>
         )}
-      </section>
+        </section>
+      ) : null}
 
-      <section className="mt-8">
+      {!settlementsFailed ? (
+        <section className="mt-8">
         <AdminSectionHeading
           title={`Payment history (${paidSettlements.length})`}
           description="Batches already paid out"
@@ -378,7 +617,7 @@ export default async function AdminSettlementsPage() {
           </div>
         ) : (
           <ul className="mt-4 overflow-hidden rounded-2xl border border-line bg-paper-soft">
-            {paidSettlements.map((settlement) => {
+            {visiblePaid.map((settlement) => {
               const row = settlementsById.get(settlement.id);
               const totalsResult = settlementTotalsResult(
                 settlement,
@@ -401,6 +640,9 @@ export default async function AdminSettlementsPage() {
                         ? formatDate(settlement.paid_at)
                         : "date not recorded"}{" "}
                       by {actorLabel(row?.paid_by ?? null, actors)}
+                      {settlement.transfer_reference
+                        ? ` · reference ${settlement.transfer_reference}`
+                        : ""}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-4 text-sm">
@@ -430,16 +672,26 @@ export default async function AdminSettlementsPage() {
             })}
           </ul>
         )}
-      </section>
+        <Pagination
+          page={paidPage}
+          total={paidSettlements.length}
+          pageSize={DEFAULT_PAGE_SIZE}
+          label="Paid settlement pages"
+          buildHref={(page) =>
+            settlementsHref({ paidPage: page, voidedPage })
+          }
+        />
+        </section>
+      ) : null}
 
-      {voidedSettlements.length > 0 ? (
+      {!settlementsFailed && voidedSettlements.length > 0 ? (
         <section className="mt-8">
           <AdminSectionHeading
             title={`Voided settlements (${voidedSettlements.length})`}
             description="Voiding releases entries for a new batch; the original batch and lines stay in the audit trail."
           />
           <ul className="mt-4 overflow-hidden rounded-2xl border border-line bg-paper-soft">
-            {voidedSettlements.map((settlement) => {
+            {visibleVoided.map((settlement) => {
               const row = settlementsById.get(settlement.id);
               const totalsResult = settlementTotalsResult(
                 settlement,
@@ -491,6 +743,15 @@ export default async function AdminSettlementsPage() {
               );
             })}
           </ul>
+          <Pagination
+            page={voidedPage}
+            total={voidedSettlements.length}
+            pageSize={DEFAULT_PAGE_SIZE}
+            label="Voided settlement pages"
+            buildHref={(page) =>
+              settlementsHref({ paidPage, voidedPage: page })
+            }
+          />
         </section>
       ) : null}
     </div>

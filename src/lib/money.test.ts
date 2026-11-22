@@ -23,6 +23,14 @@ describe("formatEgp", () => {
   it("keeps a leading minus for negative amounts", () => {
     expect(formatEgp(-17500)).toBe("-EGP 175.00");
   });
+
+  it("formats Arabic amounts with Arabic-Indic digits and ج.م.", () => {
+    // Intl separates the amount and the currency mark with a non-breaking
+    // space (U+00A0).
+    expect(formatEgp(17500, "ar")).toBe("١٧٥٫٠٠ ج.م.");
+    expect(formatEgp(0, "ar")).toBe("٠٫٠٠ ج.م.");
+    expect(formatEgp(123456789, "ar")).toBe("١٬٢٣٤٬٥٦٧٫٨٩ ج.م.");
+  });
 });
 
 describe("parseEgpToMinor", () => {
@@ -53,11 +61,26 @@ describe("parseEgpToMinor", () => {
     expect(parseEgpToMinor("1e3")).toBeNull();
   });
 
-  it("rejects ambiguous decimal-comma input", () => {
-    expect(parseEgpToMinor("250,50")).toBeNull();
-    expect(parseEgpToMinor("1,25")).toBeNull();
+  it("accepts an unambiguous decimal comma", () => {
+    // P1-10 (H-15): a single comma followed by 1-2 digits is a decimal
+    // comma in Arabic input; a group of three stays a thousands separator.
+    expect(parseEgpToMinor("250,50")).toBe(25050);
+    expect(parseEgpToMinor("1,25")).toBe(125);
+    expect(parseEgpToMinor("0,50")).toBe(50);
+    expect(parseEgpToMinor("1,250")).toBe(125000);
+  });
+
+  it("rejects mixed thousands and decimal commas", () => {
     expect(parseEgpToMinor("1,250,50")).toBeNull();
-    expect(parseEgpToMinor("0,50")).toBeNull();
+    expect(parseEgpToMinor("1,25,000")).toBeNull();
+  });
+
+  it("normalises Arabic-Indic digits and separators", () => {
+    expect(parseEgpToMinor("١٥٠")).toBe(15000);
+    expect(parseEgpToMinor("١٥٠٫٥٠")).toBe(15050);
+    expect(parseEgpToMinor("١٬٢٥٠٫٥٠")).toBe(125050);
+    expect(parseEgpToMinor("٩٩")).toBe(9900);
+    expect(parseEgpToMinor("ج.م. ٩٩")).toBe(9900);
   });
 
   it("accepts the maximum amount and rejects anything above it", () => {

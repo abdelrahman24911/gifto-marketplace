@@ -1,4 +1,8 @@
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
+
+// next-intl request config (locale + messages per request, P1-10).
+const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 // Optimized images may only come from this project's PUBLIC storage objects.
 // Derived from the environment (never hardcoded); no host is allowed if the
@@ -31,41 +35,35 @@ function supabaseImagePatterns(): NonNullable<
 }
 
 /**
- * Report-Only baseline CSP.
+ * Enforced Content-Security-Policy (P1-11, H-11).
  *
- * Remote sources are intentionally limited to the configured Supabase project
- * origin. The browser auth client needs it in `connect-src`; direct public
- * storage images need it in `img-src`. Fonts are self-hosted by next/font.
- * There are no analytics, ads, embeds, media, or other third-party origins.
+ * The policy itself is built per request in `src/proxy.ts`, where a fresh
+ * nonce is generated: Next.js extracts the nonce from the `x-nonce` /
+ * `Content-Security-Policy` request headers and applies it to its inline
+ * scripts, and the proxy sets the same policy (with the same nonce) on the
+ * response. It cannot live in `headers()` here — those values are static
+ * per build and a nonce must be unique per request.
  *
- * `'unsafe-inline'` is required for Next.js inline bootstrap scripts and the
- * inline style attributes used by the vendor analytics charts. It is
- * documented here for the eventual enforcement phase; removing it requires a
- * nonce/hash strategy plus re-testing auth, navigation, and charts.
+ * Directives (see `contentSecurityPolicy()` in the proxy):
+ * - script-src 'self' + per-request nonce + 'strict-dynamic'; NO
+ *   'unsafe-inline' for scripts. The only app-authored inline script is
+ *   the product JSON-LD block, which reads the nonce from `x-nonce`.
+ * - style-src keeps 'self' 'unsafe-inline': the bar-chart and analytics
+ *   bars set data-driven widths/heights via React `style` attributes,
+ *   and style attributes cannot take a nonce — only `unsafe-inline`
+ *   allowlists them. This is deliberate and scoped to styles only.
+ * - img-src / connect-src list the configured Supabase origin explicitly
+ *   (from env, never hardcoded); no host is allowed if it is missing.
+ * - No wildcard source anywhere.
+ *
+ * Strict-Transport-Security: `max-age=31536000; includeSubDomains`.
+ * No `preload`: that is only added after HTTPS is confirmed on every
+ * subdomain (not confirmed — see docs/HOSTED_STATE.md).
  */
-function contentSecurityPolicyReportOnly(): string {
-  const supabase = supabaseUrl();
-  const supabaseSource = supabase ? ` ${supabase.origin}` : "";
-
-  return [
-    "default-src 'self'",
-    "base-uri 'self'",
-    "object-src 'none'",
-    "frame-ancestors 'none'",
-    "frame-src 'none'",
-    "form-action 'self'",
-    "script-src 'self' 'unsafe-inline'",
-    "style-src 'self' 'unsafe-inline'",
-    `img-src 'self'${supabaseSource}`,
-    "font-src 'self'",
-    `connect-src 'self'${supabaseSource}`,
-  ].join("; ");
-}
-
 const baselineSecurityHeaders = [
   {
-    key: "Content-Security-Policy-Report-Only",
-    value: contentSecurityPolicyReportOnly(),
+    key: "Strict-Transport-Security",
+    value: "max-age=31536000; includeSubDomains",
   },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },
@@ -119,8 +117,16 @@ const nextConfig: NextConfig = {
           { key: "X-Robots-Tag", value: "noindex, nofollow" },
         ],
       },
+      {
+        source: "/:locale(ar|en)/orders/:path*",
+        headers: [
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "Cache-Control", value: "private, no-store, max-age=0" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+        ],
+      },
     ];
   },
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

@@ -4,11 +4,15 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requirePlatformAdmin } from "@/lib/auth";
+import { checkMutationQuota } from "@/lib/rate-limit";
 import { fetchAllRows } from "@/lib/fetch-all";
 import {
   commissionEntriesById,
+  isTransferMethod,
+  settlementNetDueMinor,
   settlementTotalsResult,
 } from "@/lib/finance";
+import { formatEgp, parseEgpToMinor } from "@/lib/money";
 
 import type {
   CommissionEntryRecord,
@@ -26,8 +30,66 @@ export type SettlementPaidState =
 
 export type VoidSettlementState = SettlementPaidState;
 
+export type DirectRepaymentState = SettlementPaidState;
+
 function attemptFrom(prev: { attempt?: number } | null): number {
   return (prev?.attempt ?? 0) + 1;
+}
+
+/**
+ * R-02 (D-08, N-01): record that a vendor repaid an outstanding
+ * paid-return clawback directly — the D-08 fallback for when there is no
+ * next settlement to carry it into (for example a clawback-only vendor
+ * with no new commission). Nothing here moves money: the repayment
+ * happened outside the dashboard, and the reference is the proof. The
+ * RPC is the authority — it refuses a non-admin caller, a bad reference,
+ * a clawback that is already resolved, and (R-07) a clawback that is
+ * already being recovered through an open settlement.
+ */
+export async function recordDirectRepayment(
+  prev: DirectRepaymentState,
+  formData: FormData,
+): Promise<DirectRepaymentState> {
+  const attempt = attemptFrom(prev);
+  const clawbackId = String(formData.get("clawback_id") ?? "").trim();
+  const reference = String(formData.get("reference") ?? "").trim();
+
+  if (!clawbackId) return { error: "Missing clawback id.", attempt };
+  if (reference.length < 3 || reference.length > 200) {
+    return {
+      error: "Enter the direct repayment reference (3–200 characters).",
+      attempt,
+    };
+  }
+
+  const { supabase, user } = await requirePlatformAdmin();
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { error: quotaError, attempt };
+
+  const { error } = await supabase.rpc("record_clawback_direct_repayment", {
+    p_clawback_id: clawbackId,
+    p_reference: reference,
+  });
+
+  if (error) {
+    return {
+      error:
+        error.code === "23514" || error.code === "22023"
+          ? error.message
+          : "The direct repayment could not be recorded. Refresh the page and try again.",
+      attempt,
+    };
+  }
+
+  revalidatePath("/admin/settlements");
+  revalidatePath("/vendor/finance");
+
+  return {
+    success:
+      "Direct repayment recorded. The clawback is resolved and will not be netted against a future settlement.",
+    attempt,
+  };
 }
 
 export async function createSettlement(
@@ -43,7 +105,10 @@ export async function createSettlement(
     return { error: "A settlement note must be 500 characters or fewer.", attempt };
   }
 
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { error: quotaError, attempt };
 
   const { data: settlementId, error } = await supabase.rpc(
     "create_settlement",
@@ -79,12 +144,15 @@ export async function markSettlementPaid(
 
   if (!settlementId) return { error: "Missing settlement id.", attempt };
 
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { error: quotaError, attempt };
 
   const { data: settlementData, error: settlementError } = await supabase
     .from("settlements")
     .select(
-      "settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
+      "id, total_minor, clawback_minor, settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
     )
     .eq("id", settlementId)
     .maybeSingle();
@@ -96,11 +164,11 @@ export async function markSettlementPaid(
     };
   }
 
-  const settlement = settlementData as Pick<
+  const settlementRow = settlementData as Pick<
     SettlementRecord,
-    "settlement_lines"
+    "total_minor" | "clawback_minor" | "settlement_lines"
   >;
-  const entryIds = settlement.settlement_lines.map(
+  const entryIds = settlementRow.settlement_lines.map(
     (line) => line.commission_entry_id,
   );
   const entriesResult = entryIds.length
@@ -118,7 +186,7 @@ export async function markSettlementPaid(
       )
     : { rows: [], failed: false, truncated: false };
   const totalsResult = settlementTotalsResult(
-    settlement,
+    settlementRow,
     commissionEntriesById(entriesResult.rows),
     {
       failed: entriesResult.failed,
@@ -138,18 +206,124 @@ export async function markSettlementPaid(
     };
   }
 
+  // P1-05 (D-08): marking paid attests that Gifto received the
+  // commission. The amount, the transfer method and the vendor's transfer
+  // reference are part of the attestation; the database rejects a wrong
+  // amount or a missing reference, and this validation surfaces the same
+  // errors before the RPC call.
+  //
+  // N-01 (D-08): the amount due is the NET commission — the lines'
+  // snapshot less the paid-return clawbacks applied to this batch — which
+  // is the stored total_minor. The proof validation compares the entered
+  // amount to that derived net, never to the gross lines total. When the
+  // batch is fully offset by clawbacks the net due is zero, no transfer
+  // took place, and no proof is collected or recorded.
+  const paidAmountMinor = parseEgpToMinor(
+    String(formData.get("paid_amount") ?? ""),
+  );
+  const transferMethod = String(formData.get("transfer_method") ?? "").trim();
+  const transferReference = String(
+    formData.get("transfer_reference") ?? "",
+  ).trim();
+  const proofNote = String(formData.get("proof_note") ?? "").trim();
+
+  if (paidAmountMinor === null || paidAmountMinor < 0) {
+    return {
+      error: "Enter the amount Gifto received, in pounds, of zero or more.",
+      attempt,
+    };
+  }
+
+  const netDueMinor = settlementNetDueMinor(
+    totalsResult.totals.commissionMinor,
+    settlementRow.clawback_minor ?? 0,
+  );
+  if (settlementRow.total_minor !== netDueMinor) {
+    return {
+      error:
+        "The settlement total does not match its lines net of clawbacks. The settlement was not marked paid.",
+      attempt,
+    };
+  }
+
+  // The derived D-08 amount is the net commission. Check it here for a
+  // fast, specific error; the RPC re-checks it and is the authority, so
+  // a race cannot slip a wrong amount through.
+  if (paidAmountMinor !== netDueMinor) {
+    return {
+      error: `The amount received (${formatEgp(paidAmountMinor)}) does not match the commission due (${formatEgp(netDueMinor)}).`,
+      attempt,
+    };
+  }
+
+  if (netDueMinor === 0) {
+    if (transferMethod !== "" || transferReference !== "" || proofNote !== "") {
+      return {
+        error:
+          "This settlement is fully offset by clawbacks, so no transfer took place and no proof is recorded.",
+        attempt,
+      };
+    }
+
+    const { error } = await supabase.rpc("mark_settlement_paid", {
+      p_settlement_id: settlementId,
+      p_paid_amount_minor: 0,
+      p_transfer_method: null,
+      p_transfer_reference: null,
+      p_proof_note: null,
+    });
+
+    if (error) {
+      return {
+        error:
+          error.code === "23514" || error.code === "22023"
+            ? error.message
+            : "The settlement could not be marked paid. Refresh the page and try again.",
+        attempt,
+      };
+    }
+
+    revalidatePath("/admin/settlements");
+    revalidatePath(`/admin/settlements/${settlementId}`);
+    revalidatePath("/vendor/finance");
+
+    return {
+      success:
+        "No commission was due — this batch was fully offset by paid-return clawbacks.",
+      attempt,
+    };
+  }
+
+  if (!isTransferMethod(transferMethod)) {
+    return { error: "Choose how the commission was transferred.", attempt };
+  }
+  if (transferReference.length < 3 || transferReference.length > 200) {
+    return {
+      error: "Enter the transfer reference (3–200 characters).",
+      attempt,
+    };
+  }
+  if (proofNote.length > 500) {
+    return {
+      error: "A proof note must be 500 characters or fewer.",
+      attempt,
+    };
+  }
+
   const { error } = await supabase.rpc("mark_settlement_paid", {
     p_settlement_id: settlementId,
+    p_paid_amount_minor: paidAmountMinor,
+    p_transfer_method: transferMethod,
+    p_transfer_reference: transferReference,
+    p_proof_note: proofNote || null,
   });
 
   if (error) {
     return {
       error:
-        error.code === "23514"
+        error.code === "23514" || error.code === "22023"
           ? error.message
-          : error.code === "22023"
-            ? "That settlement no longer exists."
-            : "The settlement could not be marked paid. Refresh the page and try again.",
+          : "The settlement could not be marked paid. Refresh the page and try again.",
       attempt,
     };
   }
@@ -159,7 +333,8 @@ export async function markSettlementPaid(
   revalidatePath("/vendor/finance");
 
   return {
-    success: "Settlement marked paid. The external payout should already be complete.",
+    success:
+      "Commission receipt recorded. Gifto's receipt of the commission is now on file with the transfer reference.",
     attempt,
   };
 }
@@ -180,7 +355,10 @@ export async function voidSettlement(
     return { error: "A void reason must be 500 characters or fewer.", attempt };
   }
 
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { error: quotaError, attempt };
 
   const { error } = await supabase.rpc("void_settlement", {
     p_settlement_id: settlementId,

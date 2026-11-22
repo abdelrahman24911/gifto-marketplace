@@ -5,7 +5,7 @@ import { MAX_LINE_QUANTITY, type CartItem } from "@/lib/cart";
  *
  * A buy-now checkout is expressed entirely in the URL as a product id and a
  * quantity. Nothing here is trusted: the checkout page validates the product
- * against the database, and `place_order` revalidates everything again.
+ * against the database, and `place_order_with_price_check` revalidates everything again.
  */
 
 export const BUY_NOW_PRODUCT_PARAM = "buyNow";

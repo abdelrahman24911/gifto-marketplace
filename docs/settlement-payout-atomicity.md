@@ -53,14 +53,31 @@ state.
 
 ## Validation status
 
-Static application validation is run separately from SQL execution. The
-disposable SQL/RLS suite and two-session concurrency scenarios are **NOT RUN**
-when Docker is unavailable. The local Supabase CLI is linked to a hosted
-project, so no remote command is used and no hosted database is touched.
+**Two-session concurrency test: RUN AND PASSED — 2026-11-20 (P0-03,
+FIN-001 closed for the tested definition).**
 
-Before production review, run migrations 1-25 and all SQL/RLS tests in a
-proven disposable local PostgreSQL/Supabase environment, then execute the
-four documented concurrency scenarios and an isolated rollback comparison.
+- Environment: disposable local PostgreSQL 16, database `gifto_conc_test`,
+  migrations 1–30 applied, storage stub applied, `auth` schema emulated by
+  `scripts/auth-emulation.sql`.
+- Runner: `scripts/run-settlement-concurrency.mjs`; fixtures:
+  `supabase/tests/concurrency_mark_settlement_paid.sql`.
+- Result: two concurrent `mark_settlement_paid()` calls on the same
+  settlement — exactly one succeeded, the other raised "This settlement is
+  already paid." (23514). Final state: settlement paid once, `paid_at` /
+  `paid_by` stamped, commission entry still `earned`.
+- Sequential cases in the same run: mismatch (line +1) rejected, settlement
+  stayed open; zero-value payout (entry + line zeroed after creation, the
+  TEST 17 method) succeeded with audit fields stamped.
+- Afterwards: `supabase/tests/rls_commissions_test.sql` — PASS.
+- All 13 RLS suites were run separately (P0-02, 2026-11-20):
+  **13 passed, 0 failed** on disposable local PostgreSQL 16.
+
+The SQL regression suite itself still cannot simulate two independent
+transactions in a single psql session — that is why the runner above spawns
+two separate psql processes. Only the two-payouts scenario was executed;
+payout vs return, payout vs creation, and creation vs return remain
+code-inspection reasoning (see the final report, §6). No hosted database
+was touched.
 
 ## Rollback
 

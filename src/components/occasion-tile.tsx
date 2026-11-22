@@ -1,9 +1,13 @@
-import Link from "next/link";
+"use client";
+
+import { useTranslations } from "next-intl";
 
 import { ArrowRightIcon } from "@/components/icons";
 import { OccasionFallbackArt } from "@/components/occasion-artwork";
 import { ProductImage } from "@/components/product-image";
+import { Link } from "@/i18n/navigation";
 import type { CatalogOccasion } from "@/lib/catalog";
+import { occasionDisplayName } from "@/lib/occasion-display";
 import { OCCASION_IMAGES_BUCKET } from "@/lib/supabase/database.types";
 
 const TONES = [
@@ -19,6 +23,16 @@ export function OccasionTile({
   occasion: CatalogOccasion;
   index?: number;
 }) {
+  const t = useTranslations("home");
+  const name = occasionDisplayName(occasion.slug, occasion.name);
+  const fallbackDescriptions: Record<string, string> = {
+    graduation: t("occasionFallbackGraduation"),
+    "ramdan-night": t("occasionFallbackRamadan"),
+    "ramadan-night": t("occasionFallbackRamadan"),
+  };
+  const description =
+    occasion.description?.trim() || fallbackDescriptions[occasion.slug] || null;
+
   return (
     <Link
       href={`/occasions/${occasion.slug}`}
@@ -27,15 +41,15 @@ export function OccasionTile({
       <div className="relative min-h-full overflow-hidden">
         <ProductImage
           path={occasion.imagePath}
-          alt={occasion.imageAlt ?? occasion.name}
-          name={occasion.name}
+          alt={occasion.imageAlt ?? name}
+          name={name}
           bucket={OCCASION_IMAGES_BUCKET}
           className="h-full w-full object-cover transition duration-700 ease-out group-hover:scale-[1.035] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
           rounded="rounded-none"
           sizes="(min-width: 1024px) 12vw, (min-width: 640px) 20vw, 38vw"
           fallback={
             <OccasionFallbackArt
-              initial={occasion.name.trim().charAt(0).toUpperCase() || "?"}
+              initial={name.trim().charAt(0).toUpperCase() || "?"}
               tone={index}
             />
           }
@@ -53,18 +67,18 @@ export function OccasionTile({
       <div className="relative flex min-w-0 flex-col p-4 sm:p-5">
         <div className="min-w-0">
           <p className="line-clamp-2 min-h-[2.1em] break-words font-display text-[1.4rem] leading-[1.05] tracking-[-0.02em] text-ink sm:text-[1.5rem]">
-            {occasion.name}
+            {name}
           </p>
-          {occasion.description ? (
+          {description ? (
             <p className="mt-2 line-clamp-2 text-[0.78rem] leading-[1.625] text-ink-soft sm:text-sm">
-              {occasion.description}
+              {description}
             </p>
           ) : null}
         </div>
 
         <div className="mt-auto flex justify-end pt-4">
           <span className="flex h-10 w-10 items-center justify-center rounded-full bg-berry text-paper shadow-[0_12px_24px_-16px_rgba(121,13,43,0.8)] transition-colors duration-300 group-hover:bg-berry-deep sm:h-11 sm:w-11">
-            <ArrowRightIcon className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5 motion-reduce:transition-none" />
+            <ArrowRightIcon className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5 motion-reduce:transition-none rtl:-scale-x-100" />
           </span>
         </div>
       </div>

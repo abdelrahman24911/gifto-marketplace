@@ -1,3 +1,5 @@
+> **HISTORICAL — 2026-11-20 (P0-08).** Dated snapshot of a past verification (see the date in the file). Its numbers and hosted-state claims were true when written and are not current. Current state: `README.md`, `docs/HOSTED_STATE.md` (single hosted-state table), `docs/DECISIONS.md`. Kept as a record; its findings were not edited.
+
 # Gifto Marketplace — Phase 0 Stage 1 Report
 
 **Date:** 2026-11-08

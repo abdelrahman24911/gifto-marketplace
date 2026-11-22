@@ -181,6 +181,6 @@ export const SUPPORT_FAQS: SupportFaq[] = [
     category: "Account & access",
     question: "Can I open a support ticket here?",
     answer:
-      "Yes. Use the request form on this page. It goes into the Gifto admin support queue for manual review, and its status appears under Recent requests. No email or push notification is sent, so check back here for updates.",
+      "Yes. Use the request form on this page. It goes into the Gifto admin support queue for manual review, and its status appears under Recent requests. When email is configured, the shop's contact email also receives an update when the status changes; until then, check back here for updates.",
   },
 ];

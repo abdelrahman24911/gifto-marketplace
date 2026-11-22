@@ -10,6 +10,8 @@ import {
   VENDOR_ADDRESS_MIN,
   VENDOR_CONTACT_EMAIL_MAX,
   VENDOR_CONTACT_PHONE_MAX,
+  VENDOR_COVERAGE_ITEM_MAX,
+  VENDOR_COVERAGE_MAX_ITEMS,
   VENDOR_DESCRIPTION_MAX,
   VENDOR_LOCATION_MAX,
   VENDOR_NAME_MAX,
@@ -22,7 +24,12 @@ import {
   workingHoursToJson,
   type WorkingHours,
 } from "@/lib/vendor-settings";
+import {
+  isGovernorate,
+  partitionGovernorates,
+} from "@/lib/governorates";
 import { requireVendorRole } from "@/lib/vendor";
+import { checkMutationQuota } from "@/lib/rate-limit";
 
 const LOGO_MAX_BYTES = 5 * 1024 * 1024;
 const LOGO_TYPES: Record<string, string> = {
@@ -84,7 +91,16 @@ function readValues(formData: FormData): VendorSettingsValues {
     city: String(formData.get("city") ?? "").trim(),
     governorate: String(formData.get("governorate") ?? "").trim(),
     addressLine: String(formData.get("address_line") ?? "").trim(),
-    governorates: String(formData.get("governorates") ?? "").trim(),
+    // P1-06: governorates arrive as picker checkboxes, not free text.
+    // The preserved list holds stored values that do not map to the
+    // canonical list; both are echoed back joined, as before.
+    governorates: [
+      ...formData.getAll("governorates"),
+      ...formData.getAll("unmappable_governorates"),
+    ]
+      .map((value) => String(value).trim())
+      .filter(Boolean)
+      .join(", "),
     areas: String(formData.get("areas") ?? "").trim(),
     workingHours: readWorkingHours(formData),
     prepTimeMinDays: String(formData.get("prep_time_min_days") ?? "").trim(),
@@ -178,9 +194,55 @@ export async function saveVendorSettings(
     );
   }
 
-  const governorates = parseCoverageList(values.governorates);
-  if (governorates.error) {
-    return invalid(values, governorates.error, attempt);
+  // P1-06: governorates come from the picker, never free text. A
+  // tampered submit with a non-canonical picked value is rejected;
+  // preserved values are stored entries that do not map to the
+  // canonical list, and are kept verbatim unless they now map (a stale
+  // form can still submit "Cairo Governorate" as preserved — saving
+  // canonicalises it). Nothing is silently dropped or guessed.
+  const selectedGovernorates = formData
+    .getAll("governorates")
+    .map((value) => String(value).trim())
+    .filter(Boolean);
+  const preservedGovernorates = formData
+    .getAll("unmappable_governorates")
+    .map((value) => String(value).trim())
+    .filter(Boolean);
+
+  for (const value of selectedGovernorates) {
+    if (!isGovernorate(value)) {
+      return invalid(
+        values,
+        "Choose governorates from the list.",
+        attempt,
+      );
+    }
+  }
+
+  for (const value of preservedGovernorates) {
+    if (value.length > VENDOR_COVERAGE_ITEM_MAX) {
+      return invalid(
+        values,
+        `Keep each delivery entry to ${VENDOR_COVERAGE_ITEM_MAX} characters or fewer.`,
+        attempt,
+      );
+    }
+  }
+
+  const {
+    canonical: canonicalGovernorates,
+    unmappable: keptGovernorates,
+  } = partitionGovernorates([
+    ...selectedGovernorates,
+    ...preservedGovernorates,
+  ]);
+  const governorateValues = [...canonicalGovernorates, ...keptGovernorates];
+  if (governorateValues.length > VENDOR_COVERAGE_MAX_ITEMS) {
+    return invalid(
+      values,
+      `List at most ${VENDOR_COVERAGE_MAX_ITEMS} delivery governorates.`,
+      attempt,
+    );
   }
 
   const areas = parseCoverageList(values.areas);
@@ -227,10 +289,13 @@ export async function saveVendorSettings(
     );
   }
 
-  const { supabase, access, isPlatformAdmin } = await requireVendorRole(
+  const { supabase, access, isPlatformAdmin, user } = await requireVendorRole(
     formData.get("vendor") as string | null,
     { verifyWithAuthServer: true },
   );
+
+  const quotaError = await checkMutationQuota("vendor", user.id);
+  if (quotaError) return invalid(values, quotaError, attempt);
 
   if (!canEditShop(access, isPlatformAdmin)) {
     return invalid(
@@ -254,7 +319,7 @@ export async function saveVendorSettings(
       prep_time_min_days: prepMin.value,
       prep_time_max_days: prepMax.value,
       delivery_coverage: coverageToJson({
-        governorates: governorates.values,
+        governorates: governorateValues,
         areas: areas.values,
       }),
     })
@@ -286,7 +351,7 @@ export async function saveVendorSettings(
     success: "Store settings saved.",
     values: {
       ...values,
-      governorates: governorates.values.join(", "),
+      governorates: governorateValues.join(", "),
       areas: areas.values.join(", "),
     },
     attempt,
@@ -312,10 +377,13 @@ export async function setVendorAcceptingOrders(
   }
   const accepting = raw === "true";
 
-  const { supabase, access, isPlatformAdmin } = await requireVendorRole(
+  const { supabase, access, isPlatformAdmin, user } = await requireVendorRole(
     formData.get("vendor") as string | null,
     { verifyWithAuthServer: true },
   );
+
+  const quotaError = await checkMutationQuota("vendor", user.id);
+  if (quotaError) return { error: quotaError, attempt };
 
   if (!canEditShop(access, isPlatformAdmin)) {
     return {
@@ -400,10 +468,13 @@ async function uploadVendorBranding(
     };
   }
 
-  const { supabase, access, isPlatformAdmin } = await requireVendorRole(
+  const { supabase, access, isPlatformAdmin, user } = await requireVendorRole(
     formData.get("vendor") as string | null,
     { verifyWithAuthServer: true },
   );
+
+  const quotaError = await checkMutationQuota("vendor", user.id);
+  if (quotaError) return { error: quotaError, attempt };
 
   if (!canEditShop(access, isPlatformAdmin)) {
     return {
@@ -481,10 +552,13 @@ async function removeVendorBranding(
       : 0) + 1;
 
   const spec = BRANDING[kind];
-  const { supabase, access, isPlatformAdmin } = await requireVendorRole(
+  const { supabase, access, isPlatformAdmin, user } = await requireVendorRole(
     formData.get("vendor") as string | null,
     { verifyWithAuthServer: true },
   );
+
+  const quotaError = await checkMutationQuota("vendor", user.id);
+  if (quotaError) return { error: quotaError, attempt };
 
   if (!canEditShop(access, isPlatformAdmin)) {
     return {

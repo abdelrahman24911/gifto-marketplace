@@ -6,22 +6,30 @@ type QueryRecord = {
   filters: string[];
   orders: string[];
   limit?: number;
+  countRequested?: boolean;
+  range?: [number, number];
 };
 
 type QueryChain = {
-  select(columns: string): QueryChain;
+  select(columns: string, options?: { count?: string }): QueryChain;
   eq(column: string, value: unknown): QueryChain;
   in(column: string, values: readonly unknown[]): QueryChain;
   ilike(column: string, value: string): QueryChain;
   gte(column: string, value: unknown): QueryChain;
   lte(column: string, value: unknown): QueryChain;
+  lt(column: string, value: unknown): QueryChain;
   order(column: string, options: { ascending: boolean }): QueryChain;
   limit(value: number): QueryChain;
+  range(from: number, to: number): QueryChain;
   maybeSingle(): Promise<{ data: unknown; error: unknown }>;
-  returns(): Promise<{ data: unknown; error: unknown }>;
+  returns(): Promise<{ data: unknown; error: unknown; count?: number | null }>;
 };
 
-type FakeResult = { data: unknown; error: unknown };
+type FakeResult = {
+  data: unknown;
+  error: unknown;
+  count?: number | null;
+};
 
 const db = vi.hoisted(() => ({
   queries: [] as QueryRecord[],
@@ -36,8 +44,9 @@ function fakeClient() {
       db.queries.push(record);
 
       const chain: QueryChain = {
-        select(columns) {
+        select(columns, options) {
           record.select = columns;
+          if (options?.count) record.countRequested = true;
           return chain;
         },
         eq(column, value) {
@@ -60,12 +69,20 @@ function fakeClient() {
           record.filters.push(`lte:${column}=${String(value)}`);
           return chain;
         },
+        lt(column, value) {
+          record.filters.push(`lt:${column}=${String(value)}`);
+          return chain;
+        },
         order(column, options) {
           record.orders.push(`${column}:${options.ascending ? "asc" : "desc"}`);
           return chain;
         },
         limit(value) {
           record.limit = value;
+          return chain;
+        },
+        range(from, to) {
+          record.range = [from, to];
           return chain;
         },
         maybeSingle: async () =>
@@ -100,10 +117,14 @@ vi.mock("next/cache", () => ({
 
 import {
   getNewArrivals,
+  loadCategoryPreviews,
+  loadGiftFinderPage,
   loadOccasion,
   loadOccasions,
   loadProductsByCategory,
   loadProductsByOccasion,
+  loadProductsByShop,
+  loadShopPreviews,
   searchProducts,
 } from "./catalog";
 
@@ -125,8 +146,15 @@ describe("public catalog queries", () => {
     expect(query.limit).toBe(3);
   });
 
-  it("keeps category filtering and limits on the inner-joined product query", async () => {
-    await loadProductsByCategory("category-1", 7);
+  it("pages category products with an exact total and a stable order", async () => {
+    db.results.products = { data: [], error: null, count: 40 };
+
+    const result = await loadProductsByCategory("category-1", {
+      page: 2,
+      pageSize: 7,
+    });
+
+    expect(result).toEqual({ ok: true, data: { items: [], total: 40 } });
 
     const query = db.queries[0];
     expect(query.select).toContain("vendor:public_vendors!inner(");
@@ -134,28 +162,188 @@ describe("public catalog queries", () => {
       "eq:category_id=category-1",
       "eq:status=active",
     ]);
-    expect(query.limit).toBe(7);
+    expect(query.orders).toEqual(["created_at:desc", "id:desc"]);
+    expect(query.range).toEqual([7, 13]);
+    expect(query.countRequested).toBe(true);
   });
 
-  it("keeps search filters and limits on the inner-joined product query", async () => {
+  it("pages shop products with an exact total instead of the old 60 cap", async () => {
+    db.results.products = { data: [], error: null, count: 61 };
+
+    const result = await loadProductsByShop("vendor-1", { page: 3 });
+
+    expect(result).toEqual({ ok: true, data: { items: [], total: 61 } });
+
+    const query = db.queries[0];
+    expect(query.filters).toEqual([
+      "eq:vendor_id=vendor-1",
+      "eq:status=active",
+    ]);
+    expect(query.orders).toEqual(["created_at:desc", "id:desc"]);
+    expect(query.range).toEqual([50, 74]);
+    expect(query.countRequested).toBe(true);
+  });
+
+  it("builds three image previews per category and shop from public products", async () => {
+    db.results.products = {
+      data: [
+        {
+          category_id: "category-1",
+          vendor_id: "vendor-1",
+          product_images: [
+            { path: "product-1/b.webp", alt: "Second", position: 2 },
+            { path: "product-1/a.webp", alt: "First", position: 1 },
+          ],
+        },
+        {
+          category_id: "category-1",
+          vendor_id: "vendor-1",
+          product_images: [{ path: "product-2.webp", alt: null, position: 0 }],
+        },
+        {
+          category_id: "category-1",
+          vendor_id: "vendor-1",
+          product_images: [{ path: "product-3.webp", alt: "Third", position: 0 }],
+        },
+        {
+          category_id: "category-1",
+          vendor_id: "vendor-1",
+          product_images: [{ path: "product-4.webp", alt: "Fourth", position: 0 }],
+        },
+        {
+          category_id: null,
+          vendor_id: "vendor-1",
+          product_images: [{ path: "product-5.webp", alt: null, position: 0 }],
+        },
+      ],
+      error: null,
+    };
+
+    const categories = await loadCategoryPreviews();
+    const shops = await loadShopPreviews();
+
+    expect(categories).toEqual({
+      ok: true,
+      data: {
+        "category-1": [
+          { path: "product-1/a.webp", alt: "First" },
+          { path: "product-2.webp", alt: null },
+          { path: "product-3.webp", alt: "Third" },
+        ],
+      },
+    });
+    expect(shops).toEqual({
+      ok: true,
+      data: {
+        "vendor-1": [
+          { path: "product-1/a.webp", alt: "First" },
+          { path: "product-2.webp", alt: null },
+          { path: "product-3.webp", alt: "Third" },
+        ],
+      },
+    });
+
+    const query = db.queries[0];
+    expect(query.table).toBe("products");
+    expect(query.select).toContain("vendor:public_vendors!inner(");
+    expect(query.filters).toEqual(["eq:status=active"]);
+    expect(query.orders).toEqual(["created_at:desc"]);
+    expect(query.limit).toBe(500);
+  });
+
+  it("searches through the trigram RPC and preserves its ranked order", async () => {
+    db.results.rpc = {
+      data: [
+        { id: "product-2", total_count: 3 },
+        { id: "product-1", total_count: 3 },
+      ],
+      error: null,
+    };
+    db.results.products = {
+      data: [
+        {
+          id: "product-1",
+          name: "Rose Vase",
+          slug: "rose-vase",
+          price_minor: 10_000,
+          stock: 1,
+          vendor_id: "vendor-1",
+          vendor: { name: "Shop", slug: "shop" },
+          category: null,
+          product_images: [],
+        },
+        {
+          id: "product-2",
+          name: "Ceramic Vase",
+          slug: "ceramic-vase",
+          price_minor: 20_000,
+          stock: 2,
+          vendor_id: "vendor-1",
+          vendor: { name: "Shop", slug: "shop" },
+          category: null,
+          product_images: [],
+        },
+      ],
+      error: null,
+    };
+
     const result = await searchProducts({
       q: "vase",
       minMinor: 10_000,
       maxMinor: 50_000,
-      limit: 12,
+      page: 2,
+      pageSize: 12,
     });
 
-    expect(result).toEqual({ ok: true, products: [] });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.total).toBe(3);
+    expect(result.products.map((product) => product.id)).toEqual([
+      "product-2",
+      "product-1",
+    ]);
+
+    expect(db.rpcCalls).toEqual([
+      {
+        name: "search_products",
+        args: {
+          p_query: "vase",
+          p_category_id: null,
+          p_min_minor: 10_000,
+          p_max_minor: 50_000,
+          p_limit: 12,
+          p_offset: 12,
+        },
+      },
+    ]);
 
     const query = db.queries[0];
+    expect(query.table).toBe("products");
     expect(query.select).toContain("vendor:public_vendors!inner(");
     expect(query.filters).toEqual([
+      "in:id=product-2,product-1",
       "eq:status=active",
-      "ilike:name=%vase%",
-      "gte:price_minor=10000",
-      "lte:price_minor=50000",
     ]);
-    expect(query.limit).toBe(12);
+  });
+
+  it("returns an empty search without querying products when the RPC has no rows", async () => {
+    const result = await searchProducts({ q: "nothing-matches" });
+
+    expect(result).toEqual({ ok: true, products: [], total: 0 });
+    expect(db.rpcCalls).toEqual([
+      {
+        name: "search_products",
+        args: {
+          p_query: "nothing-matches",
+          p_category_id: null,
+          p_min_minor: null,
+          p_max_minor: null,
+          p_limit: 25,
+          p_offset: 0,
+        },
+      },
+    ]);
+    expect(db.queries).toEqual([]);
   });
 });
 
@@ -243,7 +431,7 @@ describe("public occasion queries", () => {
     expect(db.rpcCalls).toEqual([
       {
         name: "get_occasion_products",
-        args: { p_occasion_id: "occasion-1", p_limit: 60, p_offset: 0 },
+        args: { p_occasion_id: "occasion-1", p_limit: 25, p_offset: 0 },
       },
     ]);
     expect(db.queries).toEqual([]);
@@ -285,7 +473,7 @@ describe("public occasion queries", () => {
       error: null,
     };
 
-    const result = await loadProductsByOccasion("occasion-1", 12);
+    const result = await loadProductsByOccasion("occasion-1", { pageSize: 12 });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -312,6 +500,112 @@ describe("public occasion queries", () => {
     db.results.products = { data: null, error: { message: "offline" } };
 
     const result = await loadProductsByOccasion("occasion-1");
+
+    expect(result).toEqual({ ok: false });
+  });
+});
+
+describe("public gift finder page", () => {
+  it("filters, counts, and pages in the database", async () => {
+    db.results.categories = {
+      data: [{ id: "category-1", slug: "personalized-gifts" }],
+      error: null,
+    };
+    db.results.products = { data: [], error: null, count: 13 };
+
+    const result = await loadGiftFinderPage({
+      recipient: "her",
+      occasionSlug: "graduation",
+      budget: "750-1000",
+      offset: 8,
+      limit: 8,
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        products: [],
+        total: 13,
+        offset: 8,
+        limit: 8,
+        hasMore: true,
+        occasionUnsupported: false,
+      },
+    });
+
+    const [categoryQuery, productQuery] = db.queries;
+    expect(categoryQuery.table).toBe("categories");
+    expect(categoryQuery.filters).toEqual([
+      "in:slug=flowers,personalized-gifts,gift-boxes",
+      "eq:is_active=true",
+    ]);
+    expect(productQuery.table).toBe("products");
+    expect(productQuery.select).toContain("vendor:public_vendors!inner(");
+    expect(productQuery.filters).toEqual([
+      "eq:status=active",
+      "in:category_id=category-1",
+      "gte:price_minor=75000",
+      "lt:price_minor=100000",
+    ]);
+    expect(productQuery.orders).toEqual([
+      "created_at:desc",
+      "id:desc",
+    ]);
+    expect(productQuery.range).toEqual([8, 15]);
+    expect(productQuery.countRequested).toBe(true);
+  });
+
+  it("returns an honest empty result for an unmapped occasion without querying", async () => {
+    const result = await loadGiftFinderPage({
+      recipient: "any",
+      occasionSlug: "birthday",
+      budget: "any",
+      offset: 0,
+      limit: 8,
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        products: [],
+        total: 0,
+        offset: 0,
+        limit: 8,
+        hasMore: false,
+        occasionUnsupported: true,
+      },
+    });
+    expect(db.queries).toEqual([]);
+  });
+
+  it("returns an empty page when no mapped category is active", async () => {
+    db.results.categories = { data: [], error: null };
+
+    const result = await loadGiftFinderPage({
+      recipient: "kids",
+      occasionSlug: null,
+      budget: "any",
+      offset: 0,
+      limit: 8,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { total: 0, occasionUnsupported: false },
+    });
+    expect(db.queries.map((query) => query.table)).toEqual(["categories"]);
+  });
+
+  it("fails honestly when the exact count is unavailable", async () => {
+    db.results.products = { data: [], error: null, count: null };
+
+    const result = await loadGiftFinderPage({
+      recipient: "any",
+      occasionSlug: null,
+      budget: "any",
+      offset: 0,
+      limit: 8,
+    });
 
     expect(result).toEqual({ ok: false });
   });

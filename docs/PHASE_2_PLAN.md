@@ -1,3 +1,5 @@
+> **P0-08 note (2026-11-20):** the exception in the note below — task 2.9, the subscription model, "blocked on D-07" — is now resolved: D-07 was DECIDED by the owner 2026-11-20 (no subscription at launch, commission-only, revisit after the pilot), recorded in `docs/DECISIONS.md`. Current state: `README.md`, `docs/HOSTED_STATE.md`, `docs/DECISIONS.md`.
+
 # Gifto Marketplace — Phase 2 Plan
 
 > **Superseded status (2026-10-19):** every task in this plan except 2.9

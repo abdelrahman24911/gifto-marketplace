@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requirePlatformAdmin } from "@/lib/auth";
+import { checkMutationQuota } from "@/lib/rate-limit";
 import { CATALOG_TAGS, revalidatePublicCatalog } from "@/lib/catalog-cache";
 import { isUuid } from "@/lib/occasions";
 import { slugify } from "@/lib/slugify";
@@ -74,8 +75,11 @@ export async function createTag(
   previous: TagActionState,
   formData: FormData,
 ): Promise<TagActionState> {
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
   const attempt = nextAttempt(previous);
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { attempt, error: quotaError };
   const rawValues = readTagValues(formData);
   const validation = validateTagInput(rawValues);
 
@@ -156,8 +160,11 @@ export async function updateTag(
   previous: TagActionState,
   formData: FormData,
 ): Promise<TagActionState> {
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
   const attempt = nextAttempt(previous);
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { attempt, error: quotaError };
   const tagId = String(formData.get("tag_id") ?? "").trim();
   const rawValues = readTagValues(formData);
   const validation = validateTagInput(rawValues);
@@ -211,8 +218,11 @@ export async function setTagActive(
   previous: TagToggleState,
   formData: FormData,
 ): Promise<TagToggleState> {
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
   const attempt = nextAttempt(previous);
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { attempt, error: quotaError };
   const tagId = String(formData.get("tag_id") ?? "").trim();
   const state = String(formData.get("state") ?? "");
 
@@ -254,8 +264,11 @@ export async function reviewTagSuggestion(
   previous: TagReviewState,
   formData: FormData,
 ): Promise<TagReviewState> {
-  const { supabase } = await requirePlatformAdmin();
+  const { supabase, user } = await requirePlatformAdmin();
   const attempt = nextAttempt(previous);
+
+  const quotaError = await checkMutationQuota("admin", user.id);
+  if (quotaError) return { attempt, error: quotaError };
   const suggestionId = String(formData.get("suggestion_id") ?? "").trim();
   const decision = String(formData.get("decision") ?? "");
   const rejectionReason = normalizeTagDescription(

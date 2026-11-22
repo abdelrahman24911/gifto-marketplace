@@ -7,7 +7,10 @@ Implemented in the application and prepared as migrations:
 - `00000000000014_managed_vendor_onboarding.sql`
 - `00000000000015_active_vendor_hardening.sql`
 
-Neither migration has been applied. Review and approval are required before running them against any environment. Apply 14 before 15, then deploy the matching application version.
+Neither migration's application state is tracked here. Whether migrations 14–15
+are applied on the hosted project is recorded in `docs/HOSTED_STATE.md` — the
+single hosted-state table; do not rely on this file for deployment state.
+Apply 14 before 15, then deploy the matching application version.
 
 ## What changed
 

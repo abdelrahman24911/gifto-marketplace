@@ -3,12 +3,14 @@ import { describe, expect, it } from "vitest";
 import {
   adminAnalyticsWindowStart,
   computeAdminMarketplaceMetrics,
+  computeAdminProductPerformance,
   computeAdminShopPerformance,
   isAdminAnalyticsRange,
   parseAdminAnalyticsRange,
   sumAdminSeries,
   type AdminCommissionRecord,
   type AdminOrderRecord,
+  type AdminProductLineRecord,
   type AdminShopLineRecord,
 } from "@/lib/admin-metrics";
 
@@ -115,6 +117,45 @@ const shopLines: AdminShopLineRecord[] = [
   },
 ];
 
+const productLines: AdminProductLineRecord[] = [
+  {
+    id: "item-1",
+    order_vendor_id: "suborder-1",
+    product_id: "product-a",
+    product_name: "Rose box",
+    quantity: 2,
+    line_total_minor: 6_000,
+    delivered_at: "2026-11-11T09:00:00.000Z",
+  },
+  {
+    id: "item-2",
+    order_vendor_id: "suborder-2",
+    product_id: "product-a",
+    product_name: "Rose box",
+    quantity: 1,
+    line_total_minor: 3_000,
+    delivered_at: "2026-11-12T09:00:00.000Z",
+  },
+  {
+    id: "item-3",
+    order_vendor_id: "suborder-1",
+    product_id: null,
+    product_name: "Custom bouquet",
+    quantity: 1,
+    line_total_minor: 1_500,
+    delivered_at: "2026-11-13T09:00:00.000Z",
+  },
+  {
+    id: "item-old",
+    order_vendor_id: "suborder-old",
+    product_id: "product-a",
+    product_name: "Rose box",
+    quantity: 9,
+    line_total_minor: 27_000,
+    delivered_at: "2026-10-01T09:00:00.000Z",
+  },
+];
+
 describe("computeAdminMarketplaceMetrics", () => {
   it("computes placed GMV, exact order counts, and earned commission only", () => {
     const result = computeAdminMarketplaceMetrics(
@@ -134,7 +175,7 @@ describe("computeAdminMarketplaceMetrics", () => {
       cancelled: 1,
       placed: 0,
     });
-    expect(result.windowStart).toBe("2026-11-07T00:00:00.000Z");
+    expect(result.windowStart).toBe("2026-11-06T22:00:00.000Z");
     expect(result.granularity).toBe("day");
     expect(result.orderSeries).toHaveLength(7);
     expect(sumAdminSeries(result.orderSeries)).toBe(3);
@@ -180,6 +221,32 @@ describe("computeAdminMarketplaceMetrics", () => {
     expect(sumAdminSeries(result.orderSeries)).toBe(4);
     expect(sumAdminSeries(result.gmvSeries)).toBe(26_000);
     expect(sumAdminSeries(result.commissionSeries)).toBe(1_650);
+  });
+
+  it("uses Cairo midnight as the window boundary, not UTC midnight", () => {
+    const result = computeAdminMarketplaceMetrics(
+      [
+        {
+          id: "cairo-midnight-new",
+          status: "placed",
+          subtotal_minor: 100,
+          created_at: "2026-11-06T22:30:00.000Z",
+        },
+        {
+          id: "cairo-before-midnight",
+          status: "placed",
+          subtotal_minor: 900,
+          created_at: "2026-11-06T21:30:00.000Z",
+        },
+      ],
+      [],
+      "7d",
+      NOW,
+    );
+
+    expect(result.totalOrders).toBe(1);
+    expect(result.gmvMinor).toBe(100);
+    expect(result.orderSeries.find((point) => point.key === "2026-11-07")?.value).toBe(1);
   });
 
   it("returns stable empty series when there is no activity", () => {
@@ -238,6 +305,40 @@ describe("computeAdminShopPerformance", () => {
   });
 });
 
+describe("computeAdminProductPerformance", () => {
+  it("ranks delivered products by revenue and counts unique orders", () => {
+    const result = computeAdminProductPerformance(productLines, "7d", NOW);
+
+    expect(result[0]).toMatchObject({
+      key: "product-a",
+      name: "Rose box",
+      units: 3,
+      revenueMinor: 9_000,
+      orderCount: 2,
+    });
+    expect(result[1]).toMatchObject({
+      key: "name:custom bouquet",
+      units: 1,
+      revenueMinor: 1_500,
+      orderCount: 1,
+    });
+  });
+
+  it("deduplicates lines and excludes deliveries outside the window", () => {
+    const result = computeAdminProductPerformance(
+      [...productLines, productLines[0]],
+      "7d",
+      NOW,
+    );
+
+    expect(result.find((item) => item.key === "product-a")).toMatchObject({
+      units: 3,
+      revenueMinor: 9_000,
+    });
+    expect(result.some((item) => item.units === 9)).toBe(false);
+  });
+});
+
 describe("admin range helpers", () => {
   it("accepts only the supported ranges", () => {
     expect(isAdminAnalyticsRange("7d")).toBe(true);
@@ -252,12 +353,12 @@ describe("admin range helpers", () => {
   it("counts today in each window", () => {
     expect(
       adminAnalyticsWindowStart("7d", NOW).toISOString(),
-    ).toBe("2026-11-07T00:00:00.000Z");
+    ).toBe("2026-11-06T22:00:00.000Z");
     expect(
       adminAnalyticsWindowStart("30d", NOW).toISOString(),
-    ).toBe("2026-10-15T00:00:00.000Z");
+    ).toBe("2026-10-14T21:00:00.000Z");
     expect(
       adminAnalyticsWindowStart("90d", NOW).toISOString(),
-    ).toBe("2026-08-16T00:00:00.000Z");
+    ).toBe("2026-08-15T21:00:00.000Z");
   });
 });

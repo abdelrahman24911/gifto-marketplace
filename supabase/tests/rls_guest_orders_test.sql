@@ -59,20 +59,35 @@ declare
   r text;
 begin
   for r in select unnest(array['anon', 'authenticated']) loop
-    if has_function_privilege(r, 'public.place_guest_order(jsonb,text,text,text,text,text,text,text,uuid,text)', 'execute')
-       or has_function_privilege(r, 'public.get_guest_order(uuid,text)', 'execute')
+    if has_function_privilege(r, 'public.get_guest_order(uuid,text)', 'execute')
        or has_function_privilege(r, 'public.consume_checkout_quota(text,integer,integer)', 'execute') then
       raise exception 'TEST 1 FAILED: % can execute a guest/service-only function', r;
     end if;
   end loop;
 
-  if has_function_privilege('authenticated', 'public._create_order(uuid,jsonb,text,text,text,text,text,text,text,uuid,text)', 'execute')
-     or has_function_privilege('service_role', 'public._create_order(uuid,jsonb,text,text,text,text,text,text,text,uuid,text)', 'execute') then
+  -- R-03: the legacy 11-argument _create_order wrapper is dropped
+  -- (migration 57), so it must not exist at all — and the surviving
+  -- 13-argument price-checked implementation stays private to the
+  -- migration role (no API role may execute it).
+  if to_regprocedure('public._create_order(uuid,jsonb,text,text,text,text,text,text,text,uuid,text)') is not null then
+    raise exception 'TEST 1 FAILED: legacy 11-arg _create_order still exists';
+  end if;
+
+  if has_function_privilege('anon', 'public._create_order(uuid,jsonb,text,text,text,text,text,text,text,uuid,text,jsonb,int)', 'execute')
+     or has_function_privilege('authenticated', 'public._create_order(uuid,jsonb,text,text,text,text,text,text,text,uuid,text,jsonb,int)', 'execute')
+     or has_function_privilege('service_role', 'public._create_order(uuid,jsonb,text,text,text,text,text,text,text,uuid,text,jsonb,int)', 'execute') then
     raise exception 'TEST 1 FAILED: _create_order is executable by an API role';
   end if;
 
-  if not has_function_privilege('service_role', 'public.place_guest_order(jsonb,text,text,text,text,text,text,text,uuid,text)', 'execute') then
-    raise exception 'TEST 1 FAILED: service_role cannot execute place_guest_order';
+  -- R-03: the legacy no-check place_guest_order is dropped (migration 51);
+  -- no API role can execute it, and the price-check guest RPC is the only
+  -- guest checkout path, executable by service_role only.
+  if to_regprocedure('public.place_guest_order(jsonb,text,text,text,text,text,text,text,uuid,text)') is not null then
+    raise exception 'TEST 1 FAILED: legacy place_guest_order still exists';
+  end if;
+
+  if not has_function_privilege('service_role', 'public.place_guest_order_with_price_check(jsonb,text,text,text,text,text,text,text,uuid,text,jsonb,int,boolean,text,date,text)', 'execute') then
+    raise exception 'TEST 1 FAILED: service_role cannot execute place_guest_order_with_price_check';
   end if;
 
   raise notice 'TEST 1 PASSED: guest RPCs are service_role-only and _create_order is private';
@@ -88,7 +103,7 @@ do $$
 declare v_hash text := repeat('a', 64);
 begin
   begin
-    perform public.place_guest_order(
+    perform gifto_test.place_guest_order(
       '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
       'Guest Buyer', '01001112233', null, '12 Main Street', 'Alexandria', 'Alexandria',
       null, gen_random_uuid(), v_hash);
@@ -110,7 +125,7 @@ declare
   v_key    uuid := gen_random_uuid();
   v_oid    uuid;
 begin
-  v_oid := public.place_guest_order(
+  v_oid := gifto_test.place_guest_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1},
       {"product_id":"51100000-0000-0000-0000-000000000102","quantity":1}]'::jsonb,
     'Nour Guest', '01001112233', 'Nour@Example.com',
@@ -193,7 +208,7 @@ do $$
 declare v_hash text := encode(digest('guest-token-bad', 'sha256'), 'hex');
 begin
   begin
-    perform public.place_guest_order(
+    perform gifto_test.place_guest_order(
       '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1},
         {"quantity":1}]'::jsonb,
       'Nour Guest', '01001112233', null,
@@ -219,7 +234,7 @@ declare
   v_first uuid := current_setting('gifto_test.guest_order_id')::uuid;
   v_again uuid;
 begin
-  v_again := public.place_guest_order(
+  v_again := gifto_test.place_guest_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1},
       {"product_id":"51100000-0000-0000-0000-000000000102","quantity":1}]'::jsonb,
     'Nour Guest', '01001112233', null,
@@ -255,7 +270,7 @@ declare
   v_key uuid := current_setting('gifto_test.guest_key')::uuid;
 begin
   begin
-    perform public.place_guest_order(
+    perform gifto_test.place_guest_order(
       '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
       'Nour Guest', '01001112233', null,
       '12 Main Street', 'Alexandria', 'Alexandria', null,
@@ -307,6 +322,44 @@ begin
   end if;
 
   raise notice 'TEST 7 PASSED: guest confirmation is token-gated and leaks no secrets';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 7b (P1-15, H-08): the guest order payload carries the handover record
+-- once the shop ships with courier and tracking.
+-- ---------------------------------------------------------------------------
+set role authenticated;
+set request.jwt.claim.sub = '31100000-0000-0000-0000-000000000101';
+set request.jwt.claims = '{"sub":"31100000-0000-0000-0000-000000000101"}';
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.guest_order_id')::uuid;
+  v_ov uuid;
+begin
+  select id into v_ov from public.order_vendors where order_id = v_oid;
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+  perform public.set_order_vendor_status(
+    v_ov, 'shipped', 'confirmed', null, null, 'Bosta', 'BST-77881');
+end $$;
+
+reset role;
+set role service_role;
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.guest_order_id')::uuid;
+  v_doc jsonb;
+begin
+  v_doc := public.get_guest_order(v_oid, current_setting('gifto_test.guest_hash'));
+  if (v_doc -> 'vendors' -> 0 ->> 'courier_name') <> 'Bosta' then
+    raise exception 'TEST 7b FAILED: guest payload has no courier';
+  end if;
+  if (v_doc -> 'vendors' -> 0 ->> 'tracking_ref') <> 'BST-77881' then
+    raise exception 'TEST 7b FAILED: guest payload has no tracking reference';
+  end if;
+  if (v_doc -> 'vendors' -> 0 ->> 'handed_over_at') is null then
+    raise exception 'TEST 7b FAILED: guest payload has no handover time';
+  end if;
+  raise notice 'TEST 7b PASSED: guest order shows courier, tracking and handover time';
 end $$;
 
 -- ---------------------------------------------------------------------------
@@ -383,7 +436,7 @@ declare v_hash text := encode(digest('guest-token-two', 'sha256'), 'hex');
 begin
   -- message that is not valid JSON / not an array
   begin
-    perform public.place_guest_order(
+    perform gifto_test.place_guest_order(
       '"nope"'::jsonb, 'Guest', '01001112233', null,
       '12 Main Street', 'Alexandria', 'Alexandria', null, gen_random_uuid(), v_hash);
     raise exception 'TEST 9a FAILED: accepted a non-array cart';
@@ -393,7 +446,7 @@ begin
 
   -- invalid email
   begin
-    perform public.place_guest_order(
+    perform gifto_test.place_guest_order(
       '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
       'Guest', '01001112233', 'not-an-email',
       '12 Main Street', 'Alexandria', 'Alexandria', null, gen_random_uuid(), v_hash);
@@ -404,7 +457,7 @@ begin
 
   -- missing recipient
   begin
-    perform public.place_guest_order(
+    perform gifto_test.place_guest_order(
       '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
       'G', '01001112233', null,
       '12 Main Street', 'Alexandria', 'Alexandria', null, gen_random_uuid(), v_hash);
@@ -415,7 +468,7 @@ begin
 
   -- invalid token hash
   begin
-    perform public.place_guest_order(
+    perform gifto_test.place_guest_order(
       '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
       'Guest Buyer', '01001112233', null,
       '12 Main Street', 'Alexandria', 'Alexandria', null, gen_random_uuid(), 'XYZ');
@@ -426,7 +479,7 @@ begin
 
   -- oversized quantity
   begin
-    perform public.place_guest_order(
+    perform gifto_test.place_guest_order(
       '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":999}]'::jsonb,
       'Guest Buyer', '01001112233', null,
       '12 Main Street', 'Alexandria', 'Alexandria', null, gen_random_uuid(), v_hash);
@@ -459,7 +512,7 @@ declare
   v_hash text := encode(digest('guest-token-three', 'sha256'), 'hex');
   v_oid uuid;
 begin
-  v_oid := public.place_guest_order(
+  v_oid := gifto_test.place_guest_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1,"price_minor":1,"total_minor":1}]'::jsonb,
     'Guest Buyer', '01001112233', null,
     '12 Main Street', 'Alexandria', 'Alexandria', null,
@@ -551,7 +604,7 @@ declare
   v_key uuid := gen_random_uuid();
   v_again uuid;
 begin
-  v_oid := public.place_order(
+  v_oid := gifto_test.place_order(
     '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
     'Owner Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria', null);
 
@@ -564,11 +617,11 @@ begin
   end if;
 
   -- the idempotent variant returns the same order for the same key
-  v_again := public.place_order_with_idempotency(
+  v_again := gifto_test.place_order_with_idempotency(
     '[{"product_id":"51100000-0000-0000-0000-000000000102","quantity":1}]'::jsonb,
     'Owner Buyer', '01001112233', null, '12 Main Street', 'Alexandria', 'Alexandria',
     null, v_key);
-  if public.place_order_with_idempotency(
+  if gifto_test.place_order_with_idempotency(
     '[{"product_id":"51100000-0000-0000-0000-000000000102","quantity":1}]'::jsonb,
     'Owner Buyer', '01001112233', null, '12 Main Street', 'Alexandria', 'Alexandria',
     null, v_key) <> v_again then
@@ -588,15 +641,734 @@ set request.jwt.claims = '{}';
 do $$
 begin
   begin
-    perform public.place_order_with_idempotency(
+    -- R-03: the only authenticated checkout RPC is place_order_with_price_check;
+    -- anon has no EXECUTE on it (the legacy place_order_with_idempotency was dropped).
+    perform public.place_order_with_price_check(
       '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
       'Anon', '01001112233', null, '12 Main Street', 'Alexandria', 'Alexandria',
-      null, gen_random_uuid());
-    raise exception 'TEST 14 FAILED: anon called place_order_with_idempotency';
+      null, gen_random_uuid(), null, null);
+    raise exception 'TEST 14 FAILED: anon called place_order_with_price_check';
   exception when insufficient_privilege then
     null;
   end;
   raise notice 'TEST 14 PASSED: anon cannot reach the authenticated checkout RPC';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 15: cancel_guest_order is executable only by service_role (P0-05)
+-- ---------------------------------------------------------------------------
+reset role;
+do $$
+begin
+  if has_function_privilege('anon', 'public.cancel_guest_order(uuid,text)', 'execute')
+     or has_function_privilege('authenticated', 'public.cancel_guest_order(uuid,text)', 'execute') then
+    raise exception 'TEST 15 FAILED: a weaker role can execute cancel_guest_order';
+  end if;
+  if not has_function_privilege('service_role', 'public.cancel_guest_order(uuid,text)', 'execute') then
+    raise exception 'TEST 15 FAILED: service_role cannot execute cancel_guest_order';
+  end if;
+  raise notice 'TEST 15 PASSED: cancel_guest_order is service_role-only';
+end $$;
+-- ---------------------------------------------------------------------------
+-- TEST 16: correct token cancels a placed guest order and restocks once (P0-05)
+-- ---------------------------------------------------------------------------
+-- Table reads run as the superuser (service_role holds no SELECT on
+-- products); only the RPC calls run as service_role.
+reset role;
+do $$
+declare v_stock_before int;
+begin
+  select stock into v_stock_before from public.products
+   where id = '51100000-0000-0000-0000-000000000101';
+  perform set_config('gifto_test.cancel_stock_before', v_stock_before::text, false);
+end $$;
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_hash text := encode(digest('guest-token-cancel', 'sha256'), 'hex');
+  v_oid uuid;
+begin
+  v_oid := gifto_test.place_guest_order(
+    '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
+    'Cancel Guest', '01001112233', null,
+    '12 Main Street', 'Alexandria', 'Alexandria', null,
+    gen_random_uuid(), v_hash);
+  perform set_config('gifto_test.cancel_order_id', v_oid::text, false);
+  perform set_config('gifto_test.cancel_hash', v_hash, false);
+  raise notice 'TEST 16a PASSED: fresh placed guest order created for cancellation';
+end $$;
+
+reset role;
+do $$
+declare
+  v_stock_before int := current_setting('gifto_test.cancel_stock_before')::int;
+begin
+  if (select stock from public.products where id = '51100000-0000-0000-0000-000000000101') <> v_stock_before - 1 then
+    raise exception 'TEST 16 FAILED: stock was not decremented on placement';
+  end if;
+end $$;
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+begin
+  perform public.cancel_guest_order(
+    current_setting('gifto_test.cancel_order_id')::uuid,
+    current_setting('gifto_test.cancel_hash'));
+end $$;
+
+reset role;
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.cancel_order_id')::uuid;
+  v_stock_before int := current_setting('gifto_test.cancel_stock_before')::int;
+begin
+  if (select status from public.orders where id = v_oid) <> 'cancelled' then
+    raise exception 'TEST 16 FAILED: parent order was not cancelled';
+  end if;
+  if (select count(*) from public.order_vendors where order_id = v_oid and status <> 'cancelled') <> 0 then
+    raise exception 'TEST 16 FAILED: a suborder was not cancelled';
+  end if;
+  if (select stock from public.products where id = '51100000-0000-0000-0000-000000000101') <> v_stock_before then
+    raise exception 'TEST 16 FAILED: stock was not restocked exactly once';
+  end if;
+  if (select count(*) from public.inventory_movements
+       where order_id = v_oid and reason = 'order_cancelled') <> 1 then
+    raise exception 'TEST 16 FAILED: restock movement not recorded exactly once';
+  end if;
+  if (select count(*) from public.order_status_events e
+       join public.order_vendors ov on ov.id = e.order_vendor_id
+      where ov.order_id = v_oid and e.to_status = 'cancelled'
+        and e.actor_role = 'system') <> 1 then
+    raise exception 'TEST 16 FAILED: cancellation audit event missing or wrong actor';
+  end if;
+  raise notice 'TEST 16 PASSED: correct token cancels, restocks once, audit event recorded (system)';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 17: a wrong token is rejected and changes nothing (P0-05)
+-- ---------------------------------------------------------------------------
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_hash text := encode(digest('guest-token-cancel-two', 'sha256'), 'hex');
+  v_oid uuid;
+begin
+  v_oid := gifto_test.place_guest_order(
+    '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
+    'Cancel Guest Two', '01001112233', null,
+    '12 Main Street', 'Alexandria', 'Alexandria', null,
+    gen_random_uuid(), v_hash);
+  perform set_config('gifto_test.cancel2_order_id', v_oid::text, false);
+end $$;
+
+do $$
+declare v_oid uuid := current_setting('gifto_test.cancel2_order_id')::uuid;
+begin
+  begin
+    perform public.cancel_guest_order(v_oid, repeat('f', 64));
+    raise exception 'TEST 17 FAILED: a wrong token cancelled the order';
+  exception when insufficient_privilege then
+    null;
+  end;
+end $$;
+
+reset role;
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.cancel2_order_id')::uuid;
+  v_stock_before int := current_setting('gifto_test.cancel_stock_before')::int;
+begin
+  if (select status from public.orders where id = v_oid) <> 'placed' then
+    raise exception 'TEST 17 FAILED: order status changed after a wrong-token attempt';
+  end if;
+  if (select stock from public.products where id = '51100000-0000-0000-0000-000000000101') <> v_stock_before - 1 then
+    raise exception 'TEST 17 FAILED: stock changed after a wrong-token attempt';
+  end if;
+  raise notice 'TEST 17 PASSED: wrong token rejected with a generic error, nothing changed';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 18: a signed-in user's order cannot be cancelled through this RPC (P0-05)
+-- ---------------------------------------------------------------------------
+set role authenticated;
+set request.jwt.claim.sub = '31100000-0000-0000-0000-000000000101';
+set request.jwt.claims = '{"sub":"31100000-0000-0000-0000-000000000101"}';
+do $$
+declare v_oid uuid;
+begin
+  v_oid := gifto_test.place_order(
+    '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
+    'Owner Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria', null);
+  perform set_config('gifto_test.signed_order_id', v_oid::text, false);
+end $$;
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare v_oid uuid := current_setting('gifto_test.signed_order_id')::uuid;
+begin
+  begin
+    perform public.cancel_guest_order(v_oid, repeat('a', 64));
+    raise exception 'TEST 18 FAILED: a signed-in order was cancelled via the guest RPC';
+  exception when insufficient_privilege then
+    null;
+  end;
+end $$;
+
+reset role;
+do $$
+declare v_oid uuid := current_setting('gifto_test.signed_order_id')::uuid;
+begin
+  if (select status from public.orders where id = v_oid) <> 'placed' then
+    raise exception 'TEST 18 FAILED: signed-in order status changed';
+  end if;
+  raise notice 'TEST 18 PASSED: signed-in orders cannot be cancelled through cancel_guest_order';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 19: a non-placed guest order is rejected; a second call on a
+-- cancelled order is a no-op that never restocks twice (P0-05)
+-- ---------------------------------------------------------------------------
+-- Earlier tests consumed the seed stock of product 101 (5 units); top it up
+-- so this test can place its own order. The suite rolls everything back.
+reset role;
+update public.products set stock = stock + 2
+ where id = '51100000-0000-0000-0000-000000000101';
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_hash text := encode(digest('guest-token-cancel-three', 'sha256'), 'hex');
+  v_oid uuid;
+begin
+  v_oid := gifto_test.place_guest_order(
+    '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
+    'Cancel Guest Three', '01001112233', null,
+    '12 Main Street', 'Alexandria', 'Alexandria', null,
+    gen_random_uuid(), v_hash);
+  perform set_config('gifto_test.cancel3_order_id', v_oid::text, false);
+  perform set_config('gifto_test.cancel3_hash', v_hash, false);
+end $$;
+
+set role authenticated;
+set request.jwt.claim.sub = '31100000-0000-0000-0000-000000000101';
+set request.jwt.claims = '{"sub":"31100000-0000-0000-0000-000000000101"}';
+do $$
+declare v_ov uuid;
+begin
+  select id into v_ov from public.order_vendors
+   where order_id = current_setting('gifto_test.cancel3_order_id')::uuid;
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+end $$;
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.cancel3_order_id')::uuid;
+  v_hash text := current_setting('gifto_test.cancel3_hash');
+begin
+  begin
+    perform public.cancel_guest_order(v_oid, v_hash);
+    raise exception 'TEST 19 FAILED: a confirmed order was cancelled';
+  exception when check_violation then
+    null;
+  end;
+end $$;
+
+reset role;
+do $$
+declare v_oid uuid := current_setting('gifto_test.cancel3_order_id')::uuid;
+begin
+  if (select status from public.orders where id = v_oid) <> 'confirmed' then
+    raise exception 'TEST 19 FAILED: confirmed order status changed';
+  end if;
+  raise notice 'TEST 19a PASSED: non-placed guest order rejected';
+end $$;
+
+-- Second call on the TEST 16 cancelled order: must succeed and change nothing.
+reset role;
+do $$
+declare v_stock_now int;
+begin
+  select stock into v_stock_now from public.products
+   where id = '51100000-0000-0000-0000-000000000101';
+  perform set_config('gifto_test.cancel_stock_now', v_stock_now::text, false);
+end $$;
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+begin
+  perform public.cancel_guest_order(
+    current_setting('gifto_test.cancel_order_id')::uuid,
+    current_setting('gifto_test.cancel_hash'));
+end $$;
+
+reset role;
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.cancel_order_id')::uuid;
+  v_stock_now int := current_setting('gifto_test.cancel_stock_now')::int;
+begin
+  if (select status from public.orders where id = v_oid) <> 'cancelled' then
+    raise exception 'TEST 19 FAILED: second call changed the cancelled order';
+  end if;
+  if (select stock from public.products where id = '51100000-0000-0000-0000-000000000101') <> v_stock_now then
+    raise exception 'TEST 19 FAILED: second call restocked again (double restock)';
+  end if;
+  if (select count(*) from public.inventory_movements
+       where order_id = v_oid and reason = 'order_cancelled') <> 1 then
+    raise exception 'TEST 19 FAILED: second call recorded another restock movement';
+  end if;
+  raise notice 'TEST 19 PASSED: second call on a cancelled order is a no-op, no double restock';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 20: guest token expiry is stamped at placement and enforced (P1-02)
+-- ---------------------------------------------------------------------------
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_hash text := encode(digest('guest-token-expiry', 'sha256'), 'hex');
+  v_oid uuid;
+begin
+  v_oid := gifto_test.place_guest_order(
+    '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
+    'Expiry Guest', '01001112233', 'expiry@guest.gifto.test',
+    '12 Main Street', 'Alexandria', 'Alexandria', null,
+    gen_random_uuid(), v_hash);
+  perform set_config('gifto_test.expiry_order_id', v_oid::text, false);
+  perform set_config('gifto_test.expiry_hash', v_hash, false);
+end $$;
+
+reset role;
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.expiry_order_id')::uuid;
+  v_expires timestamptz;
+begin
+  select guest_token_expires_at into v_expires
+    from public.orders where id = v_oid;
+  if v_expires is null then
+    raise exception 'TEST 20 FAILED: no expiry stamped at placement';
+  end if;
+  if v_expires <= now() or v_expires > now() + interval '7 days 1 minute' then
+    raise exception 'TEST 20 FAILED: expiry is not now()+7d (got %)', v_expires;
+  end if;
+  raise notice 'TEST 20a PASSED: placement stamps a 7-day token expiry';
+end $$;
+
+-- Expire the token; every guest path must now reject it.
+reset role;
+do $$
+begin
+  update public.orders
+     set guest_token_expires_at = now() - interval '1 day'
+   where id = current_setting('gifto_test.expiry_order_id')::uuid;
+end $$;
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_view jsonb;
+  v_rejected boolean := false;
+begin
+  select public.get_guest_order(
+    current_setting('gifto_test.expiry_order_id')::uuid,
+    current_setting('gifto_test.expiry_hash'))
+    into v_view;
+  if v_view is not null then
+    raise exception 'TEST 20 FAILED: expired token can still view the order';
+  end if;
+
+  begin
+    perform public.cancel_guest_order(
+      current_setting('gifto_test.expiry_order_id')::uuid,
+      current_setting('gifto_test.expiry_hash'));
+  exception when sqlstate '42501' then
+    v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'TEST 20 FAILED: expired token can still cancel the order';
+  end if;
+  raise notice 'TEST 20b PASSED: expired token rejected on view and cancel';
+end $$;
+
+-- Restore the expiry; the same token works again (no rotation needed).
+reset role;
+do $$
+begin
+  update public.orders
+     set guest_token_expires_at = now() + interval '7 days'
+   where id = current_setting('gifto_test.expiry_order_id')::uuid;
+end $$;
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_view jsonb;
+begin
+  select public.get_guest_order(
+    current_setting('gifto_test.expiry_order_id')::uuid,
+    current_setting('gifto_test.expiry_hash'))
+    into v_view;
+  if v_view is null then
+    raise exception 'TEST 20 FAILED: live token cannot view the order';
+  end if;
+  raise notice 'TEST 20 PASSED: expiry stamped and enforced, live token still works';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 21: recovery by reference + phone/email, single-use, rotation (P1-02)
+-- ---------------------------------------------------------------------------
+reset role;
+do $$
+declare
+  v_ref text;
+begin
+  select public_reference into v_ref from public.orders
+   where id = current_setting('gifto_test.expiry_order_id')::uuid;
+  perform set_config('gifto_test.expiry_reference', v_ref, false);
+end $$;
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_rows int;
+  v_token text;
+  v_oid uuid;
+  v_email text;
+begin
+  -- Wrong phone: silent empty result, no token issued.
+  select count(*) into v_rows
+    from public.request_guest_order_recovery(
+      current_setting('gifto_test.expiry_reference'), '01999999999');
+  if v_rows <> 0 then
+    raise exception 'TEST 21 FAILED: wrong phone issued a recovery token';
+  end if;
+
+  -- Correct phone: one token, emailed to the checkout address.
+  select order_id, recovery_token, contact_email
+    into v_oid, v_token, v_email
+    from public.request_guest_order_recovery(
+      current_setting('gifto_test.expiry_reference'), '01001112233');
+  if v_oid is null or v_token is null or v_token !~ '^[0-9a-f]{64}$' then
+    raise exception 'TEST 21 FAILED: correct recovery issued no usable token';
+  end if;
+  if v_email <> 'expiry@guest.gifto.test' then
+    raise exception 'TEST 21 FAILED: recovery email address is wrong';
+  end if;
+  perform set_config('gifto_test.recovery_token', v_token, false);
+
+  -- A second request invalidates the first token.
+  perform public.request_guest_order_recovery(
+    current_setting('gifto_test.expiry_reference'), 'expiry@guest.gifto.test');
+  if exists (
+    select 1 from public.guest_recovery_tokens
+     where order_id = v_oid
+       and token_hash = encode(digest(v_token, 'sha256'), 'hex')
+  ) then
+    raise exception 'TEST 21 FAILED: re-issue did not invalidate the old token';
+  end if;
+  select recovery_token into v_token
+    from public.request_guest_order_recovery(
+      current_setting('gifto_test.expiry_reference'), '01001112233');
+  perform set_config('gifto_test.recovery_token', v_token, false);
+  raise notice 'TEST 21a PASSED: recovery needs reference + contact, re-issue invalidates';
+end $$;
+
+-- Redeem once: old guest token dies, new one works, expiry refreshes.
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.expiry_order_id')::uuid;
+  v_old_hash text := current_setting('gifto_test.expiry_hash');
+  v_new_token text := encode(gen_random_bytes(32), 'hex');
+  v_new_hash text := encode(digest(v_new_token, 'sha256'), 'hex');
+  v_view jsonb;
+  v_reused boolean := false;
+begin
+  perform public.redeem_guest_recovery_token(
+    v_oid,
+    encode(digest(current_setting('gifto_test.recovery_token'), 'sha256'), 'hex'),
+    v_new_hash);
+
+  select public.get_guest_order(v_oid, v_old_hash) into v_view;
+  if v_view is not null then
+    raise exception 'TEST 21 FAILED: old guest token still works after recovery';
+  end if;
+
+  select public.get_guest_order(v_oid, v_new_hash) into v_view;
+  if v_view is null then
+    raise exception 'TEST 21 FAILED: rotated guest token cannot view the order';
+  end if;
+
+  -- The same recovery link cannot be used twice.
+  begin
+    perform public.redeem_guest_recovery_token(
+      v_oid,
+      encode(digest(current_setting('gifto_test.recovery_token'), 'sha256'), 'hex'),
+      encode(digest('another-token', 'sha256'), 'hex'));
+  exception when sqlstate '42501' then
+    v_reused := true;
+  end;
+  if not v_reused then
+    raise exception 'TEST 21 FAILED: recovery link was reusable';
+  end if;
+
+  perform set_config('gifto_test.expiry_hash', v_new_hash, false);
+  raise notice 'TEST 21 PASSED: recovery rotates the token once and refreshes expiry';
+end $$;
+
+-- Table reads run as the superuser (service_role holds no SELECT on orders).
+reset role;
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.expiry_order_id')::uuid;
+begin
+  if (select guest_token_expires_at from public.orders where id = v_oid)
+     <= now() + interval '6 days' then
+    raise exception 'TEST 21 FAILED: recovery did not refresh the expiry';
+  end if;
+end $$;
+
+-- An expired recovery link is rejected.
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.expiry_order_id')::uuid;
+  v_token text;
+begin
+  select recovery_token into v_token
+    from public.request_guest_order_recovery(
+      current_setting('gifto_test.expiry_reference'), '01001112233');
+  perform set_config('gifto_test.expired_recovery_token', v_token, false);
+end $$;
+
+reset role;
+do $$
+begin
+  update public.guest_recovery_tokens
+     set expires_at = now() - interval '1 minute'
+   where order_id = current_setting('gifto_test.expiry_order_id')::uuid
+     and used_at is null;
+end $$;
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.expiry_order_id')::uuid;
+  v_expired boolean := false;
+begin
+  begin
+    perform public.redeem_guest_recovery_token(
+      v_oid,
+      encode(digest(current_setting('gifto_test.expired_recovery_token'), 'sha256'), 'hex'),
+      encode(digest('fresh-token', 'sha256'), 'hex'));
+  exception when sqlstate '42501' then
+    v_expired := true;
+  end;
+  if not v_expired then
+    raise exception 'TEST 21 FAILED: expired recovery link was accepted';
+  end if;
+  raise notice 'TEST 21b PASSED: expired recovery link rejected';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 22: claiming a guest order attaches it to the account (P1-02)
+-- ---------------------------------------------------------------------------
+-- Earlier tests placed (and mostly kept) orders against the shared G One
+-- stock of 5; restore it so this test is independent of their consumption.
+reset role;
+update public.products set stock = 5
+ where id = '51100000-0000-0000-0000-000000000101';
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_hash text := encode(digest('guest-token-claim', 'sha256'), 'hex');
+  v_oid uuid;
+begin
+  v_oid := gifto_test.place_guest_order(
+    '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
+    'Claim Guest', '01001112234', null,
+    '12 Main Street', 'Alexandria', 'Alexandria', null,
+    gen_random_uuid(), v_hash);
+  perform set_config('gifto_test.claim_order_id', v_oid::text, false);
+  perform set_config('gifto_test.claim_hash', v_hash, false);
+end $$;
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.claim_order_id')::uuid;
+  v_wrong boolean := false;
+begin
+  -- Wrong token cannot claim.
+  begin
+    perform public.claim_guest_order(
+      v_oid,
+      encode(digest('not-the-token', 'sha256'), 'hex'),
+      '11100000-0000-0000-0000-000000000101');
+  exception when sqlstate '42501' then
+    v_wrong := true;
+  end;
+  if not v_wrong then
+    raise exception 'TEST 22 FAILED: wrong token claimed the order';
+  end if;
+
+  perform public.claim_guest_order(
+    v_oid,
+    current_setting('gifto_test.claim_hash'),
+    '11100000-0000-0000-0000-000000000101');
+end $$;
+
+-- Table reads run as the superuser (service_role holds no SELECT on orders).
+reset role;
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.claim_order_id')::uuid;
+begin
+  if (select user_id from public.orders where id = v_oid)
+     <> '11100000-0000-0000-0000-000000000101' then
+    raise exception 'TEST 22 FAILED: order was not attached to the account';
+  end if;
+  if (select guest_token_hash from public.orders where id = v_oid) is not null then
+    raise exception 'TEST 22 FAILED: guest token was not cleared on claim';
+  end if;
+end $$;
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_oid uuid := current_setting('gifto_test.claim_order_id')::uuid;
+begin
+  if (select public.get_guest_order(v_oid, current_setting('gifto_test.claim_hash'))) is not null then
+    raise exception 'TEST 22 FAILED: old guest token still opens a claimed order';
+  end if;
+  raise notice 'TEST 22 PASSED: claim attaches the order and clears the guest token';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 23: price-change consent on the guest path (P1-03)
+-- ---------------------------------------------------------------------------
+reset role;
+update public.products set stock = 5, price_minor = 30000
+ where id = '51100000-0000-0000-0000-000000000101';
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_hash text := encode(digest('guest-token-price', 'sha256'), 'hex');
+  v_oid uuid;
+  v_total int;
+begin
+  -- Unchanged prices place normally for a guest.
+  v_oid := public.place_guest_order_with_price_check(
+    '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
+    'Price Guest', '01001112233', null,
+    '12 Main Street', 'Alexandria', 'Alexandria', null,
+    gen_random_uuid(), v_hash,
+    '[{"product_id":"51100000-0000-0000-0000-000000000101","unit_price_minor":30000}]'::jsonb,
+    30000);
+  if v_oid is null then
+    raise exception 'TEST 23 FAILED: unchanged guest prices did not place';
+  end if;
+  select (public.get_guest_order(v_oid, v_hash) ->> 'total_minor')::int
+    into v_total;
+  if v_total <> 30000 then
+    raise exception 'TEST 23 FAILED: guest placed total is % not 30000', v_total;
+  end if;
+  raise notice 'TEST 23a PASSED: unchanged guest prices place normally';
+end $$;
+
+-- The vendor changes the price between cart and submit.
+reset role;
+update public.products set price_minor = 32000
+ where id = '51100000-0000-0000-0000-000000000101';
+
+set role service_role;
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '{}';
+do $$
+declare
+  v_hash text := encode(digest('guest-token-price-2', 'sha256'), 'hex');
+  v_oid uuid;
+  v_blocked boolean := false;
+  v_total int;
+begin
+  -- A changed price blocks the guest order with PRICE_CHANGED.
+  begin
+    perform public.place_guest_order_with_price_check(
+      '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
+      'Price Guest', '01001112233', null,
+      '12 Main Street', 'Alexandria', 'Alexandria', null,
+      gen_random_uuid(), v_hash,
+      '[{"product_id":"51100000-0000-0000-0000-000000000101","unit_price_minor":30000}]'::jsonb,
+      30000);
+  exception when check_violation then
+    if sqlerrm like 'PRICE_CHANGED:%' then
+      v_blocked := true;
+    else
+      raise exception 'TEST 23 FAILED: wrong error for a guest price change: %', sqlerrm;
+    end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST 23 FAILED: changed guest price did not block';
+  end if;
+
+  -- Re-confirming with the new price places at the new price.
+  v_oid := public.place_guest_order_with_price_check(
+    '[{"product_id":"51100000-0000-0000-0000-000000000101","quantity":1}]'::jsonb,
+    'Price Guest', '01001112233', null,
+    '12 Main Street', 'Alexandria', 'Alexandria', null,
+    gen_random_uuid(), v_hash,
+    '[{"product_id":"51100000-0000-0000-0000-000000000101","unit_price_minor":32000}]'::jsonb,
+    32000);
+  if v_oid is null then
+    raise exception 'TEST 23 FAILED: guest re-confirm did not place';
+  end if;
+  select (public.get_guest_order(v_oid, v_hash) ->> 'total_minor')::int
+    into v_total;
+  if v_total <> 32000 then
+    raise exception 'TEST 23 FAILED: guest re-confirmed total is % not 32000', v_total;
+  end if;
+  raise notice 'TEST 23 PASSED: guest price consent blocks and re-confirms at the new price';
 end $$;
 
 reset role;

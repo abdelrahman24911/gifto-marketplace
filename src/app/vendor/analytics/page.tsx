@@ -103,7 +103,9 @@ export default async function VendorAnalyticsPage({
       .range(from, to);
 
     if (queryStart) {
-      query = query.gte("created_at", queryStart.toISOString());
+      query = query.or(
+        `created_at.gte.${queryStart.toISOString()},delivered_at.gte.${queryStart.toISOString()}`,
+      );
     }
 
     return query.returns<AnalyticsSuborder[]>();
@@ -160,8 +162,9 @@ export default async function VendorAnalyticsPage({
         title="Analytics"
         description={
           <>
-            Sales performance for {access.vendorName}. Revenue counts delivered
-            shop lines only, matching the finance ledger.
+            Sales performance for {access.vendorName}. Revenue counts shop
+            lines delivered in the selected window, matching the finance
+            ledger&apos;s completion date.
           </>
         }
         actions={
@@ -241,7 +244,7 @@ export default async function VendorAnalyticsPage({
                 {
                   label: "Recognised revenue",
                   value: formatEgp(analytics.revenueMinor),
-                  hint: "Delivered shop lines",
+                  hint: "Delivered in this window",
                   emphasis: "positive",
                 },
                 {
@@ -255,7 +258,7 @@ export default async function VendorAnalyticsPage({
                 {
                   label: "Delivered",
                   value: analytics.completedOrders.toLocaleString("en-GB"),
-                  hint: `${analytics.openOrders} still open`,
+                  hint: "In this window",
                 },
                 {
                   label: "Average order value",
@@ -266,11 +269,11 @@ export default async function VendorAnalyticsPage({
             />
           </div>
 
-          {analytics.totalOrders === 0 ? (
+          {analytics.totalOrders === 0 && analytics.completedOrders === 0 ? (
             <div className="mt-6">
               <VendorEmpty title="No shop lines in this period">
-                Nothing was placed in the selected window. Try a longer range
-                to see earlier activity.
+                Nothing was placed or delivered in the selected window. Try a
+                longer range to see earlier activity.
               </VendorEmpty>
             </div>
           ) : null}
@@ -284,7 +287,7 @@ export default async function VendorAnalyticsPage({
                 id="reconciliation-heading"
                 className="font-display text-lg text-ink"
               >
-                How the numbers reconcile
+                How placed orders reconcile
               </h2>
               <p className="text-xs text-ink-mute">
                 Every line placed in the window is counted once.
@@ -292,14 +295,14 @@ export default async function VendorAnalyticsPage({
             </div>
             <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <Metric
-                label="Gross sales"
+                label="Gross placed"
                 value={formatEgp(analytics.grossSalesMinor)}
                 hint={`${analytics.totalOrders} placed`}
               />
               <Metric
-                label="Recognised"
-                value={formatEgp(analytics.revenueMinor)}
-                hint={`${analytics.completedOrders} delivered`}
+                label="Delivered from placed"
+                value={formatEgp(analytics.placedDeliveredMinor)}
+                hint={`${analytics.placedDeliveredOrders} delivered`}
                 tone="revenue"
               />
               <Metric
@@ -322,8 +325,10 @@ export default async function VendorAnalyticsPage({
               />
             </dl>
             <p className="mt-3 text-xs text-ink-soft">
-              Recognised + open + cancelled + returned equals gross sales.
-              Cancelled and returned lines never count as revenue.
+              Delivered from placed + open + cancelled + returned equals gross
+              placed. Recognised revenue above is counted by delivery date, so
+              it can include lines placed before this window and may not match
+              this split.
             </p>
           </section>
 
@@ -339,7 +344,8 @@ export default async function VendorAnalyticsPage({
                 Revenue over time
               </h2>
               <p className="mt-1 text-xs text-ink-mute">
-                Grouped by delivery date.
+                Grouped by delivery date, including late deliveries from
+                earlier placements.
               </p>
               <BarChart
                 points={analytics.revenueSeries}

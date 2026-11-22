@@ -10,6 +10,11 @@ export const adminNavGroups: DashboardNavGroup[] = [
         icon: "overview",
         exact: true,
       },
+      {
+        label: "Analytics",
+        href: "/admin/analytics",
+        icon: "analytics",
+      },
     ],
   },
   {
@@ -20,6 +25,18 @@ export const adminNavGroups: DashboardNavGroup[] = [
     label: "Commerce",
     items: [
       { label: "Orders", href: "/admin/orders", icon: "orders" },
+      {
+        label: "Logistics",
+        href: "/admin/logistics",
+        icon: "orders",
+      },
+      { label: "Refunds", href: "/admin/refunds", icon: "orders" },
+      {
+        label: "Price refusals",
+        href: "/admin/price-consent-refusals",
+        icon: "orders",
+      },
+      { label: "Reviews", href: "/admin/reviews", icon: "products" },
       {
         label: "Commissions",
         href: "/admin/commissions",
@@ -45,6 +62,7 @@ export const adminNavGroups: DashboardNavGroup[] = [
     label: "Support",
     items: [
       { label: "Vendor support", href: "/admin/support", icon: "support" },
+      { label: "Mail outbox", href: "/admin/mail-outbox", icon: "support" },
     ],
   },
 ];

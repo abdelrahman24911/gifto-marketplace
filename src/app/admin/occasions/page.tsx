@@ -4,6 +4,7 @@ import { PlusIcon, SearchIcon } from "@/components/icons";
 import { ProductImage } from "@/components/product-image";
 import { Breadcrumb, EmptyState } from "@/components/ui/section";
 import { requirePlatformAdmin } from "@/lib/auth";
+import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
 import { fetchAllRows } from "@/lib/fetch-all";
 import {
   OCCASION_MATCH_MODE_LABELS,
@@ -55,6 +56,7 @@ function formatUpdated(value: string) {
     day: "numeric",
     month: "short",
     year: "numeric",
+    timeZone: BUSINESS_TIME_ZONE,
   });
 }
 

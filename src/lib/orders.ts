@@ -75,6 +75,27 @@ export const VENDOR_NEXT_STATUSES: Partial<
   ],
 };
 
+/** What a platform administrator may do next with a suborder. */
+export const ADMIN_NEXT_STATUSES: Partial<
+  Record<OrderStatus, { value: OrderStatus; label: string }[]>
+> = {
+  placed: [
+    { value: "confirmed", label: "Confirm order" },
+    { value: "cancelled", label: "Cancel order" },
+  ],
+  confirmed: [
+    { value: "shipped", label: "Mark as shipped" },
+    { value: "cancelled", label: "Cancel order" },
+  ],
+  shipped: [
+    { value: "delivered", label: "Mark as delivered" },
+    { value: "cancelled", label: "Cancel and restock" },
+  ],
+  delivered: [
+    { value: "returned", label: "Mark as returned" },
+  ],
+};
+
 export function isOrderStatus(value: string): value is OrderStatus {
   return value in ORDER_STATUS_LABELS;
 }

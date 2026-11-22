@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   createContext,
   useCallback,
@@ -12,6 +12,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
+
+import { localizeHref } from "@/lib/locale-path";
 
 type DirtySource = symbol;
 
@@ -251,18 +253,26 @@ export function GuardedLink({
   ...props
 }: GuardedLinkProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { isDirty, requestNavigation } = useContext(NavigationGuardContext);
 
+  // GuardedLink must stay provider-free (it is used by admin/vendor too),
+  // so it cannot use next-intl's Link. It prefixes localised hrefs itself
+  // from the current pathname: on an Arabic page `/shops` becomes
+  // `/ar/shops`; admin, vendor and other non-localised hrefs are untouched.
+  const localizedHref = localizeHref(href, pathname ?? "/");
+
   function handleNavigate(event: { preventDefault: () => void }) {
-    const isHashOnly = typeof href === "string" && href.startsWith("#");
+    const isHashOnly =
+      typeof localizedHref === "string" && localizedHref.startsWith("#");
     if (isHashOnly || !isDirty()) return;
 
     event.preventDefault();
     requestNavigation(() => {
       if (replace) {
-        router.replace(href, { scroll });
+        router.replace(localizedHref, { scroll });
       } else {
-        router.push(href, { scroll });
+        router.push(localizedHref, { scroll });
       }
     });
   }
@@ -270,7 +280,7 @@ export function GuardedLink({
   return (
     <Link
       {...props}
-      href={href}
+      href={localizedHref}
       replace={replace}
       scroll={scroll}
       onNavigate={handleNavigate}

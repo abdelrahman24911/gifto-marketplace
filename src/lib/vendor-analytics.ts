@@ -11,11 +11,16 @@ import type { OrderStatus } from "@/lib/supabase/database.types";
  * Vendor sales analytics.
  *
  * Definitions are deliberately conservative and match the finance ledger:
- * - "Recognised revenue" is the subtotal of delivered shop lines only.
+ * - "Recognised revenue" is the subtotal of shop lines delivered in the window,
+ *   grouped and filtered by `delivered_at` so late deliveries count in the month
+ *   they completed, not the month the customer placed the order.
  * - "Gross sales" is every shop line placed in the window, whatever happened
  *   to it afterwards, so the reconciliation panel can explain the difference.
  * - Open lines (placed/confirmed/shipped) are pipeline, never revenue.
  * - Cancelled and returned lines are excluded from revenue.
+ *
+ * Callers must fetch rows where either `created_at` or `delivered_at` falls in
+ * the window; the two cohorts intentionally do not have to overlap.
  *
  * All arithmetic is integer minor units. Suborders are deduplicated by id before
  * aggregation so a joined `order_items` row can never double-count a suborder.
@@ -93,6 +98,8 @@ export type VendorAnalytics = {
   returnedOrders: number;
   openOrders: number;
   grossSalesMinor: number;
+  placedDeliveredMinor: number;
+  placedDeliveredOrders: number;
   revenueMinor: number;
   cancelledMinor: number;
   returnedMinor: number;
@@ -241,7 +248,10 @@ export function computeVendorAnalytics(
   ).flatMap((suborder) => {
     const createdAt = parseDate(suborder.created_at);
     if (!createdAt) return [];
-    return [{ suborder, createdAt }];
+    const deliveredAt =
+      parseDate(suborder.delivered_at) ??
+      (suborder.status === "delivered" ? createdAt : null);
+    return [{ suborder, createdAt, deliveredAt }];
   });
 
   const requestedStart = analyticsWindowStart(range, now);
@@ -256,12 +266,20 @@ export function computeVendorAnalytics(
   const windowStart =
     requestedStart ?? startOfBusinessMonth(oldestCreated ?? now);
 
-  const rows = unique.filter(
+  const placedRows = unique.filter(
     (row) => row.createdAt.getTime() >= windowStart.getTime(),
+  );
+  const deliveredRows = unique.filter(
+    (row) =>
+      row.suborder.status === "delivered" &&
+      row.deliveredAt !== null &&
+      row.deliveredAt.getTime() >= windowStart.getTime(),
   );
 
   const statusCounts = emptyStatusCounts();
   let grossSalesMinor = 0;
+  let placedDeliveredMinor = 0;
+  let placedDeliveredOrders = 0;
   let revenueMinor = 0;
   let cancelledMinor = 0;
   let returnedMinor = 0;
@@ -279,7 +297,7 @@ export function computeVendorAnalytics(
     { name: string; units: number; revenueMinor: number; orders: Set<string> }
   >();
 
-  for (const { suborder, createdAt } of rows) {
+  for (const { suborder, createdAt } of placedRows) {
     const subtotal = Number.isFinite(suborder.subtotal_minor)
       ? suborder.subtotal_minor
       : 0;
@@ -297,35 +315,8 @@ export function computeVendorAnalytics(
     orderCounts.set(orderKey, (orderCounts.get(orderKey) ?? 0) + 1);
 
     if (suborder.status === "delivered") {
-      revenueMinor += subtotal;
-      completedOrders += 1;
-
-      const deliveredAt = parseDate(suborder.delivered_at) ?? createdAt;
-      if (deliveredAt.getTime() > latestActivity.getTime()) {
-        latestActivity = deliveredAt;
-      }
-      const revenueKey = bucketKey(deliveredAt, granularity);
-      revenueCounts.set(
-        revenueKey,
-        (revenueCounts.get(revenueKey) ?? 0) + subtotal,
-      );
-
-      for (const item of suborder.order_items ?? []) {
-        const name = item.product_name?.trim() || "Unknown item";
-        const key = item.product_id ?? `name:${name.toLowerCase()}`;
-        const current = bestSellerMap.get(key) ?? {
-          name,
-          units: 0,
-          revenueMinor: 0,
-          orders: new Set<string>(),
-        };
-        current.units += Number.isFinite(item.quantity) ? item.quantity : 0;
-        current.revenueMinor += Number.isFinite(item.line_total_minor)
-          ? item.line_total_minor
-          : 0;
-        current.orders.add(suborder.id);
-        bestSellerMap.set(key, current);
-      }
+      placedDeliveredMinor += subtotal;
+      placedDeliveredOrders += 1;
     } else if (suborder.status === "cancelled") {
       cancelledMinor += subtotal;
       cancelledOrders += 1;
@@ -335,6 +326,42 @@ export function computeVendorAnalytics(
     } else {
       openMinor += subtotal;
       openOrders += 1;
+    }
+  }
+
+  for (const { suborder, deliveredAt } of deliveredRows) {
+    if (!deliveredAt) continue;
+
+    const subtotal = Number.isFinite(suborder.subtotal_minor)
+      ? suborder.subtotal_minor
+      : 0;
+    revenueMinor += subtotal;
+    completedOrders += 1;
+
+    if (deliveredAt.getTime() > latestActivity.getTime()) {
+      latestActivity = deliveredAt;
+    }
+    const revenueKey = bucketKey(deliveredAt, granularity);
+    revenueCounts.set(
+      revenueKey,
+      (revenueCounts.get(revenueKey) ?? 0) + subtotal,
+    );
+
+    for (const item of suborder.order_items ?? []) {
+      const name = item.product_name?.trim() || "Unknown item";
+      const key = item.product_id ?? `name:${name.toLowerCase()}`;
+      const current = bestSellerMap.get(key) ?? {
+        name,
+        units: 0,
+        revenueMinor: 0,
+        orders: new Set<string>(),
+      };
+      current.units += Number.isFinite(item.quantity) ? item.quantity : 0;
+      current.revenueMinor += Number.isFinite(item.line_total_minor)
+        ? item.line_total_minor
+        : 0;
+      current.orders.add(suborder.id);
+      bestSellerMap.set(key, current);
     }
   }
 
@@ -373,12 +400,14 @@ export function computeVendorAnalytics(
     granularity,
     windowStart: windowStart.toISOString(),
     windowEnd: latestActivity.toISOString(),
-    totalOrders: rows.length,
+    totalOrders: placedRows.length,
     completedOrders,
     cancelledOrders,
     returnedOrders,
     openOrders,
     grossSalesMinor,
+    placedDeliveredMinor,
+    placedDeliveredOrders,
     revenueMinor,
     cancelledMinor,
     returnedMinor,

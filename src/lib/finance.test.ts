@@ -2,10 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildSettlementLineLookup,
+  clawbackRemainingMinor,
   commissionEntriesById,
   getEntryFinanceState,
+  isTransferMethod,
+  settlementAdjustmentsMinor,
+  settlementEarnedCommissionMinor,
   settlementEffectiveStatus,
   settlementLineGrossMinor,
+  settlementNetDueMinor,
   settlementTotals,
   settlementTotalsResult,
   totalsForFinanceState,
@@ -75,6 +80,7 @@ const settlements: SettlementRecord[] = [
     vendor_id: "vendor-1",
     status: "open",
     total_minor: 800,
+    clawback_minor: 0,
     note: "Week 45",
     created_at: "2026-11-04T12:00:00.000Z",
     paid_at: null,
@@ -83,6 +89,10 @@ const settlements: SettlementRecord[] = [
     voided_at: null,
     voided_by: null,
     void_reason: null,
+    paid_amount_minor: null,
+    transfer_method: null,
+    transfer_reference: null,
+    proof_note: null,
     settlement_lines: [
       { commission_entry_id: "entry-open", amount_minor: 800, released_at: null, released_by: null, release_reason: null },
     ],
@@ -92,6 +102,7 @@ const settlements: SettlementRecord[] = [
     vendor_id: "vendor-1",
     status: "paid",
     total_minor: 1_125,
+    clawback_minor: 0,
     note: null,
     created_at: "2026-11-02T12:00:00.000Z",
     paid_at: "2026-11-03T12:00:00.000Z",
@@ -100,6 +111,10 @@ const settlements: SettlementRecord[] = [
     voided_at: null,
     voided_by: null,
     void_reason: null,
+    paid_amount_minor: 1_125,
+    transfer_method: "bank_transfer",
+    transfer_reference: "BANK-REF-1",
+    proof_note: "Weekly remittance",
     settlement_lines: [
       { commission_entry_id: "entry-paid", amount_minor: 1_125, released_at: null, released_by: null, release_reason: null },
     ],
@@ -109,6 +124,7 @@ const settlements: SettlementRecord[] = [
     vendor_id: "vendor-1",
     status: "voided",
     total_minor: 400,
+    clawback_minor: 0,
     note: "Opened by mistake",
     created_at: "2026-11-05T12:00:00.000Z",
     paid_at: null,
@@ -117,6 +133,10 @@ const settlements: SettlementRecord[] = [
     voided_at: "2026-11-05T13:00:00.000Z",
     voided_by: "admin-3",
     void_reason: "Wrong payout week",
+    paid_amount_minor: null,
+    transfer_method: null,
+    transfer_reference: null,
+    proof_note: null,
     settlement_lines: [
       {
         commission_entry_id: "entry-released",
@@ -374,5 +394,81 @@ describe("finance helpers", () => {
   it("renders unavailable gross for missing detail entries", () => {
     expect(settlementLineGrossMinor(undefined)).toBeNull();
     expect(settlementLineGrossMinor(entries[0])).toBe(entries[0].base_minor);
+  });
+});
+
+describe("P1-05 payout proof helpers", () => {
+  it("splits a settlement's net commission into earned and adjustments", () => {
+    const byId = commissionEntriesById(entries);
+
+    // The paid settlement's line equals its entry: no adjustments.
+    expect(settlementEarnedCommissionMinor(settlements[1], byId)).toBe(1_125);
+    expect(settlementAdjustmentsMinor(settlements[1], byId)).toBe(0);
+
+    // A line reduced by a refund: earned 800, adjustment -400, net 400.
+    const adjusted = {
+      ...settlements[0],
+      settlement_lines: [
+        {
+          commission_entry_id: "entry-open",
+          amount_minor: 400,
+          released_at: null,
+          released_by: null,
+          release_reason: null,
+        },
+      ],
+    };
+    expect(settlementEarnedCommissionMinor(adjusted, byId)).toBe(800);
+    expect(settlementAdjustmentsMinor(adjusted, byId)).toBe(-400);
+  });
+
+  it("returns null instead of an incomplete adjustment", () => {
+    const byId = commissionEntriesById(entries);
+    const missing = {
+      ...settlements[0],
+      settlement_lines: [
+        {
+          commission_entry_id: "entry-missing",
+          amount_minor: 100,
+          released_at: null,
+          released_by: null,
+          release_reason: null,
+        },
+      ],
+    };
+    expect(settlementEarnedCommissionMinor(missing, byId)).toBeNull();
+    expect(settlementAdjustmentsMinor(missing, byId)).toBeNull();
+  });
+
+  it("accepts only the three transfer methods", () => {
+    expect(isTransferMethod("bank_transfer")).toBe(true);
+    expect(isTransferMethod("cash")).toBe(true);
+    expect(isTransferMethod("other")).toBe(true);
+    expect(isTransferMethod("wire")).toBe(false);
+    expect(isTransferMethod(null)).toBe(false);
+    expect(isTransferMethod(undefined)).toBe(false);
+  });
+
+  it("N-01: nets paid-return clawbacks out of the lines total", () => {
+    expect(settlementNetDueMinor(1000, 200)).toBe(800);
+    expect(settlementNetDueMinor(400, 400)).toBe(0);
+    expect(settlementNetDueMinor(800, 0)).toBe(800);
+  });
+
+  it("R-02: what a vendor still owes on an outstanding clawback", () => {
+    // A clawback is stored negative; the remainder is its magnitude
+    // less any partial applications already netted against settlements.
+    expect(clawbackRemainingMinor({ amount_minor: -500 }, [])).toBe(500);
+    expect(
+      clawbackRemainingMinor({ amount_minor: -500 }, [
+        { amount_minor: 400 },
+      ]),
+    ).toBe(100);
+    expect(
+      clawbackRemainingMinor({ amount_minor: -500 }, [
+        { amount_minor: 300 },
+        { amount_minor: 200 },
+      ]),
+    ).toBe(0);
   });
 });

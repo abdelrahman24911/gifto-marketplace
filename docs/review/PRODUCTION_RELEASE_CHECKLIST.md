@@ -1,3 +1,5 @@
+> **HISTORICAL — 2026-11-20 (P0-08).** Dated snapshot of a past verification (see the date in the file). Its numbers and hosted-state claims were true when written and are not current. Current state: `README.md`, `docs/HOSTED_STATE.md` (single hosted-state table), `docs/DECISIONS.md`. Kept as a record; its findings were not edited.
+
 # Gifto — Production Release Checklist
 
 Date: 2026-11-09
@@ -96,6 +98,7 @@ Security:
 
 - App-only rollback: restore the previous Vercel deployment. Note that the old app will again show generic “Shop” labels in order history after migration 20; this is degraded but not data-destructive.
 - Database rollback: do not roll back migrations 20 or 23 without a backup and an explicit data-loss decision. Prefer fixing forward.
+- Migration 30 is forward-only: there is no rollback file. It creates refund cases and the commission-adjustment ledger; a down migration would destroy live refund history. The owner approved this irreversibility on 2026-11-22, limited to migration 30; that approval does not authorize merging, pushing, deploying, or applying hosted migrations. If reversal is ever required after application, use a carefully reviewed corrective forward migration.
 - If checkout pause or vendor settings break, disable the affected UI path or revert the app; do not weaken RLS as a workaround.
 
 ## 8. Release blockers / accepted risks

@@ -2,7 +2,7 @@
  * Client-side cart for the Gifto marketplace.
  *
  * The cart lives in the browser (localStorage) and is never trusted: prices,
- * stock and commission are all read from the database by `place_order` at
+ * stock and commission are all read from the database by `place_order_with_price_check` at
  * checkout time. Anything stored here is display state only — the database
  * decides what an order actually costs.
  *
@@ -29,7 +29,7 @@ export const CART_STORAGE_KEY = "gifto.cart.v1";
 /** Mirrors the `order_items.quantity` check constraint in the database. */
 export const MAX_LINE_QUANTITY = 20;
 
-/** Upper bound on distinct products per order, mirroring `place_order`. */
+/** Upper bound on distinct products per order, mirroring `place_order_with_price_check`. */
 export const MAX_CART_LINES = 50;
 
 function clampQuantity(quantity: number, stock: number): number {
@@ -123,7 +123,7 @@ export function cartCount(items: CartItem[]): number {
   return items.reduce((count, i) => count + i.quantity, 0);
 }
 
-/** The payload `place_order` expects: product ids and quantities, nothing else. */
+/** The payload `place_order_with_price_check` expects: product ids and quantities, nothing else. */
 export function toOrderItems(
   items: CartItem[],
 ): { product_id: string; quantity: number }[] {
