@@ -17,6 +17,7 @@ export const LOCALIZED_PREFIXES = [
   "/search",
   "/cart",
   "/checkout",
+  "/wishlist",
   "/account",
   "/orders",
   "/contact",

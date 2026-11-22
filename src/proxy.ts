@@ -30,6 +30,7 @@ const LOCALIZED_PREFIXES = [
   "/search",
   "/cart",
   "/checkout",
+  "/wishlist",
   "/account",
   "/orders",
   "/contact",
@@ -78,6 +79,9 @@ const intlMiddleware = createIntlMiddleware(routing);
 // - script-src 'self' + nonce + 'strict-dynamic'; NO 'unsafe-inline'.
 //   Next's inline bootstrap scripts get the nonce automatically; the only
 //   app-authored inline script (product JSON-LD) reads it from `x-nonce`.
+//   Development adds 'unsafe-eval' because React's dev-mode debugging
+//   (callstack reconstruction) requires eval(); production never does and
+//   the security-header contract asserts it stays out of the built policy.
 // - style-src keeps 'self' 'unsafe-inline': the bar-chart and analytics
 //   bars set data-driven widths/heights via React `style` attributes, and
 //   style attributes cannot take a nonce. Deliberate, styles only.
@@ -97,6 +101,13 @@ function supabaseOrigin(): string {
 function contentSecurityPolicy(nonce: string): string {
   const supabase = supabaseOrigin();
   const supabaseSource = supabase ? ` ${supabase}` : "";
+  const scriptSrc = [
+    "'self'",
+    `'nonce-${nonce}'`,
+    "'strict-dynamic'",
+    // React only needs eval() for dev-mode debugging; production is strict.
+    ...(process.env.NODE_ENV === "production" ? [] : ["'unsafe-eval'"]),
+  ];
 
   return [
     "default-src 'self'",
@@ -105,7 +116,7 @@ function contentSecurityPolicy(nonce: string): string {
     "frame-ancestors 'none'",
     "frame-src 'none'",
     "form-action 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    `script-src ${scriptSrc.join(" ")}`,
     "style-src 'self' 'unsafe-inline'",
     `img-src 'self'${supabaseSource}`,
     "font-src 'self'",

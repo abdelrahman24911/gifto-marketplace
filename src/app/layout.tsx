@@ -7,6 +7,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 
 import { NavigationGuardProvider } from "@/components/navigation-guard";
+import { LocaleHtmlSync } from "@/components/locale-html-sync";
 import { ToastProvider } from "@/components/toast-provider";
 import { LOCALE_DIRECTIONS, type AppLocale } from "@/i18n/routing";
 import { isIndexingEnabled } from "@/lib/indexing";
@@ -108,6 +109,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} ${plexSansArabic.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-paper text-ink">
+        <LocaleHtmlSync />
         <script
           nonce={nonce}
           type="application/ld+json"
