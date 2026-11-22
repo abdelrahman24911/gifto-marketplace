@@ -154,6 +154,7 @@ grant execute on function public.set_order_vendor_status(
   text,
   text,
   text
+) to authenticated;
 
 comment on function public.set_order_vendor_status(
   uuid,

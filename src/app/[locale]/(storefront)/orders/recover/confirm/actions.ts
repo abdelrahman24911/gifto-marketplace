@@ -2,19 +2,30 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getLocale } from "next-intl/server";
 
+import type { AppLocale } from "@/i18n/routing";
 import {
-  GUEST_COOKIE_MAX_AGE_SECONDS,
   GUEST_TOKEN_PATTERN,
   createGuestToken,
-  guestCookieName,
+  guestCookieSettings,
   isValidGuestToken,
+  legacyGuestCookieCleanupSettings,
   sha256Hex,
 } from "@/lib/guest-order";
+import { localePrefixFor } from "@/lib/locale-path";
 import { createServiceClient } from "@/lib/supabase/service";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function currentLocalePrefix(): Promise<string> {
+  try {
+    return localePrefixFor((await getLocale()) as AppLocale);
+  } catch {
+    return "";
+  }
+}
 
 export type RedeemRecoveryState =
   | { error: string; attempt: number }
@@ -42,9 +53,10 @@ export async function redeemGuestOrderRecovery(
 ): Promise<RedeemRecoveryState> {
   const orderId = String(formData.get("order") ?? "").trim();
   const token = String(formData.get("token") ?? "").trim();
+  const localePrefix = await currentLocalePrefix();
 
   if (!UUID_PATTERN.test(orderId) || !GUEST_TOKEN_PATTERN.test(token)) {
-    redirect("/orders/recover?error=invalid");
+    redirect(`${localePrefix}/orders/recover?error=invalid`);
   }
 
   const newToken = createGuestToken();
@@ -56,19 +68,14 @@ export async function redeemGuestOrderRecovery(
   });
 
   if (error || !isValidGuestToken(newToken)) {
-    redirect("/orders/recover?error=invalid");
+    redirect(`${localePrefix}/orders/recover?error=invalid`);
   }
 
   const cookieStore = await cookies();
-  cookieStore.set({
-    name: guestCookieName(orderId),
-    value: newToken,
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: `/orders/${orderId}`,
-    maxAge: GUEST_COOKIE_MAX_AGE_SECONDS,
-  });
+  cookieStore.set(guestCookieSettings(orderId, newToken));
+  for (const cookie of legacyGuestCookieCleanupSettings(orderId)) {
+    cookieStore.delete(cookie);
+  }
 
-  redirect(`/orders/${orderId}`);
+  redirect(`${localePrefix}/orders/${orderId}`);
 }

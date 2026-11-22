@@ -8,6 +8,8 @@ import { redeemGuestOrderRecovery } from "./actions";
 const state = vi.hoisted(() => ({
   rpc: vi.fn(),
   cookieSet: vi.fn(),
+  cookieDelete: vi.fn(),
+  locale: "en",
 }));
 
 vi.mock("@/lib/supabase/service", () => ({
@@ -15,7 +17,14 @@ vi.mock("@/lib/supabase/service", () => ({
 }));
 
 vi.mock("next/headers", () => ({
-  cookies: async () => ({ set: state.cookieSet }),
+  cookies: async () => ({
+    set: state.cookieSet,
+    delete: state.cookieDelete,
+  }),
+}));
+
+vi.mock("next-intl/server", () => ({
+  getLocale: async () => state.locale,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -39,6 +48,7 @@ function formData(order: string, token: string): FormData {
 describe("redeemGuestOrderRecovery", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    state.locale = "en";
     state.rpc.mockResolvedValue({ data: null, error: null });
   });
 
@@ -59,11 +69,43 @@ describe("redeemGuestOrderRecovery", () => {
     expect(state.cookieSet).toHaveBeenCalledTimes(1);
     const cookie = state.cookieSet.mock.calls[0][0] as Record<string, unknown>;
     expect(cookie.httpOnly).toBe(true);
-    expect(cookie.path).toBe(`/orders/${ORDER_ID}`);
+    expect(cookie.path).toBe("/");
     expect(cookie.value).toMatch(/^[0-9a-f]{64}$/);
     expect(cookie.value).not.toBe(TOKEN);
 
+    expect(state.cookieDelete).toHaveBeenCalledWith({
+      name: `gifto_guest_${ORDER_ID}`,
+      path: `/orders/${ORDER_ID}`,
+    });
+    expect(state.cookieDelete).toHaveBeenCalledWith({
+      name: `gifto_guest_${ORDER_ID}`,
+      path: `/ar/orders/${ORDER_ID}`,
+    });
+    expect(state.cookieDelete).not.toHaveBeenCalledWith({
+      name: `gifto_guest_${ORDER_ID}`,
+      path: "/",
+    });
+
     expect(redirect).toHaveBeenCalledWith(`/orders/${ORDER_ID}`);
+  });
+
+  it("uses the Arabic order and recovery paths when the request locale is Arabic", async () => {
+    state.locale = "ar";
+
+    await expect(
+      redeemGuestOrderRecovery(null, formData(ORDER_ID, TOKEN)),
+    ).rejects.toThrow(`NEXT_REDIRECT:/ar/orders/${ORDER_ID}`);
+
+    const cookie = state.cookieSet.mock.calls[0][0] as Record<string, unknown>;
+    expect(cookie.path).toBe("/");
+    expect(redirect).toHaveBeenCalledWith(`/ar/orders/${ORDER_ID}`);
+
+    await expect(
+      redeemGuestOrderRecovery(null, formData("not-a-uuid", TOKEN)),
+    ).rejects.toThrow("NEXT_REDIRECT:/ar/orders/recover?error=invalid");
+    expect(redirect).toHaveBeenCalledWith(
+      "/ar/orders/recover?error=invalid",
+    );
   });
 
   it("sends an invalid order id back to the recover page without calling the RPC", async () => {

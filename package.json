@@ -11,6 +11,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:e2e:security": "playwright test --config=playwright.security.config.ts",
     "test:e2e:admin": "playwright test --config=playwright.admin.config.ts",
     "test:e2e:list": "playwright test --list && playwright test --config=playwright.admin.config.ts --list",
     "test:e2e:guard": "playwright test --project=local-guard",

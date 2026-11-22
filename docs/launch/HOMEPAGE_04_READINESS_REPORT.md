@@ -1,3 +1,5 @@
+> **HISTORICAL - 2026-11-22 (P0 remediation).** Dated readiness snapshot at `5aee211`; its CSP report-only and no-CI statements are no longer current. CSP is now enforced with a per-request nonce (`src/proxy.ts`), and CI has app, security-header Playwright, and RLS jobs. Current state: `README.md`, `docs/HOSTED_STATE.md`, `docs/launch/CSP_ENFORCEMENT_PLAN.md`. Kept as a record; its findings were not edited.
+
 # HOMEPAGE-04 launch readiness report
 
 **Date:** 2026-11-16  

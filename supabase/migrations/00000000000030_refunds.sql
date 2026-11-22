@@ -1,5 +1,16 @@
 -- Gifto Phase 2: refunds and disputes (MON-9)
 --
+-- FORWARD-ONLY - OWNER APPROVED 2026-11-22.
+-- This migration has no rollback file by design. It creates refund cases,
+-- the commission-adjustment ledger, and the RPCs that later migrations build
+-- on. A down migration would drop live refund decisions and ledger history.
+-- Do not attempt one; fix forward or restore from backup. The owner approved
+-- this irreversibility on 2026-11-22, limited to migration 30. That approval
+-- does not authorize merging, pushing, deploying, or applying hosted
+-- migrations. If reversal is ever required after application, use a carefully
+-- reviewed corrective forward migration. See docs/HOSTED_STATE.md and
+-- docs/review/PRODUCTION_RELEASE_CHECKLIST.md.
+--
 -- A customer or admin can open a case against one vendor suborder. An admin
 -- resolves it with an amount, and commission is reduced through an append-only
 -- adjustment ledger before the entry is settled. Once commission is part of an

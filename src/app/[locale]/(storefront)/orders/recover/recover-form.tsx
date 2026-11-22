@@ -14,7 +14,11 @@ const labelClass = "flex flex-col gap-1 text-sm font-medium text-zinc-700";
 const buttonClass =
   "rounded-md bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60";
 
-export function RecoverOrderForm() {
+export function RecoverOrderForm({
+  initialReference,
+}: {
+  initialReference?: string;
+}) {
   const t = useTranslations("order");
   const [state, formAction, pending] = useActionState<
     RecoverOrderState,
@@ -31,6 +35,7 @@ export function RecoverOrderForm() {
           autoComplete="off"
           required
           maxLength={16}
+          defaultValue={initialReference}
           placeholder="GFT-ABCDEF123456"
           className={inputClass}
         />

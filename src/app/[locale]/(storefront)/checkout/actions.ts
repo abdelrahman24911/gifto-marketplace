@@ -4,10 +4,9 @@ import { cookies, headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 
 import {
-  GUEST_COOKIE_MAX_AGE_SECONDS,
   checkoutRateBucket,
   clientIpFromHeaders,
-  guestCookieName,
+  guestCookieSettings,
   isValidEmail,
   isValidGuestToken,
   isValidIdempotencyKey,
@@ -506,15 +505,7 @@ export async function placeOrder(
     }
 
     const cookieStore = await cookies();
-    cookieStore.set({
-      name: guestCookieName(data),
-      value: guestToken,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: `/orders/${data}`,
-      maxAge: GUEST_COOKIE_MAX_AGE_SECONDS,
-    });
+    cookieStore.set(guestCookieSettings(data, guestToken));
 
     revalidatePath("/vendor/orders");
     revalidatePath("/admin/orders");

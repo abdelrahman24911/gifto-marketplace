@@ -88,10 +88,13 @@ test("CSP nonce is fresh per request and matches the inline scripts", async ({
   expect(secondNonce, "second nonce").toBeTruthy();
   expect(secondNonce, "nonce rotates per request").not.toBe(firstNonce);
 
-  // The rendered page's Next.js inline scripts must carry the response nonce.
-  const html = await page.content();
-  expect(html, "inline script carries the nonce").toContain(
-    `nonce="${secondNonce}"`,
+  // Browsers hide the nonce attribute from serialized DOM, so read the
+  // script element's `nonce` property instead of page.content().
+  const inlineNonces = await page.evaluate(() =>
+    Array.from(document.querySelectorAll("script")).map((script) => script.nonce),
+  );
+  expect(inlineNonces, "inline script carries the nonce").toContain(
+    secondNonce,
   );
 });
 
@@ -108,29 +111,42 @@ test("CSP includes the configured Supabase origin", async ({ page }) => {
   );
 });
 
-test("order routes keep their no-referrer and no-index protections", async ({
+test("order routes keep their no-referrer and no-index protections in both locales", async ({
   page,
 }) => {
-  const response = await page.goto("/orders/not-a-uuid", {
-    waitUntil: "domcontentloaded",
-  });
-  expect(response, "order route response").not.toBeNull();
+  for (const path of ["/orders/not-a-uuid", "/ar/orders/not-a-uuid"]) {
+    const response = await page.goto(path, {
+      waitUntil: "domcontentloaded",
+    });
+    expect(response, `${path}: order route response`).not.toBeNull();
 
-  const headers = response!.headers();
-  expect(headers["referrer-policy"], "order referrer policy").toBe("no-referrer");
-  expect(headers["x-robots-tag"], "order indexing policy").toBe("noindex, nofollow");
-  expect(headers["cache-control"], "order cache policy").toMatch(
-    /private|no-store/,
-  );
-  expect(headers["x-content-type-options"], "order nosniff").toBe("nosniff");
-  expect(headers["x-frame-options"], "order frame denial").toBe("DENY");
-  expect(headers["content-security-policy"], "order enforced CSP").toBeTruthy();
-  expect(
-    headers["content-security-policy-report-only"],
-    "order no report-only CSP",
-  ).toBeUndefined();
-  expect(
-    headers["strict-transport-security"],
-    "order HSTS",
-  ).toBe("max-age=31536000; includeSubDomains");
+    const headers = response!.headers();
+    expect(headers["referrer-policy"], `${path}: order referrer policy`).toBe(
+      "no-referrer",
+    );
+    expect(headers["x-robots-tag"], `${path}: order indexing policy`).toBe(
+      "noindex, nofollow",
+    );
+    expect(headers["cache-control"], `${path}: order cache policy`).toMatch(
+      /private|no-store/,
+    );
+    expect(headers["x-content-type-options"], `${path}: order nosniff`).toBe(
+      "nosniff",
+    );
+    expect(headers["x-frame-options"], `${path}: order frame denial`).toBe(
+      "DENY",
+    );
+    expect(
+      headers["content-security-policy"],
+      `${path}: order enforced CSP`,
+    ).toBeTruthy();
+    expect(
+      headers["content-security-policy-report-only"],
+      `${path}: order no report-only CSP`,
+    ).toBeUndefined();
+    expect(
+      headers["strict-transport-security"],
+      `${path}: order HSTS`,
+    ).toBe("max-age=31536000; includeSubDomains");
+  }
 });

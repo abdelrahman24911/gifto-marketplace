@@ -46,7 +46,9 @@ export async function addSavedAddress(
 ): Promise<AddressBookState> {
   const attempt =
     (prev && typeof prev.attempt === "number" ? prev.attempt : 0) + 1;
-  const { supabase, user } = await requireUser();
+  const { supabase, user } = await requireUser({
+    verifyWithAuthServer: true,
+  });
   const input = readInput(formData);
   const validationError = validateSavedAddressInput(input);
   if (validationError) return { error: validationError, attempt };
@@ -102,7 +104,9 @@ export async function updateSavedAddress(
 ): Promise<AddressBookState> {
   const attempt =
     (prev && typeof prev.attempt === "number" ? prev.attempt : 0) + 1;
-  const { supabase, user } = await requireUser();
+  const { supabase, user } = await requireUser({
+    verifyWithAuthServer: true,
+  });
   const addressId = String(formData.get("address_id") ?? "").trim();
   if (!addressId) return { error: "Missing address.", attempt };
   const input = readInput(formData);
@@ -155,7 +159,9 @@ export async function setDefaultSavedAddress(
 ): Promise<AddressBookState> {
   const attempt =
     (prev && typeof prev.attempt === "number" ? prev.attempt : 0) + 1;
-  const { supabase, user } = await requireUser();
+  const { supabase, user } = await requireUser({
+    verifyWithAuthServer: true,
+  });
   const addressId = String(formData.get("address_id") ?? "").trim();
   if (!addressId) return { error: "Missing address.", attempt };
 
@@ -191,7 +197,9 @@ export async function deleteSavedAddress(
 ): Promise<AddressBookState> {
   const attempt =
     (prev && typeof prev.attempt === "number" ? prev.attempt : 0) + 1;
-  const { supabase, user } = await requireUser();
+  const { supabase, user } = await requireUser({
+    verifyWithAuthServer: true,
+  });
   const addressId = String(formData.get("address_id") ?? "").trim();
   if (!addressId) return { error: "Missing address.", attempt };
 

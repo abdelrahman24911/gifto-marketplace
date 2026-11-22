@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
+  guestCookieCleanupSettings,
   guestCookieName,
   isValidGuestToken,
   sha256Hex,
@@ -77,7 +78,9 @@ export async function claimGuestOrder(
     };
   }
 
-  cookieStore.delete(guestCookieName(orderId));
+  for (const cookie of guestCookieCleanupSettings(orderId)) {
+    cookieStore.delete(cookie);
+  }
   // NOTE (P1-10): next-intl's redirect does not narrow/terminate in
   // TypeScript control flow in this codebase (see account/page.tsx), so the
   // plain redirect stays here; the proxy re-localises /account/orders from

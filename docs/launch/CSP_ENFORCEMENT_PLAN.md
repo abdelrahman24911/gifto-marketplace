@@ -2,7 +2,7 @@
 
 ## Current posture
 
-`next.config.ts` sends `Content-Security-Policy-Report-Only` for every route. It is deliberately report-only: it collects violations without blocking navigation, auth, or checkout.
+`src/proxy.ts` sends an enforced `Content-Security-Policy` for every route, with a fresh per-request nonce. It blocks disallowed scripts and other sources; it is no longer report-only.
 
 Current policy:
 
@@ -13,25 +13,22 @@ object-src 'none'
 frame-ancestors 'none'
 frame-src 'none'
 form-action 'self'
-script-src 'self' 'unsafe-inline'
+script-src 'self' 'nonce-<per-request>' 'strict-dynamic'
 style-src 'self' 'unsafe-inline'
 img-src 'self' <supabase-origin>
 font-src 'self'
 connect-src 'self' <supabase-origin>
 ```
 
-There are no third-party analytics, advertising, embeds, media providers, or payment scripts. Fonts are self-hosted by `next/font`. Supabase is the only remote origin, for browser Auth calls and public Storage images. The app has no `next/script`, no `dangerouslySetInnerHTML`, and no custom inline scripts.
+There are no third-party analytics, advertising, embeds, media providers, or payment scripts. Fonts are self-hosted by `next/font`. Supabase is the only remote origin, for browser Auth calls and public Storage images. The only app-authored inline script is the product JSON-LD block, which reads the per-request nonce from `x-nonce`.
 
-`'unsafe-inline'` in `script-src` is required today for Next.js bootstrap scripts. `'unsafe-inline'` in `style-src` is required by dynamic inline style attributes in `src/components/bar-chart.tsx` (bar heights and minimum chart width). Development also reports `'unsafe-eval'` violations from the dev toolchain; that is expected and must not be copied into a production policy.
+`script-src` no longer allows `'unsafe-inline'`: Next.js bootstrap scripts receive the nonce, and `'strict-dynamic'` lets those trusted scripts load their chunks. `'unsafe-inline'` remains in `style-src` because `src/components/bar-chart.tsx` and the analytics bars use data-driven React `style` attributes, which cannot take a nonce. Development may still report `'unsafe-eval'` violations from the dev toolchain; that is expected and must not be copied into a production policy.
 
-## Why not enforce immediately
+## Enforcement status
 
-Enforcing the current string would either block the application or provide little security value:
-
-- Removing `'unsafe-inline'` from scripts without a nonce breaks Next.js hydration and client navigation.
-- Removing `'unsafe-inline'` from styles breaks the analytics bars.
-- A nonce must be generated per request, which cannot be done by the static header in `next.config.ts`; it needs request-scoped middleware/proxy headers.
-- There is no report endpoint, so report-only violations currently appear only in browser consoles.
+- **Script enforcement is live (2026-11-22):** `src/proxy.ts` generates a fresh nonce per request and sets the same policy on the request and response.
+- **Style enforcement remains partial:** `style-src` keeps `'unsafe-inline'` until the chart styles are refactored.
+- **No report endpoint is deployed:** violations are visible in browser consoles and the repository's Playwright security-header test, not in a central report stream.
 
 ## Staged plan
 
@@ -42,7 +39,7 @@ Enforcing the current string would either block the application or provide littl
 3. Exercise the full app: public catalogue, search, Gift Finder, product detail, cart, login/signup, account, vendor, admin, checkout, order confirmation, 404, theme/reduced-motion, and keyboard navigation.
 4. Classify every report as expected framework behavior, a real inline source, or a browser extension/test artifact. Do not add a source to the allowlist just to silence a report.
 
-### Stage 1: nonce scripts, enforce script-src
+### Stage 1: nonce scripts, enforce script-src (completed 2026-11-22)
 
 1. Generate a cryptographically random nonce per request in `src/proxy.ts`.
 2. Return the nonce-bearing policy on the response and pass the nonce to the request via a header (for example `x-nonce`) so the root layout and framework-emitted scripts can use it.
@@ -50,13 +47,13 @@ Enforcing the current string would either block the application or provide littl
 4. Run the complete browser matrix in report-only first; promote to enforcing only when the report stream is clean for a full release cycle.
 5. Do not use `'unsafe-eval'` in production. Re-test dev separately if local tooling needs it.
 
-### Stage 2: styles
+### Stage 2: styles (remaining)
 
 1. Keep `style-src 'self' 'unsafe-inline'` while charts use React inline style attributes.
 2. To remove it later, refactor chart sizing to a small, bounded set of generated classes or CSS custom properties that do not require arbitrary inline style attributes. Do not rely on hashes for values that change every render.
 3. Re-test admin and vendor analytics at all chart sizes, including empty and single-point datasets.
 
-### Stage 3: full enforcement and retirement
+### Stage 3: full enforcement and retirement (partial)
 
 1. Enforce `default-src`, `script-src`, `style-src`, `img-src`, `connect-src`, `form-action`, `object-src`, `base-uri`, `frame-ancestors`, and `frame-src`.
 2. Keep `connect-src` limited to self plus the configured Supabase origin. If realtime or hosted auth changes, update the source explicitly rather than adding a wildcard.
@@ -78,7 +75,7 @@ Enforcing the current string would either block the application or provide littl
 
 ## Guardrails
 
-- Report-only is the default until a clean full-matrix pass.
+- Script enforcement is live; `style-src` remains `'unsafe-inline'` until the chart styles are refactored. A report endpoint is still not deployed.
 - No analytics or marketing origins are assumed; add a source only for a documented product requirement.
 - Supabase origins come from environment configuration, never hardcoded.
 - A CSP change is a security change: record the policy, test date, browser versions, and reviewer in the launch report.

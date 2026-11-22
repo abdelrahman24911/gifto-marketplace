@@ -366,9 +366,10 @@ set request.jwt.claims = '{}';
 do $$
 declare
   v_hash text := encode(digest('guest-refund-token', 'sha256'), 'hex');
+  v_case uuid;
   v_rejected boolean := false;
 begin
-  -- Expire the token: opening and listing are both rejected.
+  -- Expire the token: opening, listing and cancelling are all rejected.
   begin
     perform public.open_guest_refund_case(
       '62200000-0000-0000-0000-000000000002', v_hash,
@@ -391,7 +392,33 @@ begin
     raise exception 'TEST 6 FAILED: expired token listed guest refund cases';
   end if;
 
-  raise notice 'TEST 6 PASSED: expired guest token rejected on refund open and list';
+  select id into v_case
+    from public.refund_cases
+   where order_id = '62200000-0000-0000-0000-000000000002'
+     and order_vendor_id = '72200000-0000-0000-0000-000000000002'
+     and status = 'open';
+  if v_case is null then
+    raise exception 'TEST 6 FAILED: live-token case was not found';
+  end if;
+
+  v_rejected := false;
+  begin
+    perform public.cancel_guest_refund_case(
+      '62200000-0000-0000-0000-000000000002', v_hash, v_case);
+  exception when sqlstate '42501' then
+    v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'TEST 6 FAILED: expired token cancelled a guest refund case';
+  end if;
+  if not exists (
+    select 1 from public.refund_cases
+     where id = v_case and status = 'open'
+  ) then
+    raise exception 'TEST 6 FAILED: rejected cancel changed the case status';
+  end if;
+
+  raise notice 'TEST 6 PASSED: expired guest token rejected on refund open, list and cancel';
 end $$;
 
 -- ---------------------------------------------------------------------------

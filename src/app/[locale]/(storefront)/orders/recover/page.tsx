@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 
 import { Link } from "@/i18n/navigation";
+import { PUBLIC_REFERENCE_PATTERN } from "@/lib/guest-order";
 
 import { RecoverOrderForm } from "./recover-form";
 
@@ -16,11 +17,15 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function RecoverOrderPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; reference?: string }>;
 }) {
   const t = await getTranslations("order");
   const tc = await getTranslations("common");
-  const { error } = await searchParams;
+  const { error, reference: rawReference } = await searchParams;
+  const reference =
+    rawReference && PUBLIC_REFERENCE_PATTERN.test(rawReference)
+      ? rawReference
+      : undefined;
 
   return (
     <div className="mx-auto w-full max-w-md px-4 py-10">
@@ -38,7 +43,7 @@ export default async function RecoverOrderPage({
         </p>
       ) : null}
 
-      <RecoverOrderForm />
+      <RecoverOrderForm initialReference={reference} />
 
       <p className="mt-6 text-sm text-zinc-600">
         <Link href="/shops" className="font-medium text-zinc-900 underline">

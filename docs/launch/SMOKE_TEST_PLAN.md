@@ -118,9 +118,9 @@ Run write flows only in local/preview with disposable data.
 
 ## 9. Headers, CSP, and SEO
 
-- [ ] `Content-Security-Policy-Report-Only` is present; its Supabase origin matches the environment.
+- [ ] `Content-Security-Policy` is enforced; `script-src` carries a per-request nonce and its Supabase origin matches the environment.
 - [ ] `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and `Permissions-Policy` are present.
-- [ ] Browser console shows no unexpected CSP reports during the full run; known dev-only `unsafe-eval` reports are documented separately.
+- [ ] Browser console shows no unexpected CSP violations during the full run; known dev-only `unsafe-eval` violations are documented separately.
 - [ ] API responses have the expected cache headers; private/order routes are `private, no-store` and `noindex`.
 - [ ] Canonical URL, OG image, Twitter card, and page title/description are correct for home, occasion, category, shop, product, and policy pages.
 - [ ] Unknown detail pages are 404 and noindex; search remains noindex.

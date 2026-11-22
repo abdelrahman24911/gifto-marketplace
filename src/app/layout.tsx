@@ -3,7 +3,8 @@ import { Fraunces, Geist, Geist_Mono, IBM_Plex_Sans_Arabic } from "next/font/goo
 import { headers } from "next/headers";
 import type { ReactNode } from "react";
 
-import { getLocale } from "next-intl/server";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
 
 import { NavigationGuardProvider } from "@/components/navigation-guard";
 import { ToastProvider } from "@/components/toast-provider";
@@ -95,6 +96,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   // Organization JSON-LD block below must carry it or the enforced
   // script-src blocks it. Rendered once here, for the whole site (P1-16).
   const nonce = (await headers()).get("x-nonce") ?? undefined;
+  // Client providers (toasts, navigation guards) sit above the locale segment,
+  // so the messages must be supplied here rather than only in [locale].
+  const messages = await getMessages();
 
   return (
     <html
@@ -111,9 +115,11 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             __html: serializeJsonLd(organizationJsonLd()),
           }}
         />
-        <ToastProvider>
-          <NavigationGuardProvider>{children}</NavigationGuardProvider>
-        </ToastProvider>
+        <NextIntlClientProvider messages={messages} locale={locale}>
+          <ToastProvider>
+            <NavigationGuardProvider>{children}</NavigationGuardProvider>
+          </ToastProvider>
+        </NextIntlClientProvider>
       </body>
     </html>
   );

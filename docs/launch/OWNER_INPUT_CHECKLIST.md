@@ -64,6 +64,7 @@ Use this alongside `docs/OWNER_DECISIONS_BRIEF.md` and `docs/DECISIONS.md`. Item
 
 - [ ] Confirm who holds Supabase and Vercel admin access and who can approve production changes.
 - [ ] Confirm a backup/PITR decision and the rollback owner; see `docs/review/PRODUCTION_RELEASE_CHECKLIST.md`.
+- [x] Owner approved migration 30 as forward-only on 2026-11-22 (no rollback file; rolling it back would destroy live refund and commission-adjustment history). Approval is limited to this irreversibility and does not authorize merging, pushing, deploying, or applying hosted migrations; any later reversal must use a reviewed corrective forward migration.
 - [ ] Confirm whether the unrun SQL/RLS suites and the accepted database risks are launch blockers or explicitly accepted risks.
 - [ ] Confirm error monitoring, alert destination, and on-call contact for launch week.
 - [ ] Confirm analytics/tracking requirements; current CSP allows no third-party analytics origins.
@@ -76,7 +77,7 @@ Use this alongside `docs/OWNER_DECISIONS_BRIEF.md` and `docs/DECISIONS.md`. Item
 The owner may defer these, but they must be recorded as accepted launch limitations:
 
 - Hard 404s now work for unknown catalogue detail routes; route-level skeleton loading screens for catalog pages were removed to obtain them.
-- CSP remains report-only; script nonce enforcement and style refactoring are post-launch work.
+- CSP is enforced per request with a script nonce; `style-src` still allows `'unsafe-inline'` for data-driven style attributes, and refactoring those styles is post-launch work.
 - Gift Finder occasion filtering remains category-based rather than using the explicit occasion matching tables.
 - Image derivatives are prepared locally but not uploaded; hosted originals remain in use until the owner performs the upload and path update.
-- No automated CI/CD, staging environment, error tracking, or SQL/RLS suite execution exists in this worktree.
+- CI runs lint, typecheck, i18n checks, Vitest, build, the isolated Playwright security-header lane, and the 17 SQL/RLS suites; no staging environment, error tracking, or automated production deployment exists yet.

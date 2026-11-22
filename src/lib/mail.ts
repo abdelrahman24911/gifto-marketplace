@@ -2,6 +2,7 @@ import "server-only";
 
 import nodemailer from "nodemailer";
 
+import { PUBLIC_REFERENCE_PATTERN } from "./guest-order";
 import { formatEgp } from "./money";
 import { ORDER_STATUS_LABELS } from "./orders";
 import { getSiteUrl } from "./site-url";
@@ -159,16 +160,27 @@ function htmlWrap(title: string, text: string): string {
   return `<!doctype html><html><body style="font-family:sans-serif;color:#18181b"><h1 style="font-size:18px">${title}</h1><p>${escaped}</p><p style="color:#71717a;font-size:13px">Gifto — gifts from local shops, cash on delivery.</p></body></html>`;
 }
 
+function redactEmail(email: string): string {
+  const at = email.lastIndexOf("@");
+  if (at <= 0 || at === email.length - 1) return "***";
+  return `${email.slice(0, 1)}***@${email.slice(at + 1)}`;
+}
+
+function redactEmailAddresses(text: string): string {
+  return text.replace(/[^\s@]+@[^\s@]+\.[^\s@]+/g, redactEmail);
+}
+
 function logSkipped(to: string, subject: string, reason: string): void {
   console.error(
-    `[gifto-mail] NOT SENT to=${to} subject="${subject}": ${reason}. ` +
+    `[gifto-mail] NOT SENT to=${redactEmail(to)} subject="${subject}": ${reason}. ` +
       "Configure SMTP_HOST and MAIL_FROM (see .env.example) and retry from the ops log.",
   );
 }
 
 function logFailed(to: string, subject: string, error: unknown): void {
+  const message = error instanceof Error ? error.message : "unknown error";
   console.error(
-    `[gifto-mail] FAILED to=${to} subject="${subject}": ${error instanceof Error ? error.message : "unknown error"}. ` +
+    `[gifto-mail] FAILED to=${redactEmail(to)} subject="${subject}": ${redactEmailAddresses(message)}. ` +
       "The order/status/refund that triggered this email was NOT rolled back; retry the send from the ops log.",
   );
 }
@@ -261,14 +273,14 @@ export async function enqueueMailOutbox(
     });
     if (error) {
       console.error(
-        `[gifto-mail] outbox enqueue failed to=${message.to} subject="${message.subject}": ${error.message}`,
+        `[gifto-mail] outbox enqueue failed to=${redactEmail(message.to)} subject="${message.subject}": ${redactEmailAddresses(error.message)}`,
       );
       return false;
     }
     return true;
   } catch (error) {
     console.error(
-      `[gifto-mail] outbox enqueue failed to=${message.to} subject="${message.subject}": ${error instanceof Error ? error.message : "unknown error"}`,
+      `[gifto-mail] outbox enqueue failed to=${redactEmail(message.to)} subject="${message.subject}": ${redactEmailAddresses(error instanceof Error ? error.message : "unknown error")}`,
     );
     return false;
   }
@@ -708,6 +720,7 @@ export async function sendVendorStaffAddedEmail(
 
 type OrderNotificationRow = {
   id: string;
+  user_id: string | null;
   public_reference: string | null;
   contact_email: string | null;
   total_minor: number;
@@ -721,6 +734,31 @@ type OrderNotificationRow = {
   }[];
 };
 
+/**
+ * The order URL in customer email must work in the recipient's browser:
+ * signed-in customers use their account page; guests use the recovery page
+ * with their public reference. The guest token is never included.
+ */
+export function customerOrderUrl(
+  order: {
+    id: string;
+    user_id: string | null;
+    public_reference: string | null;
+  },
+  siteUrl: string = getSiteUrl(),
+): string {
+  if (order.user_id) {
+    return `${siteUrl}/account/orders/${order.id}`;
+  }
+  if (
+    order.public_reference &&
+    PUBLIC_REFERENCE_PATTERN.test(order.public_reference)
+  ) {
+    return `${siteUrl}/orders/recover?reference=${encodeURIComponent(order.public_reference)}`;
+  }
+  return `${siteUrl}/orders/${order.id}`;
+}
+
 async function fetchOrderForMail(
   orderId: string,
 ): Promise<OrderNotificationRow | null> {
@@ -729,7 +767,7 @@ async function fetchOrderForMail(
     const { data, error } = await service
       .from("orders")
       .select(
-        "id, public_reference, contact_email, total_minor, recipient_name, contact_phone, " +
+        "id, user_id, public_reference, contact_email, total_minor, recipient_name, contact_phone, " +
           "order_vendors(id, subtotal_minor, vendor:vendors(name, contact_email), order_items(quantity))",
       )
       .eq("id", orderId)
@@ -774,7 +812,7 @@ export async function notifyOrderPlaced(orderId: string): Promise<void> {
       ...orderPlacedCustomerEmail({
         reference,
         totalMinor: order.total_minor,
-        orderUrl: `${siteUrl}/orders/${order.id}`,
+        orderUrl: customerOrderUrl(order, siteUrl),
       }),
       to: order.contact_email,
     },
@@ -793,15 +831,25 @@ export async function notifyOrderStatusChanged(
     const { data, error } = await service
       .from("order_vendors")
       .select(
-        "order:orders(id, public_reference, contact_email), vendor:vendors(name)",
+        "order:orders(id, user_id, public_reference, contact_email), vendor:vendors(name)",
       )
       .eq("id", suborderId)
       .maybeSingle();
     if (error || !data) return;
     const row = data as unknown as {
       order:
-        | { id: string; public_reference: string | null; contact_email: string | null }
-        | { id: string; public_reference: string | null; contact_email: string | null }[]
+        | {
+            id: string;
+            user_id: string | null;
+            public_reference: string | null;
+            contact_email: string | null;
+          }
+        | {
+            id: string;
+            user_id: string | null;
+            public_reference: string | null;
+            contact_email: string | null;
+          }[]
         | null;
       vendor: { name: string } | null;
     };
@@ -814,7 +862,7 @@ export async function notifyOrderStatusChanged(
         vendorName: row.vendor?.name ?? "Gifto",
         previousStatus,
         status: nextStatus,
-        orderUrl: `${getSiteUrl()}/orders/${order.id}`,
+        orderUrl: customerOrderUrl(order),
       }),
       to: order.contact_email,
     },

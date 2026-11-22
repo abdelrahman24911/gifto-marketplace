@@ -208,3 +208,17 @@ Each decision entry:
     owner (or platform admin) for cancellation.
 - **Current schema default:** implemented in `supabase/migrations/00000000000005_orders.sql`;
   failed-delivery extension in `supabase/migrations/00000000000013_failed_delivery.sql`.
+
+## D-10 - Migration 30 forward-only irreversibility
+
+- **Status:** `DECIDED (2026-11-22, owner: approve migration 30 as forward-only; no rollback migration)`
+- **Why it matters:** Migration 30 creates refund cases, the commission-adjustment ledger, and RPCs
+  that later migrations build on. A down migration would destroy financial and settlement history.
+- **Decision:** Migration 30 remains intentionally forward-only with no rollback migration. Do not
+  create a destructive or misleading rollback. If reversal is ever required after application, use
+  a carefully reviewed corrective forward migration.
+- **Scope limit:** This approval covers only migration 30's irreversibility. It does not authorize
+  merging, pushing, deploying, or applying hosted migrations.
+- **Implementation:** Documented in `supabase/migrations/00000000000030_refunds.sql`,
+  `docs/HOSTED_STATE.md`, `docs/review/PRODUCTION_RELEASE_CHECKLIST.md`, and
+  `docs/launch/OWNER_INPUT_CHECKLIST.md`.

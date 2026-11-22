@@ -8,54 +8,56 @@ const state = vi.hoisted(() => ({
   lastUpdate: null as Record<string, unknown> | null,
   clearedDefaults: 0,
   updatedRows: [] as Record<string, unknown>[],
+  requireUserCalls: [] as unknown[],
 }));
 
 vi.mock("@/lib/auth", () => ({
-  requireUser: async () => ({
-    user: { id: state.userId },
-    supabase: {
-      from() {
-        const builder: Record<string, unknown> = {};
-        builder.select = () => builder;
-        builder.eq = () => builder;
-        builder.order = () => builder;
-        builder.limit = () => builder;
-        builder.update = (values: Record<string, unknown>) => {
-          state.lastUpdate = values;
-          return builder;
-        };
-        builder.insert = () => builder;
-        builder.delete = () => builder;
-        // The chain ends in .select("id") for the update path; the
-        // add path ends in an insert whose awaited value is the
-        // builder itself, so make the builder thenable.
-        builder.then = (
-          resolve: (value: unknown) => void,
-        ) => {
-          if (
-            state.lastUpdate !== null &&
-            Object.keys(state.lastUpdate).length === 1 &&
-            state.lastUpdate.is_default === false
-          ) {
-            // setDefault / clear-defaults update: no rows selected.
-            state.clearedDefaults += 1;
+  requireUser: async (options: unknown) => {
+    state.requireUserCalls.push(options);
+    return {
+      user: { id: state.userId },
+      supabase: {
+        from() {
+          const builder: Record<string, unknown> = {};
+          builder.select = () => builder;
+          builder.eq = () => builder;
+          builder.order = () => builder;
+          builder.limit = () => builder;
+          builder.update = (values: Record<string, unknown>) => {
+            state.lastUpdate = values;
+            return builder;
+          };
+          builder.insert = () => builder;
+          builder.delete = () => builder;
+          // The chain ends in .select("id") for the update path; the
+          // add path ends in an insert whose awaited value is the
+          // builder itself, so make the builder thenable.
+          builder.then = (resolve: (value: unknown) => void) => {
+            if (
+              state.lastUpdate !== null &&
+              Object.keys(state.lastUpdate).length === 1 &&
+              state.lastUpdate.is_default === false
+            ) {
+              // setDefault / clear-defaults update: no rows selected.
+              state.clearedDefaults += 1;
+              resolve({ data: null, error: null });
+              return;
+            }
+            if (state.lastUpdate !== null) {
+              state.updatedRows.push(state.lastUpdate);
+              resolve({
+                data: state.updateResult === "found" ? [{ id: "addr-1" }] : [],
+                error: null,
+              });
+              return;
+            }
             resolve({ data: null, error: null });
-            return;
-          }
-          if (state.lastUpdate !== null) {
-            state.updatedRows.push(state.lastUpdate);
-            resolve({
-              data: state.updateResult === "found" ? [{ id: "addr-1" }] : [],
-              error: null,
-            });
-            return;
-          }
-          resolve({ data: null, error: null });
-        };
-        return builder;
+          };
+          return builder;
+        },
       },
-    },
-  }),
+    };
+  },
 }));
 
 vi.mock("next/cache", () => ({
@@ -63,6 +65,9 @@ vi.mock("next/cache", () => ({
 }));
 
 import {
+  addSavedAddress,
+  deleteSavedAddress,
+  setDefaultSavedAddress,
   updateSavedAddress,
   type AddressBookState,
 } from "./actions";
@@ -92,6 +97,7 @@ describe("updateSavedAddress (R-08 address edit)", () => {
     state.lastUpdate = null;
     state.clearedDefaults = 0;
     state.updatedRows = [];
+    state.requireUserCalls = [];
   });
 
   it("updates the caller's own row and reports success", async () => {
@@ -141,5 +147,29 @@ describe("updateSavedAddress (R-08 address edit)", () => {
     );
     expect(result).toEqual({ error: "Missing address.", attempt: 1 });
     expect(state.updatedRows).toHaveLength(0);
+  });
+});
+
+describe("address mutation auth verification", () => {
+  beforeEach(() => {
+    state.updateResult = "found";
+    state.lastUpdate = null;
+    state.clearedDefaults = 0;
+    state.updatedRows = [];
+    state.requireUserCalls = [];
+  });
+
+  it("verifies the Auth server session for every write", async () => {
+    await addSavedAddress(null, formData(VALID));
+    await updateSavedAddress(null, formData(VALID));
+    await setDefaultSavedAddress(null, formData({ address_id: "addr-1" }));
+    await deleteSavedAddress(null, formData({ address_id: "addr-1" }));
+
+    expect(state.requireUserCalls).toEqual([
+      { verifyWithAuthServer: true },
+      { verifyWithAuthServer: true },
+      { verifyWithAuthServer: true },
+      { verifyWithAuthServer: true },
+    ]);
   });
 });

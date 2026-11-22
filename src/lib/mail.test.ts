@@ -22,6 +22,7 @@ vi.mock("@/lib/supabase/service", () => ({
 }));
 
 import {
+  customerOrderUrl,
   enqueueMailOutbox,
   getMailConfig,
   guestOrderRecoveryEmail,
@@ -103,6 +104,22 @@ describe("sendMail without a provider", () => {
     errorSpy.mockRestore();
   });
 
+  it("redacts the recipient in skip logs", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    await sendMail(
+      {
+        to: "customer@example.com",
+        subject: "Test",
+        text: "hello",
+      },
+      { config: null },
+    );
+    const logged = errorSpy.mock.calls.flat().join(" ");
+    expect(logged).not.toContain("customer@example.com");
+    expect(logged).toContain("c***@example.com");
+    errorSpy.mockRestore();
+  });
+
   it("rejects an invalid recipient without throwing", async () => {
     const result = await sendMail(
       { to: "not-an-email", subject: "Test", text: "hello" },
@@ -125,6 +142,65 @@ describe("sendMail without a provider", () => {
     expect(result).toEqual({ sent: false, error: "connection refused" });
     expect(errorSpy).toHaveBeenCalled();
     errorSpy.mockRestore();
+  });
+
+  it("redacts addresses from transport failure logs", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const failingTransport = {
+      sendMail: async () => {
+        throw new Error("550 customer@example.com rejected");
+      },
+    } as never;
+    await sendMail(
+      { to: "customer@example.com", subject: "Test", text: "hello" },
+      { transport: failingTransport },
+    );
+    const logged = errorSpy.mock.calls.flat().join(" ");
+    expect(logged).not.toContain("customer@example.com");
+    expect(logged).toContain("c***@example.com");
+    errorSpy.mockRestore();
+  });
+});
+
+describe("customerOrderUrl", () => {
+  const siteUrl = "https://gifto.example";
+  const id = "11111111-1111-4111-8111-111111111111";
+
+  it("sends signed-in customers to their account order page", () => {
+    expect(
+      customerOrderUrl(
+        {
+          id,
+          user_id: "user-1",
+          public_reference: "GFT-ABCDEF123456",
+        },
+        siteUrl,
+      ),
+    ).toBe(`${siteUrl}/account/orders/${id}`);
+  });
+
+  it("sends guests to recovery with the public reference, never a token", () => {
+    const url = customerOrderUrl(
+      {
+        id,
+        user_id: null,
+        public_reference: "GFT-ABCDEF123456",
+      },
+      siteUrl,
+    );
+    expect(url).toBe(
+      `${siteUrl}/orders/recover?reference=GFT-ABCDEF123456`,
+    );
+    expect(url).not.toMatch(/token|guest_/i);
+  });
+
+  it("falls back to the guest order page when no public reference exists", () => {
+    expect(
+      customerOrderUrl(
+        { id, user_id: null, public_reference: null },
+        siteUrl,
+      ),
+    ).toBe(`${siteUrl}/orders/${id}`);
   });
 });
 

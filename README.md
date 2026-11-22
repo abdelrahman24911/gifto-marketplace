@@ -83,9 +83,9 @@ Only ever apply migrations to the **Gifto** project. Do not link or push to the 
 
 Current hosted state is tracked in exactly one place: `docs/HOSTED_STATE.md`.
 Do not rely on any hosted-state claim elsewhere in this file or in `docs/` —
-the table there is the single source of truth. Locally, forward migrations run to 65
-(`ls supabase/migrations/*.sql | grep -v rollback | wc -l` → 65, recounted 2026-11-21
-from the recovered bundle `e4586b1`): migration 11
+the table there is the single source of truth. Locally, forward migrations run to 66
+(`ls supabase/migrations/*.sql | grep -v rollback | wc -l`  66, recounted 2026-11-22;
+66 adds the P0 guest-refund expiry check): migration 11
 adds guest COD checkout; migration 12 hardens the order tables to least-privilege grants; migration
 13 adds failed-COD-delivery handling and the parent-only `partially_completed` status. Migration 14
 adds managed vendor onboarding; 15 adds active-vendor hardening, stock-column grants, normalized
@@ -100,7 +100,7 @@ delivered-at indexes; 29 enforces vendor delivery coverage at checkout and on di
 inserts; 30 adds refund cases, an append-only commission-adjustment ledger, guest/customer/admin
 refund RPCs, and net-commission settlement creation; 31 locks the parent order row before
 recounting suborders (parent-status race fix); 32 adds token-gated guest order cancellation.
-Migrations 28-65 are applied locally only and
+Migrations 28-66 are applied locally only and
 have not been pushed to the hosted project (hosted state is UNVERIFIED; see
 `docs/HOSTED_STATE.md`). Apply migrations in order. Pushing requires a valid CLI
 login (`supabase login`) and the project database password for `db push`.
@@ -114,14 +114,16 @@ pre-19 broad write grants on the security-definer view would reopen the exposure
 
 ### Continuous integration
 
-`.github/workflows/ci.yml` runs on every push and pull request, in two jobs:
-`app` (lint, typecheck, Vitest, build) and `rls` (all RLS suites on a
-disposable `supabase/postgres:17.11.0.003` container, via
-`scripts/run-rls-suites.sh`). CI uses no production credential and never
-touches a hosted project. The RLS suites can also be run locally with the
-same script against a disposable database — see `scripts/run-rls-suites.sh`
-for the required environment variables. Hosted state, staging, monitoring,
-and the backup drill are tracked in `docs/HOSTED_STATE.md`.
+`.github/workflows/ci.yml` runs on every push and pull request, in three jobs:
+`app` (lint, typecheck, i18n, Vitest, build), `security-headers` (the isolated
+Playwright CSP/header contract against a production build and a loopback
+Supabase stub), and `rls` (all RLS suites on a disposable
+`supabase/postgres:17.11.0.003` container, via `scripts/run-rls-suites.sh`).
+CI uses no production credential and never touches a hosted project. The RLS
+suites can also be run locally with the same script against a disposable
+database - see `scripts/run-rls-suites.sh` for the required environment
+variables. Hosted state, staging, monitoring, and the backup drill are
+tracked in `docs/HOSTED_STATE.md`.
 
 > **CI RLS bootstrap fixed locally (2026-11-21):** a freshly created database
 > on the `supabase/postgres` image does not inherit `auth.users`, and the
@@ -130,8 +132,10 @@ and the backup drill are tracked in `docs/HOSTED_STATE.md`.
 > `BYPASSRLS`, only attempts the `ALTER` when it is missing (and fails loudly
 > if that would require a superuser), and asserts that `anon`/`authenticated`
 > do not bypass RLS. The exact fresh-database path passed all 17 suites
-> locally. At the time of this commit, the GitHub Actions run against this
-> branch is pending; no run link/ID exists yet.
+> locally. PR #1 head `bdcc169` ran the prior **two-job** workflow successfully
+> (`app` and `rls`: https://github.com/abdelrahman24911/gifto-marketplace/actions/runs/44951092340).
+> The **three-job** workflow, including `security-headers`, is part of the
+> uncommitted P0 remediation and has not run on GitHub yet; do not claim it has.
 > `.gitattributes` now forces `*.sh` (and itself) to LF so Windows checkouts
 > do not feed CRLF scripts to Git Bash or Linux CI.
 
@@ -139,7 +143,7 @@ and the backup drill are tracked in `docs/HOSTED_STATE.md`.
 
 Seventeen suites exercise the policies against a disposable `supabase/postgres` container
 (`ls supabase/tests/*_test.sql | wc -l` → 17, recounted 2026-11-21; all 17 pass on a
-fresh database after migrations 1–65 through the CI-equivalent path, run 2026-11-21)
+fresh database through migrations 1–66 via the CI-equivalent path, run 2026-11-22)
 (its default database already ships the `auth` schema, `auth.users`, `auth.uid()`, and the
 `anon`/`authenticated`/`service_role` roles; a freshly created database does not inherit them,
 and `scripts/auth-emulation.sql` bootstraps the minimum auth surface — see the CI note above).
@@ -518,10 +522,11 @@ aspirational.
 
 | Check | Result |
 |---|---|
+| P0 remediation validation (2026-11-22) | `npm run lint`, `npm run typecheck`, `npm run check:i18n` (774 calls), `npm test` (58 files / 538 tests), `npm run build`, all 17 RLS suites, and the isolated Playwright security-header lane (4/4) pass locally. No hosted access; GitHub Actions has not run this branch. |
 | Recovered bundle validation (2026-11-21) | lint, typecheck, i18n (774 calls), Vitest 56 files / 520 tests, and build pass; all 17 SQL suites pass on a fresh disposable `supabase/postgres:17.11.0.003` database through the CI-equivalent `scripts/run-rls-suites.sh` path (no manual bootstrap); `.gitattributes` fresh-checkout check keeps shell scripts LF; Playwright discovery 90 tests / 13 files. No hosted access. |
 | `npm run lint` | 0 errors, 0 warnings |
 | `npm run typecheck` | clean |
-| `npm test` | 357 passing unit tests across 37 files (recounted 2026-11-20) |
+| `npm test` | 538 passing unit tests across 58 files (2026-11-22; was 357 across 37 on 2026-11-20) |
 | `npm run build` | exit 0 (all routes), including Tailwind CSS verification |
 | DB suites in disposable container | All fourteen suites passed on a fresh schema after migrations 1–32 (run 2026-11-20, P0-04/P0-05; P0-02 ran thirteen suites on migrations 1–30), including `rls_order_audit_test.sql`, `rls_delivery_coverage_test.sql`, `rls_refunds_test.sql`, `rls_guest_orders_test.sql`, and `concurrency_parent_status_test.sql` |
 | Migration 30 settlement regression | Full suite caught a zero-value payout regression in `mark_settlement_paid`; fixed and re-ran all thirteen suites successfully (thirteen at the time) |
@@ -540,9 +545,10 @@ aspirational.
 
 Three limits on the current verification:
 
-- **The browser E2E is a temporary harness, not a repo test suite.** It lives in
+- **The broad browser E2E is a temporary harness, not a repo test suite.** It lives in
   `C:\Users\bodyo\AppData\Local\Temp\opencode\gifto-e2e` and is not wired into `npm test` or CI.
-  Other vendor/admin/customer write paths remain covered by the DB suites rather than browser tests.
+  The separate, isolated security-header Playwright lane *is* wired into CI; other
+  vendor/admin/customer write paths remain covered by the DB suites rather than browser tests.
 - **Default database ACLs remain broad.** Migration 12 hardened the current order tables, but
   Supabase still grants ALL on future `public` tables to `anon`/`authenticated`; every new table
   needs explicit grants or a default-ACL migration.

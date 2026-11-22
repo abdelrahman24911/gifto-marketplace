@@ -40,7 +40,9 @@ export async function acknowledgeRefundCase(
     return { error: "That refund case could not be found.", attempt };
   }
 
-  const { supabase, user } = await requireVendorRole(vendorId);
+  const { supabase, user } = await requireVendorRole(vendorId, {
+    verifyWithAuthServer: true,
+  });
 
   const quotaError = await checkMutationQuota("vendor", user.id);
   if (quotaError) return { error: quotaError, attempt };
@@ -89,7 +91,9 @@ export async function confirmRefundReceipt(
     };
   }
 
-  const { supabase, user } = await requireVendorRole(vendorId);
+  const { supabase, user } = await requireVendorRole(vendorId, {
+    verifyWithAuthServer: true,
+  });
 
   const quotaError = await checkMutationQuota("vendor", user.id);
   if (quotaError) return { error: quotaError, attempt };
@@ -141,7 +145,9 @@ export async function correctInspectionCondition(
     };
   }
 
-  const { supabase, user } = await requireVendorRole(vendorId);
+  const { supabase, user } = await requireVendorRole(vendorId, {
+    verifyWithAuthServer: true,
+  });
 
   const quotaError = await checkMutationQuota("vendor", user.id);
   if (quotaError) return { error: quotaError, attempt };
