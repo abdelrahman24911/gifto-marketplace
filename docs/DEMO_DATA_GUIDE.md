@@ -15,6 +15,20 @@ How the Gifto demo catalog is deployed, inspected, edited, re-seeded, and remove
 | Product images | 36 generated PNGs in the public `product-images` bucket |
 | Demo orders | none (intentional — see Limitations) |
 
+> **Demo separation (Batch 4, P5).** The demo catalogue still lives
+> in the production project — that is the pre-separation setup. The
+> scripts below are now fail-closed: they refuse to run unless
+> `GIFTO_ENVIRONMENT=demo` is set, and they refuse the production
+> project unless `GIFTO_DEMO_ALLOW_PRODUCTION_PROJECT=true` is set
+> explicitly (see `scripts/demo-target-guard.mjs`). To run them
+> against the production project today, set both variables in
+> `.env.local` first — that is a deliberate, acknowledged act, not a
+> default. The full move to an isolated demo environment is
+> `docs/DEMO_SEPARATION_CHECKLIST.md`; once it is live, stop using
+> the production opt-in. A demo deployment also never sends real
+> email (mail module blocks it unless `GIFTO_DEMO_ALLOW_EMAIL=true`)
+> and shows an amber demo banner on every page.
+
 Everything seeded by this workflow is tagged with `is_demo = true` on `vendors`
 and `products`. Public storefront rendering is unchanged; the flag exists so
 admin tooling and cleanup can identify seeded rows safely.
@@ -101,6 +115,14 @@ repository.
 ```bash
 npm run seed:demo
 ```
+
+The seeder refuses to run unless `GIFTO_ENVIRONMENT=demo` is set
+and the target is not the production project (or the production
+opt-in `GIFTO_DEMO_ALLOW_PRODUCTION_PROJECT=true` is set) — see
+`scripts/demo-target-guard.mjs`. To wipe and re-seed in one step,
+run `npm run demo:reset` instead, then `npm run demo:passwords`
+(the reset re-creates the owner accounts with fresh random
+passwords).
 
 Behavior:
 
