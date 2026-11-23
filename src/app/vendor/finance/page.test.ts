@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ReactElement, ReactNode } from "react";
 
+import { FilterPill } from "@/components/dashboard/filter-pill";
+
 import type { CommissionEntryRecord } from "@/lib/finance";
 
 const mocks = vi.hoisted(() => ({
@@ -76,6 +78,27 @@ function findByType(
   return findByType(element.props?.children, type);
 }
 
+function findAllByType(
+  node: ReactNode,
+  type: unknown,
+): ReactElement<Record<string, unknown>>[] {
+  const found: ReactElement<Record<string, unknown>>[] = [];
+  const walk = (current: ReactNode): void => {
+    if (current === null || typeof current !== "object") return;
+    if (Array.isArray(current)) {
+      for (const child of current) walk(child);
+      return;
+    }
+    const element = current as ReactElement<{ children?: ReactNode }>;
+    if (element.type === type) {
+      found.push(element as ReactElement<Record<string, unknown>>);
+    }
+    walk(element.props?.children);
+  };
+  walk(node);
+  return found;
+}
+
 describe("VendorFinancePage pagination", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -123,5 +146,25 @@ describe("VendorFinancePage pagination", () => {
 
     const pagination = findByType(tree, mocks.Pagination);
     expect(pagination?.props).toMatchObject({ page: 1, total: 5 });
+  });
+
+  it("renders the finance view tabs as pending-state filter pills", async () => {
+    const tree = await VendorFinancePage({
+      searchParams: Promise.resolve({
+        vendor: "vendor-1",
+        range: "7d",
+        page: "1",
+      }),
+    });
+
+    const tabs = findAllByType(tree, FilterPill);
+    expect(tabs).toHaveLength(2);
+    expect(tabs.map((tab) => tab.props.href)).toEqual([
+      "/vendor/finance?vendor=vendor-1&range=7d",
+      "/vendor/finance?vendor=vendor-1&view=settlements&range=7d",
+    ]);
+    // Earnings is the active view for the default (no view param) render.
+    expect(tabs[0].props.active).toBe(true);
+    expect(tabs[1].props.active).toBe(false);
   });
 });

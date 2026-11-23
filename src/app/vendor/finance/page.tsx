@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { FilterPill } from "@/components/dashboard/filter-pill";
 import { Pagination } from "@/components/pagination";
 import { RefreshButton } from "@/components/dashboard/refresh-button";
 import {
@@ -401,10 +402,15 @@ export default async function VendorFinancePage({
           ).map((tab) => {
             const active = view === tab.value;
             return (
-              <Link
+              // Same treatment as the filter pills (Batch 2): switching views
+              // is a search-param-only navigation on this route, so a plain
+              // Link left the old ledger on screen with no feedback and
+              // users clicked again. FilterPill dims and spins until the
+              // new view renders.
+              <FilterPill
                 key={tab.value}
                 href={financeHref(access.vendorId, tab.value, range)}
-                aria-current={active ? "page" : undefined}
+                active={active}
                 className={`-mb-px border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
                   active
                     ? "border-berry text-berry-deep"
@@ -412,7 +418,7 @@ export default async function VendorFinancePage({
                 }`}
               >
                 {tab.label}
-              </Link>
+              </FilterPill>
             );
           })}
         </nav>
