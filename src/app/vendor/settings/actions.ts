@@ -31,6 +31,7 @@ import {
 import { requireVendorRole } from "@/lib/vendor";
 import { checkMutationQuota } from "@/lib/rate-limit";
 import { isVendorBlockedFromOrders } from "@/lib/demo-containment";
+import { validateImageFile } from "@/lib/image-upload";
 import { safeDbError } from "@/lib/safe-db-error";
 
 const LOGO_MAX_BYTES = 5 * 1024 * 1024;
@@ -477,17 +478,26 @@ async function uploadVendorBranding(
   if (!(file instanceof File) || file.size === 0) {
     return { error: `Choose an image file to upload.`, attempt };
   }
-  if (file.size > LOGO_MAX_BYTES) {
-    return { error: `The ${spec.label} must be 5 MB or smaller.`, attempt };
-  }
 
-  const extension = LOGO_TYPES[file.type];
-  if (!extension) {
-    return {
-      error: "Use a JPEG, PNG, WebP or AVIF image.",
-      attempt,
-    };
+  // Verify contents, not just the declared MIME type (see the product
+  // image upload): the bucket's allowed_mime_types check trusts the label.
+  const validated = await validateImageFile(file, {
+    maxBytes: LOGO_MAX_BYTES,
+    allowed: LOGO_TYPES,
+  });
+  if (!validated.ok) {
+    const message =
+      validated.reason === "too-large"
+        ? `The ${spec.label} must be 5 MB or smaller.`
+        : validated.reason === "invalid-content"
+          ? `The ${spec.label} does not look like a valid image.`
+          : validated.reason === "type-mismatch"
+            ? `The ${spec.label} contents do not match its image type.`
+            : "Use a JPEG, PNG, WebP or AVIF image.";
+    return { error: message, attempt };
   }
+  const extension = validated.value.extension;
+  const contentType = validated.value.contentType;
 
   const { supabase, access, isPlatformAdmin, user } = await requireVendorRole(
     formData.get("vendor") as string | null,
@@ -518,7 +528,7 @@ async function uploadVendorBranding(
   const { error: uploadError } = await supabase.storage
     .from(VENDOR_MEDIA_BUCKET)
     .upload(path, file, {
-      contentType: file.type,
+      contentType,
       cacheControl: "31536000",
       upsert: false,
     });
@@ -545,7 +555,10 @@ async function uploadVendorBranding(
       error:
         updateError.code === "42501"
           ? "Your account doesn't have permission to change this shop."
-          : updateError.message,
+          : safeDbError(
+              updateError,
+              `The ${spec.label} could not be saved. Please try again.`,
+            ),
       attempt,
     };
   }

@@ -3,6 +3,10 @@
 import { revalidatePath } from "next/cache";
 
 import { revalidatePublicCatalog } from "@/lib/catalog-cache";
+import {
+  validateImageFile,
+  type ImageValidationReason,
+} from "@/lib/image-upload";
 import { requireVendorRole } from "@/lib/vendor";
 import { checkMutationQuota } from "@/lib/rate-limit";
 import { safeDbError } from "@/lib/safe-db-error";
@@ -17,6 +21,22 @@ const ALLOWED_TYPES: Record<string, string> = {
   "image/webp": "webp",
   "image/avif": "avif",
 };
+
+/** Maps the shared image validator's reason to this surface's wording. */
+function imageValidationError(name: string, reason: ImageValidationReason) {
+  switch (reason) {
+    case "empty":
+      return `"${name}" is empty.`;
+    case "too-large":
+      return `"${name}" is larger than 5 MB.`;
+    case "unsupported-type":
+      return `"${name}" must be a JPEG, PNG, WebP or AVIF image.`;
+    case "invalid-content":
+      return `"${name}" does not look like a valid image.`;
+    case "type-mismatch":
+      return `"${name}" contents do not match its image type.`;
+  }
+}
 
 export type ImageActionState =
   | { error: string; attempt: number }
@@ -88,16 +108,24 @@ export async function uploadProductImages(
     return { error: "That product was not found in this shop.", attempt };
   }
 
+  // Verify contents, not just the declared MIME type: a client can label
+  // any bytes image/jpeg, and the bucket's allowed_mime_types check trusts
+  // that label. The detected type also decides the stored extension and
+  // content type, so a disguised file can never be stored as an image.
+  const validated: { file: File; contentType: string; extension: string }[] =
+    [];
   for (const file of files) {
-    if (file.size > MAX_FILE_BYTES) {
-      return { error: `"${file.name}" is larger than 5 MB.`, attempt };
-    }
-    if (!ALLOWED_TYPES[file.type]) {
+    const result = await validateImageFile(file, {
+      maxBytes: MAX_FILE_BYTES,
+      allowed: ALLOWED_TYPES,
+    });
+    if (!result.ok) {
       return {
-        error: `"${file.name}" must be a JPEG, PNG, WebP or AVIF image.`,
+        error: imageValidationError(file.name, result.reason),
         attempt,
       };
     }
+    validated.push({ file, ...result.value });
   }
 
   const { count } = await supabase
@@ -123,17 +151,19 @@ export async function uploadProductImages(
   const bucket = supabase.storage.from(PRODUCT_IMAGES_BUCKET);
   const uploaded: string[] = [];
 
-  for (const file of files) {
-    const ext = ALLOWED_TYPES[file.type];
-    const path = `${access.vendorId}/${productId}/${crypto.randomUUID()}.${ext}`;
+  for (const { file, contentType, extension } of validated) {
+    const path = `${access.vendorId}/${productId}/${crypto.randomUUID()}.${extension}`;
 
     const { error: uploadError } = await bucket.upload(path, file, {
-      contentType: file.type,
+      contentType,
       upsert: false,
     });
     if (uploadError) {
       await bucket.remove(uploaded);
-      return { error: `Upload failed: ${uploadError.message}`, attempt };
+      return {
+        error: safeDbError(uploadError, "Upload failed. Please try again."),
+        attempt,
+      };
     }
     uploaded.push(path);
 
@@ -145,7 +175,10 @@ export async function uploadProductImages(
     });
     if (insertError) {
       await bucket.remove(uploaded);
-      return { error: `Upload failed: ${insertError.message}`, attempt };
+      return {
+        error: safeDbError(insertError, "Upload failed. Please try again."),
+        attempt,
+      };
     }
     position += 1;
   }

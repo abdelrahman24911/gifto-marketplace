@@ -1,4 +1,5 @@
 import type { OccasionMatchMode } from "@/lib/supabase/database.types";
+import { detectImageType, validateImageFile } from "@/lib/image-upload";
 import { slugify } from "@/lib/slugify";
 
 export const OCCASION_NAME_MIN = 2;
@@ -201,44 +202,9 @@ export function validateOccasionImageBasics(file: {
 export function detectOccasionImageType(
   bytes: Uint8Array,
 ): OccasionImageContentType | null {
-  if (
-    bytes.length >= 3 &&
-    bytes[0] === 0xff &&
-    bytes[1] === 0xd8 &&
-    bytes[2] === 0xff
-  ) {
-    return "image/jpeg";
-  }
-
-  if (
-    bytes.length >= 8 &&
-    bytes[0] === 0x89 &&
-    bytes[1] === 0x50 &&
-    bytes[2] === 0x4e &&
-    bytes[3] === 0x47 &&
-    bytes[4] === 0x0d &&
-    bytes[5] === 0x0a &&
-    bytes[6] === 0x1a &&
-    bytes[7] === 0x0a
-  ) {
-    return "image/png";
-  }
-
-  if (
-    bytes.length >= 12 &&
-    bytes[0] === 0x52 &&
-    bytes[1] === 0x49 &&
-    bytes[2] === 0x46 &&
-    bytes[3] === 0x46 &&
-    bytes[8] === 0x57 &&
-    bytes[9] === 0x45 &&
-    bytes[10] === 0x42 &&
-    bytes[11] === 0x50
-  ) {
-    return "image/webp";
-  }
-
-  return null;
+  const detected = detectImageType(bytes);
+  if (detected === "image/avif") return null;
+  return detected;
 }
 
 export async function validateOccasionImageFile(
@@ -247,33 +213,39 @@ export async function validateOccasionImageFile(
   | { ok: true; value: ValidatedOccasionImage }
   | { ok: false; error: string }
 > {
-  const basics = validateOccasionImageBasics(file);
-  if (!basics.ok) return basics;
-
-  const header = new Uint8Array(await file.slice(0, 12).arrayBuffer());
-  const detected = detectOccasionImageType(header);
-
-  if (!detected) {
+  const result = await validateImageFile(file, {
+    maxBytes: OCCASION_IMAGE_MAX_BYTES,
+    allowed: OCCASION_IMAGE_TYPES,
+  });
+  if (result.ok) {
     return {
-      ok: false,
-      error: "The file does not look like a valid JPEG, PNG or WebP image.",
+      ok: true,
+      value: {
+        contentType: result.value.contentType as OccasionImageContentType,
+        extension: result.value.extension as OccasionImageExtension,
+      },
     };
   }
-
-  if (detected !== file.type) {
-    return {
-      ok: false,
-      error: "The file contents do not match the selected image type.",
-    };
+  // Messages kept identical to the pre-refactor wording (the client-side
+  // basics check in the occasion form shows the same strings).
+  switch (result.reason) {
+    case "empty":
+      return { ok: false, error: "Choose a non-empty image file." };
+    case "too-large":
+      return { ok: false, error: "The image must be 5 MB or smaller." };
+    case "unsupported-type":
+      return { ok: false, error: "Use a JPEG, PNG or WebP image." };
+    case "invalid-content":
+      return {
+        ok: false,
+        error: "The file does not look like a valid JPEG, PNG or WebP image.",
+      };
+    case "type-mismatch":
+      return {
+        ok: false,
+        error: "The file contents do not match the selected image type.",
+      };
   }
-
-  return {
-    ok: true,
-    value: {
-      contentType: detected,
-      extension: OCCASION_IMAGE_TYPES[detected],
-    },
-  };
 }
 
 export function buildOccasionImagePath(
