@@ -2268,6 +2268,96 @@ begin
   raise notice 'TEST 14e PASSED: scope trigger rejects a pending adjustment with the wrong rate';
 end $$;
 
+-- 14f (N-02, final pass): a case opened while shipped, then cancelled
+-- before approval, must approve explicitly with no commission effect.
+-- The suborder can never be delivered, so no commission is ever earned
+-- and there is nothing to reduce — but the previous code reached this
+-- outcome by silently falling through the shipped-only pending branch.
+-- Migration 71 names the cancelled branch; this test proves the
+-- approval stands and no pending row, entry, or adjustment appears.
+insert into public.orders (
+  id, user_id, status, subtotal_minor, total_minor, recipient_name,
+  contact_phone, address_line, city, governorate
+) values (
+  '62200000-0000-0000-0000-000000000026',
+  '12200000-0000-0000-0000-000000000001',
+  'delivered', 10000, 10000, 'Refund Buyer', '01001112233',
+  '12 Road 9, Maadi', 'Maadi', 'Cairo');
+
+insert into public.order_vendors (
+  id, order_id, vendor_id, status, subtotal_minor, commission_rate, delivered_at
+) values (
+  '72200000-0000-0000-0000-000000000026',
+  '62200000-0000-0000-0000-000000000026',
+  '42200000-0000-0000-0000-000000000007',
+  'shipped', 10000, 0.1000, null);
+
+insert into public.order_items (
+  order_vendor_id, product_id, product_name, product_slug,
+  unit_price_minor, quantity, line_total_minor
+) values (
+  '72200000-0000-0000-0000-000000000026',
+  '52200000-0000-0000-0000-000000000007', 'Pending Gift', 'pending-gift',
+  10000, 1, 10000);
+
+set role authenticated;
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000001"}';
+do $$
+begin
+  insert into refund_test_ids
+  select 'pending_f', public.open_refund_case(
+    '72200000-0000-0000-0000-000000000026', 'Changed my mind before delivery', 2500);
+end $$;
+
+-- Cancel the suborder BEFORE the admin approves (as the admin, matching
+-- TEST 14b: only shop owners, managers, or platform administrators may
+-- update a suborder).
+set request.jwt.claim.sub = '12200000-0000-0000-0000-000000000006';
+set request.jwt.claims = '{"sub":"12200000-0000-0000-0000-000000000006"}';
+do $$
+begin
+  perform public.set_order_vendor_status(
+    '72200000-0000-0000-0000-000000000026', 'cancelled', 'shipped',
+    'unreachable', 'Customer did not answer');
+end $$;
+
+do $$
+begin
+  perform public.resolve_refund_case(
+    (select id from refund_test_ids where name = 'pending_f'), true, 2500,
+    'Approved after cancellation');
+
+  if not exists (
+    select 1 from public.refund_cases
+     where id = (select id from refund_test_ids where name = 'pending_f')
+       and status = 'approved' and refund_amount_minor = 2500
+  ) then
+    raise exception 'TEST 14f FAILED: approval on a cancelled suborder was not recorded';
+  end if;
+
+  if exists (select 1 from public.pending_commission_adjustments
+              where refund_case_id = (select id from refund_test_ids where name = 'pending_f')) then
+    raise exception 'TEST 14f FAILED: approval on a cancelled suborder recorded a pending adjustment';
+  end if;
+
+  if exists (select 1 from public.commission_entries
+              where order_vendor_id = '72200000-0000-0000-0000-000000000026') then
+    raise exception 'TEST 14f FAILED: cancelled suborder earned commission';
+  end if;
+
+  if exists (select 1 from public.commission_adjustments
+              where refund_case_id = (select id from refund_test_ids where name = 'pending_f')) then
+    raise exception 'TEST 14f FAILED: approval on a cancelled suborder wrote a commission adjustment';
+  end if;
+
+  if (select status from public.order_vendors
+       where id = '72200000-0000-0000-0000-000000000026') <> 'cancelled' then
+    raise exception 'TEST 14f FAILED: suborder did not stay cancelled';
+  end if;
+  raise notice 'TEST 14f PASSED: approval on a cancelled suborder records no commission effect';
+end $$;
+
 -- ---------------------------------------------------------------------------
 -- TEST 15: cancel_refund_case RPC + UI backing (N-03, D-09)
 -- ---------------------------------------------------------------------------
