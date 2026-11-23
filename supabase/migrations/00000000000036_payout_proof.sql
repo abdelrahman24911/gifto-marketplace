@@ -45,6 +45,22 @@ alter table public.settlements
   add column if not exists proof_note text
     check (proof_note is null or length(proof_note) <= 500);
 
+-- Hosted installations may contain paid settlements created before P1-05
+-- payout proof existed. Backfill those legacy rows before installing the
+-- proof invariant. The generated reference is deliberately identifiable as
+-- legacy and does not claim that a real transfer reference was recorded.
+update public.settlements
+   set paid_amount_minor = total_minor,
+       transfer_method = 'other',
+       transfer_reference = 'LEGACY-' || substr(id::text, 1, 8),
+       proof_note = 'Legacy paid settlement: original payout proof was not recorded.'
+ where status = 'paid'
+   and (
+     paid_amount_minor is null
+     or transfer_method is null
+     or transfer_reference is null
+   );
+
 -- Proof exists exactly on paid settlements. (Paid settlements cannot be
 -- voided — void_settlement refuses them — so a paid row never has to shed
 -- its proof.)
