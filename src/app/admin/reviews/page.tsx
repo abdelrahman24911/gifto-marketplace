@@ -151,6 +151,15 @@ export default async function AdminReviewsPage({
         />
       </div>
 
+      {pendingResult.error?.code === "PGRST205" ? (
+        <div className="mt-4">
+          <AdminNotice tone="warning" role="status">
+            Review moderation is waiting for migration 54 to be applied to the
+            hosted database. The page is ready, but review data is not available yet.
+          </AdminNotice>
+        </div>
+      ) : null}
+
       {pendingResult.error ? (
         <div className="mt-4">
           <AdminNotice tone="danger" role="alert">

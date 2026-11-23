@@ -16,9 +16,11 @@ export const vendorNavGroups: DashboardNavGroup[] = [
     label: "Shop management",
     items: [
       { label: "Orders", href: "/vendor/orders", icon: "orders" },
+      { label: "Logistics", href: "/vendor/orders?status=shipped", icon: "orders" },
       { label: "Products", href: "/vendor/products", icon: "products" },
       { label: "Inventory", href: "/vendor/inventory", icon: "inventory" },
       { label: "Refunds", href: "/vendor/refunds", icon: "support" },
+      { label: "Reviews", href: "/vendor/reviews", icon: "products" },
     ],
   },
   {

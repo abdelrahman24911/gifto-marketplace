@@ -124,7 +124,7 @@ export default async function AdminSettlementsPage({
         supabase
           .from("settlements")
           .select(
-            "id, vendor_id, status, total_minor, clawback_minor, note, created_at, paid_at, created_by, paid_by, voided_at, voided_by, void_reason, paid_amount_minor, transfer_method, transfer_reference, proof_note, vendor:vendors(name, slug), settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
+            "id, vendor_id, status, total_minor, note, created_at, paid_at, created_by, paid_by, voided_at, voided_by, void_reason, vendor:vendors(name, slug), settlement_lines(commission_entry_id, amount_minor, released_at, released_by, release_reason)",
           )
           .order("created_at", { ascending: false })
           .order("id", { ascending: false })
@@ -180,7 +180,7 @@ export default async function AdminSettlementsPage({
     vendor_id: settlement.vendor_id,
     status: settlement.status,
     total_minor: settlement.total_minor,
-    clawback_minor: settlement.clawback_minor,
+    clawback_minor: 0,
     note: settlement.note,
     created_at: settlement.created_at,
     paid_at: settlement.paid_at,
@@ -189,10 +189,10 @@ export default async function AdminSettlementsPage({
     voided_at: settlement.voided_at,
     voided_by: settlement.voided_by,
     void_reason: settlement.void_reason,
-    paid_amount_minor: settlement.paid_amount_minor,
-    transfer_method: settlement.transfer_method,
-    transfer_reference: settlement.transfer_reference,
-    proof_note: settlement.proof_note,
+    paid_amount_minor: null,
+    transfer_method: null,
+    transfer_reference: null,
+    proof_note: null,
     settlement_lines: settlement.settlement_lines ?? [],
   }));
 

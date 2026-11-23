@@ -169,10 +169,20 @@ export default async function AdminPriceConsentRefusalsPage({
 
       {listResult.error ? (
         <div className="mt-4">
-          <AdminNotice tone="danger" role="alert">
-            Price-change refusals could not be loaded.
-          </AdminNotice>
-          <RefreshButton />
+          {listResult.error.code === "PGRST205" ? (
+            <AdminNotice tone="warning" role="status">
+              Price-change refusal records are waiting for migration 64 to be
+              applied to the hosted database. The page is ready, but no audit
+              records can be shown until it is deployed.
+            </AdminNotice>
+          ) : (
+            <>
+              <AdminNotice tone="danger" role="alert">
+                Price-change refusals could not be loaded.
+              </AdminNotice>
+              <RefreshButton />
+            </>
+          )}
         </div>
       ) : refusals.length === 0 ? (
         <EmptyState title="No refused checkouts yet">
