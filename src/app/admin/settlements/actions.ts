@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import { requirePlatformAdmin } from "@/lib/auth";
 import { checkMutationQuota } from "@/lib/rate-limit";
+import { safeDbError } from "@/lib/safe-db-error";
 import { fetchAllRows } from "@/lib/fetch-all";
 import {
   commissionEntriesById,
@@ -74,10 +75,10 @@ export async function recordDirectRepayment(
 
   if (error) {
     return {
-      error:
-        error.code === "23514" || error.code === "22023"
-          ? error.message
-          : "The direct repayment could not be recorded. Refresh the page and try again.",
+      error: safeDbError(
+        error,
+        "The direct repayment could not be recorded. Refresh the page and try again.",
+      ),
       attempt,
     };
   }
@@ -122,7 +123,10 @@ export async function createSettlement(
     return {
       error:
         error?.code === "23514"
-          ? error.message
+          ? safeDbError(
+              error,
+              "The settlement could not be opened. Refresh the page and try again.",
+            )
           : error?.code === "42501"
             ? "Only platform administrators can open settlements."
             : "The settlement could not be opened. Refresh the page and try again.",
@@ -275,10 +279,10 @@ export async function markSettlementPaid(
 
     if (error) {
       return {
-        error:
-          error.code === "23514" || error.code === "22023"
-            ? error.message
-            : "The settlement could not be marked paid. Refresh the page and try again.",
+        error: safeDbError(
+          error,
+          "The settlement could not be marked paid. Refresh the page and try again.",
+        ),
         attempt,
       };
     }
@@ -320,10 +324,10 @@ export async function markSettlementPaid(
 
   if (error) {
     return {
-      error:
-        error.code === "23514" || error.code === "22023"
-          ? error.message
-          : "The settlement could not be marked paid. Refresh the page and try again.",
+      error: safeDbError(
+        error,
+        "The settlement could not be marked paid. Refresh the page and try again.",
+      ),
       attempt,
     };
   }
@@ -367,12 +371,10 @@ export async function voidSettlement(
 
   if (error) {
     return {
-      error:
-        error.code === "23514"
-          ? error.message
-          : error.code === "22023"
-            ? error.message
-            : "The settlement could not be voided. Refresh the page and try again.",
+      error: safeDbError(
+        error,
+        "The settlement could not be voided. Refresh the page and try again.",
+      ),
       attempt,
     };
   }

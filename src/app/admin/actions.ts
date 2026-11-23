@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { requirePlatformAdmin } from "@/lib/auth";
 import { checkMutationQuota } from "@/lib/rate-limit";
+import { safeDbError } from "@/lib/safe-db-error";
 import { revalidatePublicCatalog } from "@/lib/catalog-cache";
 import { getSiteUrl } from "@/lib/site-url";
 import { slugify } from "@/lib/slugify";
@@ -52,7 +53,14 @@ export async function setVendorStatus(
     .update({ status })
     .eq("id", vendorId);
 
-  if (error) return { vendorId, error: error.message };
+  if (error)
+    return {
+      vendorId,
+      error: safeDbError(
+        error,
+        "The shop status could not be changed. Please try again.",
+      ),
+    };
 
   revalidatePath("/admin");
   revalidatePath("/admin/shops");
@@ -92,7 +100,14 @@ export async function setCommissionRate(
     .update({ commission_rate: rate })
     .eq("id", vendorId);
 
-  if (error) return { vendorId, error: error.message };
+  if (error)
+    return {
+      vendorId,
+      error: safeDbError(
+        error,
+        "The commission rate could not be changed. Please try again.",
+      ),
+    };
 
   revalidatePath("/admin");
   revalidatePath("/admin/shops");
@@ -316,7 +331,10 @@ export async function createCategory(
       error:
         error.code === "23505"
           ? "A category with this name already exists."
-          : error.message,
+          : safeDbError(
+              error,
+              "The category could not be created. Please try again.",
+            ),
     };
   }
 
@@ -404,7 +422,10 @@ export async function updateCategory(
       error:
         error.code === "23505"
           ? "Another category already uses this name."
-          : error.message,
+          : safeDbError(
+              error,
+              "The category could not be updated. Please try again.",
+            ),
     };
   }
   if (!updated) {
@@ -469,7 +490,13 @@ export async function deleteCategory(
     .maybeSingle();
 
   if (error) {
-    return { categoryId, error: error.message };
+    return {
+      categoryId,
+      error: safeDbError(
+        error,
+        "The category could not be deleted. Please try again.",
+      ),
+    };
   }
   if (!deleted) {
     return { categoryId, error: "This category no longer exists." };

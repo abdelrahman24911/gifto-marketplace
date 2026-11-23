@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { revalidatePublicCatalog } from "@/lib/catalog-cache";
 import { requireVendorRole } from "@/lib/vendor";
 import { checkMutationQuota } from "@/lib/rate-limit";
+import { safeDbError } from "@/lib/safe-db-error";
 
 import { PRODUCT_IMAGES_BUCKET } from "@/lib/supabase/database.types";
 
@@ -195,7 +196,14 @@ export async function deleteProductImage(
     .from("product_images")
     .delete()
     .eq("id", image.id);
-  if (error) return { error: error.message, attempt };
+  if (error)
+    return {
+      error: safeDbError(
+        error,
+        "The image could not be removed. Please try again.",
+      ),
+      attempt,
+    };
 
   // The object is ours if the row was; storage policies allow managers to
   // delete within their vendor folder. A missing object is fine.

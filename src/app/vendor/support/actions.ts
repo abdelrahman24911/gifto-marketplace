@@ -10,6 +10,7 @@ import {
   isSupportCategory,
 } from "@/lib/support-requests";
 import { requireVendorRole } from "@/lib/vendor";
+import { safeDbError } from "@/lib/safe-db-error";
 
 export type SupportRequestValues = {
   category: string;
@@ -80,7 +81,12 @@ export async function createSupportRequest(
       );
     }
     if (error.code === "22023" || error.code === "23514") {
-      return invalid(error.message);
+      return invalid(
+        safeDbError(
+          error,
+          "Your request couldn't be sent. Please try again.",
+        ),
+      );
     }
     return invalid("Your request couldn't be sent. Please try again.");
   }

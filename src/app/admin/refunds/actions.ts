@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { requirePlatformAdmin } from "@/lib/auth";
 import { checkMutationQuota } from "@/lib/rate-limit";
+import { safeDbError } from "@/lib/safe-db-error";
 import { formatEgp, parseEgpToMinor } from "@/lib/money";
 import { notifyRefundCaseResolved } from "@/lib/mail";
 
@@ -64,10 +65,10 @@ export async function resolveRefundCase(
 
   if (error) {
     return {
-      error:
-        error.code === "23514" || error.code === "42501" || error.code === "22023"
-          ? error.message
-          : "The refund could not be resolved. Refresh the page and try again.",
+      error: safeDbError(
+        error,
+        "The refund could not be resolved. Refresh the page and try again.",
+      ),
       attempt,
     };
   }
@@ -170,10 +171,10 @@ export async function correctInspectionCondition(
 
   if (error) {
     return {
-      error:
-        error.code === "23514" || error.code === "42501" || error.code === "22023"
-          ? error.message
-          : "The inspection could not be corrected. Refresh the page and try again.",
+      error: safeDbError(
+        error,
+        "The inspection could not be corrected. Refresh the page and try again.",
+      ),
       attempt,
     };
   }
@@ -216,10 +217,10 @@ export async function restockRefundCase(
 
   if (error) {
     return {
-      error:
-        error.code === "23514" || error.code === "42501" || error.code === "22023"
-          ? error.message
-          : "The return could not be restocked. Refresh the page and try again.",
+      error: safeDbError(
+        error,
+        "The return could not be restocked. Refresh the page and try again.",
+      ),
       attempt,
     };
   }

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { requireVendorRole } from "@/lib/vendor";
 import { checkMutationQuota } from "@/lib/rate-limit";
+import { safeDbError } from "@/lib/safe-db-error";
 
 export type VendorRefundState =
   | { error: string; attempt: number }
@@ -18,10 +19,10 @@ function refundError(
   attempt: number,
 ): VendorRefundState {
   return {
-    error:
-      error.code === "23514" || error.code === "42501" || error.code === "22023"
-        ? error.message
-        : "The refund case could not be updated. Refresh the page and try again.",
+    error: safeDbError(
+      error,
+      "The refund case could not be updated. Refresh the page and try again.",
+    ),
     attempt,
   };
 }

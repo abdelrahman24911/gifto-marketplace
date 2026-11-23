@@ -31,6 +31,7 @@ import {
 import { requireVendorRole } from "@/lib/vendor";
 import { checkMutationQuota } from "@/lib/rate-limit";
 import { isVendorBlockedFromOrders } from "@/lib/demo-containment";
+import { safeDbError } from "@/lib/safe-db-error";
 
 const LOGO_MAX_BYTES = 5 * 1024 * 1024;
 const LOGO_TYPES: Record<string, string> = {
@@ -343,7 +344,11 @@ export async function saveVendorSettings(
         attempt,
       );
     }
-    return invalid(values, error.message, attempt);
+    return invalid(
+      values,
+      safeDbError(error, "Store settings could not be saved. Please try again."),
+      attempt,
+    );
   }
 
   revalidateShopSurfaces(access.vendorSlug);
@@ -417,7 +422,10 @@ export async function setVendorAcceptingOrders(
       error:
         error.code === "42501"
           ? "Your account doesn't have permission to change this shop."
-          : error.message,
+          : safeDbError(
+              error,
+              "New orders could not be changed. Please try again.",
+            ),
       attempt,
     };
   }
@@ -604,7 +612,10 @@ async function removeVendorBranding(
       error:
         error.code === "42501"
           ? "Your account doesn't have permission to change this shop."
-          : error.message,
+          : safeDbError(
+              error,
+              "The shop image could not be removed. Please try again.",
+            ),
       attempt,
     };
   }

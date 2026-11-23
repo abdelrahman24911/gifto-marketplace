@@ -6,6 +6,7 @@ import { CATALOG_TAGS, revalidatePublicCatalog } from "@/lib/catalog-cache";
 import { validateStockNote } from "@/lib/inventory";
 import { requireVendorRole } from "@/lib/vendor";
 import { checkMutationQuota } from "@/lib/rate-limit";
+import { safeDbError } from "@/lib/safe-db-error";
 
 const DELTA_MAX = 1_000_000;
 
@@ -71,7 +72,14 @@ export async function adjustStock(
     p_note: note || null,
   });
 
-  if (error) return { error: error.message, attempt };
+  if (error)
+    return {
+      error: safeDbError(
+        error,
+        "The stock could not be adjusted. Please try again.",
+      ),
+      attempt,
+    };
 
   revalidatePath(`/vendor/products/${productId}`);
   revalidatePath(`/vendor/products/${productId}/inventory`);

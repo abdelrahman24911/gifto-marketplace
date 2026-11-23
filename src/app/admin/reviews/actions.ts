@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { requirePlatformAdmin } from "@/lib/auth";
 import { checkMutationQuota } from "@/lib/rate-limit";
+import { safeDbError } from "@/lib/safe-db-error";
 
 export type ModerateReviewState =
   | { error: string; attempt: number }
@@ -49,10 +50,10 @@ export async function moderateReview(
 
   if (error) {
     return {
-      error:
-        error.code === "23514" || error.code === "22023"
-          ? error.message
-          : "The review could not be moderated. Refresh the page and try again.",
+      error: safeDbError(
+        error,
+        "The review could not be moderated. Refresh the page and try again.",
+      ),
       attempt,
     };
   }

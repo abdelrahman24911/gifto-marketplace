@@ -9,6 +9,7 @@ import {
 } from "@/lib/mail";
 import { checkMutationQuota } from "@/lib/rate-limit";
 import { getSiteUrl } from "@/lib/site-url";
+import { safeDbError } from "@/lib/safe-db-error";
 import { createServiceClient } from "@/lib/supabase/service";
 import { requireVendorRole } from "@/lib/vendor";
 
@@ -269,7 +270,10 @@ export async function changeVendorMemberRole(
       error:
         error.code === "42501"
           ? "Your account doesn't have permission to change this member."
-          : error.message,
+          : safeDbError(
+              error,
+              "The member's role could not be changed. Please try again.",
+            ),
       attempt,
     };
   }
@@ -318,7 +322,10 @@ export async function removeVendorMember(
       error:
         error.code === "42501"
           ? "Your account doesn't have permission to remove this member."
-          : error.message,
+          : safeDbError(
+              error,
+              "The member could not be removed. Please try again.",
+            ),
       attempt,
     };
   }

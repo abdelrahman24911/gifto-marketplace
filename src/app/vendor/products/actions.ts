@@ -7,6 +7,7 @@ import { deleteConfirmationMatches } from "@/lib/confirm-delete";
 import { parseEgpToMinor } from "@/lib/money";
 import { requireVendorRole } from "@/lib/vendor";
 import { checkMutationQuota } from "@/lib/rate-limit";
+import { safeDbError } from "@/lib/safe-db-error";
 
 import { PRODUCT_IMAGES_BUCKET } from "@/lib/supabase/database.types";
 import type { ProductStatus } from "@/lib/supabase/database.types";
@@ -144,7 +145,12 @@ export async function saveProduct(
       .select("id, name")
       .maybeSingle();
 
-    if (error) return invalid(values, error.message, attempt);
+    if (error)
+      return invalid(
+        values,
+        safeDbError(error, "The product could not be updated. Please try again."),
+        attempt,
+      );
     if (!data) {
       return invalid(
         values,
@@ -190,7 +196,12 @@ export async function saveProduct(
     .select("id, name")
     .maybeSingle();
 
-  if (error) return invalid(values, error.message, attempt);
+  if (error)
+    return invalid(
+      values,
+      safeDbError(error, "The product could not be created. Please try again."),
+      attempt,
+    );
   if (!data) return invalid(values, "Could not create the product.", attempt);
 
   revalidatePath("/vendor/products");
@@ -264,7 +275,14 @@ export async function deleteProduct(
     .eq("id", productId)
     .eq("vendor_id", access.vendorId);
 
-  if (error) return { error: error.message, attempt };
+  if (error)
+    return {
+      error: safeDbError(
+        error,
+        "The product could not be deleted. Please try again.",
+      ),
+      attempt,
+    };
 
   const paths = (images ?? []).map((image) => image.path);
   if (paths.length > 0) {
