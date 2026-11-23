@@ -51,3 +51,15 @@ export function supportCategoryLabel(value: string) {
     value
   );
 }
+
+/**
+ * Columns for the admin support queue list query.
+ *
+ * The creator embed MUST name its foreign key explicitly. `support_requests`
+ * has two FKs to `profiles` (`created_by` and `replied_by`, the latter added
+ * by migration 69 for admin replies), so a bare `creator:profiles(...)`
+ * embed is ambiguous and PostgREST rejects the whole list query with
+ * PGRST201 — the queue renders empty with a "could not be loaded" banner.
+ */
+export const ADMIN_SUPPORT_REQUEST_COLUMNS =
+  "id, category, subject, body, status, admin_reply, replied_at, created_at, vendor:vendors(name, slug), creator:profiles!support_requests_created_by_fkey(full_name)";

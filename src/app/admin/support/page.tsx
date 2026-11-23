@@ -11,6 +11,7 @@ import {
   totalPages,
 } from "@/lib/pagination";
 import {
+  ADMIN_SUPPORT_REQUEST_COLUMNS,
   SUPPORT_CATEGORIES,
   SUPPORT_STATUSES,
   SUPPORT_STATUS_LABELS,
@@ -93,10 +94,7 @@ export default async function AdminSupportPage({
 
   let listQuery = supabase
     .from("support_requests")
-    .select(
-      "id, category, subject, body, status, admin_reply, replied_at, created_at, vendor:vendors(name, slug), creator:profiles(full_name)",
-      { count: "exact" },
-    )
+    .select(ADMIN_SUPPORT_REQUEST_COLUMNS, { count: "exact" })
     .order("created_at", { ascending: false })
     .order("id", { ascending: false });
 
