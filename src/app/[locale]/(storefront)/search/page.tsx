@@ -231,6 +231,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                     imageAlt={product.imageAlt}
                     vendorName={product.vendorName}
                     categoryName={product.categoryName}
+                    reviewSummary={product.reviewSummary}
                     wishlistItem={toWishlistItem(product)}
                   />
                 ))}

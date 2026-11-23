@@ -649,6 +649,7 @@ export default async function ProductPage({ params }: Props) {
                   imagePath={item.imagePath}
                   imageAlt={item.imageAlt}
                   categoryName={item.categoryName}
+                  reviewSummary={item.reviewSummary}
                   wishlistItem={toWishlistItem(item)}
                 />
               ))}

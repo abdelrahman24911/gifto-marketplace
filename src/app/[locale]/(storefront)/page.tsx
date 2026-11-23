@@ -190,6 +190,7 @@ export default async function HomePage() {
                       imageAlt={product.imageAlt}
                       vendorName={product.vendorName}
                       categoryName={product.categoryName}
+                      reviewSummary={product.reviewSummary}
                       quickAdd={
                         item
                           ? {

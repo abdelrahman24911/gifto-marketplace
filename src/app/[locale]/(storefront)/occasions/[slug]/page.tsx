@@ -351,6 +351,7 @@ export default async function OccasionPage({ params, searchParams }: Props) {
                     imagePath={product.imagePath}
                     imageAlt={product.imageAlt}
                     vendorName={product.vendorName}
+                    reviewSummary={product.reviewSummary}
                     wishlistItem={toWishlistItem(product)}
                   />
                 ))}

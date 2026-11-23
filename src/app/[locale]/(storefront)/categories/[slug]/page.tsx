@@ -210,6 +210,7 @@ export default async function CategoryPage({
                     imagePath={product.imagePath}
                     imageAlt={product.imageAlt}
                     vendorName={product.vendorName}
+                    reviewSummary={product.reviewSummary}
                     wishlistItem={toWishlistItem(product)}
                   />
                 ))}

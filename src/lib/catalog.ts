@@ -1,5 +1,7 @@
 import { cache } from "react";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import {
   CATALOG_TAGS,
   cachedCatalogRead,
@@ -12,7 +14,7 @@ import {
 } from "@/lib/pagination";
 import { createPublicClient } from "@/lib/supabase/public";
 import { createClient } from "@/lib/supabase/server";
-import type { Json } from "@/lib/supabase/database.types";
+import type { Database, Json } from "@/lib/supabase/database.types";
 import {
   emptyGiftFinderPage,
   giftFinderBudgetRange,
@@ -51,6 +53,11 @@ export type CatalogProduct = {
   vendorIsAcceptingOrders: boolean;
   categoryName: string | null;
   categorySlug: string | null;
+  /** Approved-review average and count; absent when the product has none. */
+  reviewSummary?: {
+    average: number;
+    count: number;
+  };
 };
 
 export type CatalogImagePreview = {
@@ -244,6 +251,49 @@ function toCatalogProducts(rows: ProductRow[]): CatalogProduct[] {
   });
 }
 
+type ReviewRatingRow = { product_id: string; rating: number };
+
+/**
+ * Adds approved-review averages to a product list with one extra query.
+ * Stars are decoration: a failed review read leaves the list intact.
+ */
+async function withReviewSummaries(
+  products: CatalogProduct[],
+  supabase: SupabaseClient<Database>,
+): Promise<CatalogProduct[]> {
+  if (products.length === 0) return products;
+
+  const ids = [...new Set(products.map((product) => product.id))];
+  const { data, error } = await supabase
+    .from("product_reviews")
+    .select("product_id, rating")
+    .in("product_id", ids)
+    .eq("status", "approved")
+    .returns<ReviewRatingRow[]>();
+
+  if (error) return products;
+
+  const aggregates = new Map<string, { count: number; total: number }>();
+  for (const row of data ?? []) {
+    const aggregate = aggregates.get(row.product_id) ?? { count: 0, total: 0 };
+    aggregate.count += 1;
+    aggregate.total += row.rating;
+    aggregates.set(row.product_id, aggregate);
+  }
+
+  return products.map((product) => {
+    const aggregate = aggregates.get(product.id);
+    if (!aggregate || aggregate.count === 0) return product;
+    return {
+      ...product,
+      reviewSummary: {
+        count: aggregate.count,
+        average: Math.round((aggregate.total / aggregate.count) * 10) / 10,
+      },
+    };
+  });
+}
+
 /**
  * A load that distinguishes "no rows" from "the read failed". Storefront pages
  * use this to render an honest error state instead of silently mistaking a
@@ -317,7 +367,13 @@ export const loadProductsByCategory = cachedCatalogRead(
     return {
       value: {
         ok: true,
-        data: { items: toCatalogProducts(data ?? []), total: count },
+        data: {
+          items: await withReviewSummaries(
+            toCatalogProducts(data ?? []),
+            supabase,
+          ),
+          total: count,
+        },
       },
       cacheable: true,
     };
@@ -478,7 +534,9 @@ export const loadProductsByOccasion = cachedCatalogRead(
     if (productError) return FAILED_LOAD;
 
     const productById = new Map(
-      toCatalogProducts(products ?? []).map((product) => [product.id, product]),
+      (await withReviewSummaries(toCatalogProducts(products ?? []), supabase)).map(
+        (product) => [product.id, product],
+      ),
     );
     const items = ids.flatMap((id) => {
       const product = productById.get(id);
@@ -644,7 +702,13 @@ export const loadProductsByShop = cachedCatalogRead(
     return {
       value: {
         ok: true,
-        data: { items: toCatalogProducts(data ?? []), total: count },
+        data: {
+          items: await withReviewSummaries(
+            toCatalogProducts(data ?? []),
+            supabase,
+          ),
+          total: count,
+        },
       },
       cacheable: true,
     };
@@ -671,7 +735,13 @@ const readNewArrivals = cachedCatalogRead(
 
     if (error) return FAILED_LOAD;
     return {
-      value: { ok: true, data: toCatalogProducts(data ?? []) },
+      value: {
+        ok: true,
+        data: await withReviewSummaries(
+          toCatalogProducts(data ?? []),
+          supabase,
+        ),
+      },
       cacheable: true,
     };
   },
@@ -928,7 +998,9 @@ export async function searchProducts({
   if (error) return { ok: false };
 
   const productById = new Map(
-    toCatalogProducts(data ?? []).map((product) => [product.id, product]),
+    (await withReviewSummaries(toCatalogProducts(data ?? []), supabase)).map(
+      (product) => [product.id, product],
+    ),
   );
   const products = ids.flatMap((id) => {
     const product = productById.get(id);

@@ -184,6 +184,128 @@ describe("public catalog queries", () => {
     expect(query.countRequested).toBe(true);
   });
 
+  it("adds approved-review averages to product cards in one bulk query", async () => {
+    db.results.products = {
+      data: [
+        {
+          id: "product-1",
+          name: "Rose",
+          slug: "rose",
+          price_minor: 10_000,
+          stock: 1,
+          vendor_id: "vendor-1",
+          vendor: { name: "Shop", slug: "shop" },
+          category: null,
+          product_images: [],
+        },
+        {
+          id: "product-2",
+          name: "Hamper",
+          slug: "hamper",
+          price_minor: 20_000,
+          stock: 2,
+          vendor_id: "vendor-1",
+          vendor: { name: "Shop", slug: "shop" },
+          category: null,
+          product_images: [],
+        },
+      ],
+      error: null,
+    };
+    db.results.product_reviews = {
+      data: [
+        { product_id: "product-1", rating: 5 },
+        { product_id: "product-1", rating: 4 },
+        { product_id: "product-2", rating: 3 },
+      ],
+      error: null,
+    };
+
+    const products = await getNewArrivals(2);
+
+    expect(products[0].reviewSummary).toEqual({ average: 4.5, count: 2 });
+    expect(products[1].reviewSummary).toEqual({ average: 3, count: 1 });
+
+    const reviewQuery = db.queries[1];
+    expect(reviewQuery.table).toBe("product_reviews");
+    expect(reviewQuery.select).toBe("product_id, rating");
+    expect(reviewQuery.filters).toEqual([
+      "in:product_id=product-1,product-2",
+      "eq:status=approved",
+    ]);
+  });
+
+  it("keeps product cards when the review summary read fails", async () => {
+    db.results.products = {
+      data: [
+        {
+          id: "product-1",
+          name: "Rose",
+          slug: "rose",
+          price_minor: 10_000,
+          stock: 1,
+          vendor_id: "vendor-1",
+          vendor: { name: "Shop", slug: "shop" },
+          category: null,
+          product_images: [],
+        },
+      ],
+      error: null,
+      count: 1,
+    };
+    db.results.product_reviews = {
+      data: null,
+      error: { message: "offline" },
+    };
+
+    const result = await loadProductsByCategory("category-1");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.items).toHaveLength(1);
+    expect(result.data.items[0].reviewSummary).toBeUndefined();
+  });
+
+  it("adds review summaries to search results without changing their order", async () => {
+    db.results.rpc = {
+      data: [{ id: "product-1", total_count: 1 }],
+      error: null,
+    };
+    db.results.products = {
+      data: [
+        {
+          id: "product-1",
+          name: "Rose",
+          slug: "rose",
+          price_minor: 10_000,
+          stock: 1,
+          vendor_id: "vendor-1",
+          vendor: { name: "Shop", slug: "shop" },
+          category: null,
+          product_images: [],
+        },
+      ],
+      error: null,
+    };
+    db.results.product_reviews = {
+      data: [{ product_id: "product-1", rating: 4 }],
+      error: null,
+    };
+
+    const result = await searchProducts({ q: "rose" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.products.map((product) => product.id)).toEqual([
+      "product-1",
+    ]);
+    expect(result.products[0].reviewSummary).toEqual({
+      average: 4,
+      count: 1,
+    });
+    expect(db.queries[1].table).toBe("product_reviews");
+  });
+
   it("builds three image previews per category and shop from public products", async () => {
     db.results.products = {
       data: [

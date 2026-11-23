@@ -19,6 +19,11 @@ type ProductCardProps = {
   imageAlt: string | null;
   vendorName?: string | null;
   categoryName?: string | null;
+  /** Approved-review average and count; hidden when the product has none. */
+  reviewSummary?: {
+    average: number;
+    count: number;
+  } | null;
   /** Opt-in quick add. The homepage uses it; other surfaces keep their current card link. */
   quickAdd?: {
     item: QuickAddItem;
@@ -78,13 +83,24 @@ function CardBody({
   priceMinor,
   vendorName,
   categoryName,
+  reviewSummary,
 }: {
   name: string;
   priceMinor: number;
   vendorName?: string | null;
   categoryName?: string | null;
+  reviewSummary?: {
+    average: number;
+    count: number;
+  } | null;
 }) {
   const locale = useLocale() as MoneyLocale;
+  const t = useTranslations("product");
+
+  const filledStars =
+    reviewSummary && reviewSummary.count > 0
+      ? Math.max(0, Math.min(5, Math.round(reviewSummary.average)))
+      : 0;
 
   return (
     <div className="flex flex-1 flex-col gap-1 p-4">
@@ -98,6 +114,30 @@ function CardBody({
       </p>
       {vendorName ? (
         <p className="truncate text-sm text-ink-mute">{vendorName}</p>
+      ) : null}
+
+      {reviewSummary && reviewSummary.count > 0 ? (
+        <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-ink-soft">
+          <span aria-hidden className="tracking-[-0.08em]">
+            <span className="text-amber-500">
+              {"★".repeat(filledStars)}
+            </span>
+            <span className="text-zinc-300">
+              {"★".repeat(5 - filledStars)}
+            </span>
+          </span>
+          <span aria-hidden>{reviewSummary.average.toFixed(1)}</span>
+          <span aria-hidden className="text-ink-mute">
+            ({reviewSummary.count})
+          </span>
+          <span className="sr-only">
+            {t("reviewsAverage", {
+              average: reviewSummary.average.toFixed(1),
+            })}
+            {", "}
+            {t("reviewCount", { count: reviewSummary.count })}
+          </span>
+        </p>
       ) : null}
 
       <div className="mt-auto pt-3">
@@ -118,6 +158,7 @@ export function ProductCard({
   imageAlt,
   vendorName,
   categoryName,
+  reviewSummary,
   quickAdd,
   wishlistItem,
 }: ProductCardProps) {
@@ -138,6 +179,7 @@ export function ProductCard({
             priceMinor={priceMinor}
             vendorName={vendorName}
             categoryName={categoryName}
+            reviewSummary={reviewSummary}
           />
         </Link>
         <div className="flex items-center gap-2 px-4 pb-4">
@@ -168,6 +210,7 @@ export function ProductCard({
             priceMinor={priceMinor}
             vendorName={vendorName}
             categoryName={categoryName}
+            reviewSummary={reviewSummary}
           />
         </Link>
         <div className="flex justify-end px-4 pb-4">
@@ -190,6 +233,7 @@ export function ProductCard({
         priceMinor={priceMinor}
         vendorName={vendorName}
         categoryName={categoryName}
+        reviewSummary={reviewSummary}
       />
     </Link>
   );

@@ -276,7 +276,8 @@ export default async function ShopPage({ params, searchParams }: Props) {
                     imagePath={product.imagePath}
                     imageAlt={product.imageAlt}
                     categoryName={product.categoryName}
-                  wishlistItem={toWishlistItem(product)}
+                    reviewSummary={product.reviewSummary}
+                    wishlistItem={toWishlistItem(product)}
                   />
                 ))}
               </div>
