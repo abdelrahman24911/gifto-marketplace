@@ -7,6 +7,7 @@ import {
 
 const ARABIC_NAMES: Record<string, string> = {
   "names.graduation": "التخرج",
+  "names.ramadan-night": "ليالي رمضان",
   "names.ramdan-night": "ليالي رمضان",
 };
 
@@ -18,20 +19,29 @@ describe("occasionDisplayName", () => {
       occasionDisplayName("graduation", "Graduation", translate),
     ).toBe("التخرج");
     expect(
-      occasionDisplayName("ramdan-night", "Ramdan Night", translate),
+      occasionDisplayName("ramadan-night", "Ramadan Night", translate),
     ).toBe("ليالي رمضان");
     expect(
       occasionDisplayName("new-moment", "New Moment", translate),
     ).toBe("New Moment");
   });
 
-  it("corrects the live Ramadan slug without changing other names", () => {
-    expect(occasionDisplayName("ramdan-night", "Ramdan Night")).toBe(
+  it("corrects the Ramadan slug without changing other names", () => {
+    expect(occasionDisplayName("ramadan-night", "Ramadan Night")).toBe(
       "Ramadan Night",
     );
     expect(occasionDisplayName("graduation", "Graduation")).toBe(
       "Graduation",
     );
+  });
+
+  it("still resolves the old Ramadan slug as an alias", () => {
+    expect(occasionDisplayName("ramdan-night", "Ramdan Night")).toBe(
+      "Ramadan Night",
+    );
+    expect(
+      occasionDisplayName("ramdan-night", "Ramdan Night", translate),
+    ).toBe("ليالي رمضان");
   });
 
   it("keeps the stored name when there is no known correction", () => {

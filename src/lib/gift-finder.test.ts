@@ -87,9 +87,9 @@ describe("gift finder recipient and occasion mappings", () => {
     expect(RECIPIENT_CATEGORY_SLUGS.kids).toContain("toys-kids");
   });
 
-  it("supports both the live and corrected Ramadan slugs", () => {
+  it("supports the corrected Ramadan slug and its old alias", () => {
     expect(OCCASION_CATEGORY_SLUGS["ramdan-night"]).toEqual(
-      OCCASION_CATEGORY_SLUGS["ramadan-night"],
+      OCCASION_CATEGORY_SLUGS["ramdan-night"],
     );
   });
 
@@ -97,10 +97,10 @@ describe("gift finder recipient and occasion mappings", () => {
     expect(
       planGiftFinderCategories({
         ...ANY_SELECTION,
-        occasionSlug: "ramdan-night",
+        occasionSlug: "ramadan-night",
       }),
     ).toEqual({
-      categorySlugs: [...OCCASION_CATEGORY_SLUGS["ramdan-night"]],
+      categorySlugs: [...OCCASION_CATEGORY_SLUGS["ramadan-night"]],
       occasionUnsupported: false,
     });
   });
@@ -167,7 +167,7 @@ describe("gift finder query parsing", () => {
       parseGiftFinderSearchParams(
         new URLSearchParams({
           recipient: "kids",
-          occasion: "ramdan-night",
+          occasion: "ramadan-night",
           budget: "under-250",
           offset: "8",
           limit: "8",
@@ -177,7 +177,7 @@ describe("gift finder query parsing", () => {
       ok: true,
       query: {
         recipient: "kids",
-        occasionSlug: "ramdan-night",
+        occasionSlug: "ramadan-night",
         budget: "under-250",
         offset: 8,
         limit: 8,

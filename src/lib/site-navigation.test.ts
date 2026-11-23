@@ -29,15 +29,15 @@ describe("buildStoreNav", () => {
     expect(nav[3].items).toBeUndefined();
   });
 
-  it("shows the corrected Ramadan label while keeping the live slug", () => {
+  it("shows the corrected Ramadan slug and label", () => {
     const nav = buildStoreNav({
       categories: [],
-      occasions: [{ name: "Ramdan Night", slug: "ramdan-night" }],
+      occasions: [{ name: "Ramadan Night", slug: "ramadan-night" }],
       labels: { home: "Home", occasions: "Occasions", categories: "Categories", shops: "Shops" },
     });
 
     expect(nav[1].items).toEqual([
-      { href: "/occasions/ramdan-night", label: "Ramadan Night" },
+      { href: "/occasions/ramadan-night", label: "Ramadan Night" },
     ]);
   });
 

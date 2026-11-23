@@ -56,7 +56,7 @@ export function DeleteOccasionButton({
             if (pending) event.preventDefault();
           }}
           aria-labelledby={`delete-occasion-title-${occasionId}`}
-          className="w-[min(92vw,28rem)] rounded-2xl border border-line bg-paper p-0 text-ink shadow-2xl backdrop:bg-ink/45 backdrop:backdrop-blur-sm"
+          className="m-auto max-h-[90dvh] w-[min(92vw,28rem)] overflow-y-auto rounded-2xl border border-line bg-paper p-0 text-ink shadow-2xl backdrop:bg-ink/45 backdrop:backdrop-blur-sm"
         >
           <div className="p-5 sm:p-6">
             <p className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-red-700">

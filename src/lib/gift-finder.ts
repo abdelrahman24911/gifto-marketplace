@@ -92,16 +92,16 @@ export const RECIPIENT_CATEGORY_SLUGS: Readonly<
 };
 
 /**
- * Live occasion slugs. "ramdan-night" is the current value in hosted data; the
- * corrected alias is included so the Finder keeps working if an admin fixes
- * the slug later. This is a read-only alias, not a data change.
+ * Live occasion slugs. "ramadan-night" is the current value in hosted data
+ * (migration 68 renamed it from "ramdan-night"); the old spelling stays as
+ * an alias so the Finder keeps working for old links and cached data.
  */
 export const OCCASION_CATEGORY_SLUGS: Readonly<
   Record<string, readonly string[]>
 > = {
   graduation: ["personalized-gifts", "gift-boxes", "flowers"],
-  "ramdan-night": ["gift-boxes", "chocolates-sweets", "cakes-baked-goods"],
   "ramadan-night": ["gift-boxes", "chocolates-sweets", "cakes-baked-goods"],
+  "ramdan-night": ["gift-boxes", "chocolates-sweets", "cakes-baked-goods"],
 };
 
 export type GiftFinderProduct = {

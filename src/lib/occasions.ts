@@ -20,6 +20,18 @@ export const OCCASION_MATCH_MODE_LABELS: Record<OccasionMatchMode, string> = {
   hybrid: "Hybrid",
 };
 
+// What each matching mode actually does, in plain words. Shown on the edit
+// page and as a tooltip on the list page, where "Hybrid matching" used to
+// appear with no explanation at all.
+export const OCCASION_MATCH_MODE_NOTES: Record<OccasionMatchMode, string> = {
+  manual:
+    "Manual mode uses only the products picked above. These category and tag rules are saved for later but do not affect the public collection yet.",
+  automatic:
+    "Automatic mode uses category and tag matches only. Manual picks stay saved but are not currently included in the public collection.",
+  hybrid:
+    "Hybrid mode places manual picks first, then adds matching products from these categories and tags. A product matched more than once appears only once.",
+};
+
 export const OCCASION_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

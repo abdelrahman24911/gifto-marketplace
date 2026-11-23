@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useId, useState } from "react";
 
 import { useUnsavedChangesGuard } from "@/components/navigation-guard";
+import { OCCASION_MATCH_MODE_NOTES } from "@/lib/occasions";
 import {
   tagSelectionIsDirty,
   toggleTagSelection,
@@ -18,14 +19,8 @@ import {
 
 type Option = { id: string; name: string };
 
-const MODE_NOTES: Record<OccasionMatchMode, string> = {
-  manual:
-    "Manual mode uses only the products picked above. These category and tag rules are saved for later but do not affect the public collection yet.",
-  automatic:
-    "Automatic mode uses category and tag matches only. Manual picks stay saved but are not currently included in the public collection.",
-  hybrid:
-    "Hybrid mode places manual picks first, then adds matching products from these categories and tags. A product matched more than once appears only once.",
-};
+const MODE_NOTES: Record<OccasionMatchMode, string> =
+  OCCASION_MATCH_MODE_NOTES;
 
 const primaryButtonClass =
   "rounded-full bg-berry px-4 py-2 text-sm font-semibold text-paper transition-colors hover:bg-berry-deep disabled:cursor-not-allowed disabled:opacity-50";

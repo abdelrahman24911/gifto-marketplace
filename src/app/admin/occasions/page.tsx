@@ -8,6 +8,7 @@ import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
 import { fetchAllRows } from "@/lib/fetch-all";
 import {
   OCCASION_MATCH_MODE_LABELS,
+  OCCASION_MATCH_MODE_NOTES,
   filterOccasions,
   parseOccasionStatusFilter,
   type OccasionStatusFilter,
@@ -364,8 +365,11 @@ export default async function AdminOccasionsPage({
                       "No description yet. Add one so this occasion carries its own point of view."}
                   </p>
                   <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-mute">
-                    <span>
-                      {OCCASION_MATCH_MODE_LABELS[occasion.match_mode]} matching
+                    <span
+                      title={OCCASION_MATCH_MODE_NOTES[occasion.match_mode]}
+                    >
+                      {OCCASION_MATCH_MODE_LABELS[occasion.match_mode]}{" "}
+                      matching
                     </span>
                     <span>Position {fullIndex + 1}</span>
                     <span>Updated {formatUpdated(occasion.updated_at)}</span>
@@ -386,6 +390,13 @@ export default async function AdminOccasionsPage({
                     occasionName={occasion.name}
                     isActive={occasion.is_active}
                   />
+                  <Link
+                    href={`/occasions/${occasion.slug}`}
+                    aria-label={`View ${occasion.name} on the public site`}
+                    className="rounded-full border border-line-strong bg-paper px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:border-berry/40 hover:bg-berry-soft"
+                  >
+                    View public
+                  </Link>
                   <Link
                     href={`/admin/occasions/${occasion.id}/edit`}
                     aria-label={`Edit ${occasion.name}`}

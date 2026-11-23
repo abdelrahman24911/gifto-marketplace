@@ -2,12 +2,17 @@
  * Presentation-only corrections and translations for hosted occasion records.
  * The database slug and stored name stay untouched until an admin edits them.
  */
+
 const DISPLAY_NAMES: Readonly<Record<string, string>> = {
+  "ramadan-night": "Ramadan Night",
+  // Alias for the pre-migration-68 slug.
   "ramdan-night": "Ramadan Night",
 };
 
 const NAME_KEYS: Readonly<Record<string, string>> = {
   graduation: "names.graduation",
+  "ramadan-night": "names.ramadan-night",
+  // Alias for the pre-migration-68 slug.
   "ramdan-night": "names.ramdan-night",
   birthdays: "names.birthdays",
   weddings: "names.weddings",
