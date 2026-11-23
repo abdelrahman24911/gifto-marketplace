@@ -23,6 +23,7 @@ import {
   coverageFromJson,
   deliveryCoverageAllows,
 } from "@/lib/vendor-settings";
+import { demoVendorOrderError } from "@/lib/demo-containment";
 import {
   buildPriceDiff,
   parseExpectedPrices,
@@ -358,6 +359,15 @@ export async function placeOrder(
   const coverageError = await deliveryCoverageError(items, values);
   if (coverageError) {
     return { error: coverageError, values, attempt };
+  }
+
+  // P0 demo containment (migration 67): a demo vendor's order is refused
+  // transactionally by _create_order; this only gives the same paused
+  // message early, before the customer fills in payment details. When
+  // the check cannot run, the database remains authoritative.
+  const demoError = await demoVendorOrderError(items);
+  if (demoError) {
+    return { error: demoError, values, attempt };
   }
 
   const supabase = await createClient();

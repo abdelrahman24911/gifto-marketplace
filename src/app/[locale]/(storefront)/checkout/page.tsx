@@ -12,6 +12,7 @@ import {
   parseBuyNowProductRequest,
   type BuyNowCheckout,
 } from "@/lib/buy-now";
+import { isVendorBlockedFromOrders } from "@/lib/demo-containment";
 
 import { CheckoutForm, type CheckoutDefaults } from "./checkout-form";
 import type { SavedAddress } from "@/lib/saved-address";
@@ -141,10 +142,13 @@ export default async function CheckoutPage({
         } else {
           buyNowBackHref = `/shops/${vendor.slug}/${data.slug}`;
 
+          // P0 demo containment (migration 67): a demo shop's buy-now
+          // fails with the same paused message as a paused shop.
+          const blocked = await isVendorBlockedFromOrders(vendor.id);
           const availability = checkBuyNowAvailability(
             request.quantity,
             data.stock,
-            vendor.is_accepting_orders,
+            vendor.is_accepting_orders && !blocked,
           );
 
           if (!availability.ok) {

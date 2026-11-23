@@ -34,6 +34,7 @@
  * UX Batch 1: wishlists, saved_addresses; orders gift_wrap, gift_message,
  *       preferred_delivery_date, delivery_time_note; gift parameters on the
  *       price-check checkout RPCs.
+ * P0-67: demo containment switch (app_settings, demo_orders_allowed).
  *
  * Regenerate from the live database once the Gifto project exists:
  *   supabase gen types typescript --project-id <ref> > src/lib/supabase/database.types.ts
@@ -80,6 +81,24 @@ export const OCCASION_IMAGES_BUCKET = "occasion-images";
 export type Database = {
   public: {
     Tables: {
+      app_settings: {
+        Row: {
+          key: string;
+          value: Json;
+          updated_at: string;
+        };
+        Insert: {
+          key: string;
+          value: Json;
+          updated_at?: string;
+        };
+        Update: {
+          key?: string;
+          value?: Json;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       profiles: {
         Row: {
           id: string;
@@ -130,6 +149,7 @@ export type Database = {
           prep_time_min_days: number | null;
           prep_time_max_days: number | null;
           is_accepting_orders: boolean;
+          is_demo: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -152,6 +172,7 @@ export type Database = {
           prep_time_min_days?: number | null;
           prep_time_max_days?: number | null;
           is_accepting_orders?: boolean;
+          is_demo?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -174,6 +195,7 @@ export type Database = {
           prep_time_min_days?: number | null;
           prep_time_max_days?: number | null;
           is_accepting_orders?: boolean;
+          is_demo?: boolean;
           created_at?: string;
           updated_at?: string;
         };

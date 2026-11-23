@@ -30,6 +30,7 @@ import {
 } from "@/lib/governorates";
 import { requireVendorRole } from "@/lib/vendor";
 import { checkMutationQuota } from "@/lib/rate-limit";
+import { isVendorBlockedFromOrders } from "@/lib/demo-containment";
 
 const LOGO_MAX_BYTES = 5 * 1024 * 1024;
 const LOGO_TYPES: Record<string, string> = {
@@ -388,6 +389,18 @@ export async function setVendorAcceptingOrders(
   if (!canEditShop(access, isPlatformAdmin)) {
     return {
       error: "Only the shop owner can pause or resume orders.",
+      attempt,
+    };
+  }
+
+  // P0 demo containment (migration 67): a demo shop stays paused in
+  // production even if its owner tries to resume it — the pause flag
+  // alone is not a durable boundary, and _create_order would refuse the
+  // orders anyway. Pausing a demo shop further is always allowed.
+  if (accepting && (await isVendorBlockedFromOrders(access.vendorId))) {
+    return {
+      error:
+        "Demo shops stay paused in production and cannot accept new orders.",
       attempt,
     };
   }

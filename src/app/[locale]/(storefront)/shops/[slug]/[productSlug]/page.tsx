@@ -24,6 +24,7 @@ import {
   Eyebrow,
 } from "@/components/ui/section";
 import { loadProductsByShop } from "@/lib/catalog";
+import { isVendorBlockedFromOrders } from "@/lib/demo-containment";
 import { breadcrumbJsonLd } from "@/lib/breadcrumb-json-ld";
 import { governorateDisplayName } from "@/lib/governorates";
 import { Link } from "@/i18n/navigation";
@@ -230,11 +231,13 @@ function ShopInfoCard({
   location,
   prepTime,
   workingHours,
+  acceptingOrders,
 }: {
   shop: ShopRow;
   location: string;
   prepTime: string | null;
   workingHours: Array<{ day: string; label: string; value: string }>;
+  acceptingOrders: boolean;
 }) {
   const t = useTranslations("product");
 
@@ -310,7 +313,7 @@ function ShopInfoCard({
         </div>
       ) : null}
 
-      {!shop.is_accepting_orders ? (
+      {!acceptingOrders ? (
         <p
           role="status"
           className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
@@ -395,7 +398,12 @@ export default async function ProductPage({ params }: Props) {
     : [];
 
   const soldOut = product.stock <= 0;
-  const purchasable = shop.is_accepting_orders && !soldOut;
+  // P0 demo containment (migration 67): a demo shop shows the standard
+  // paused state while containment is on — same notice, no demo label.
+  const acceptingOrders =
+    shop.is_accepting_orders &&
+    !(await isVendorBlockedFromOrders(shop.id));
+  const purchasable = acceptingOrders && !soldOut;
   const location = [
     shop.city,
     governorateDisplayName(shop.governorate, locale),
@@ -558,7 +566,7 @@ export default async function ProductPage({ params }: Props) {
                 <StockBadge
                   stock={product.stock}
                   soldOut={soldOut}
-                  paused={!shop.is_accepting_orders}
+                  paused={!acceptingOrders}
                 />
               </div>
 
@@ -569,7 +577,7 @@ export default async function ProductPage({ params }: Props) {
               <div className="mt-6 border-t border-line pt-6">
                 <ProductPurchasePanel
                   key={product.id}
-                  acceptingOrders={shop.is_accepting_orders}
+                  acceptingOrders={acceptingOrders}
                   item={{
                     productId: product.id,
                     vendorId: shop.id,
@@ -592,6 +600,7 @@ export default async function ProductPage({ params }: Props) {
               location={location}
               prepTime={prepTime}
               workingHours={workingHours}
+              acceptingOrders={acceptingOrders}
             />
           </div>
         </div>

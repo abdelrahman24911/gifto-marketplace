@@ -22,6 +22,7 @@ import {
   Eyebrow,
 } from "@/components/ui/section";
 import { loadProductsByShop, loadShop } from "@/lib/catalog";
+import { isVendorBlockedFromOrders } from "@/lib/demo-containment";
 import { pageMetadata } from "@/lib/metadata";
 import {
   clampPage,
@@ -98,6 +99,12 @@ export default async function ShopPage({ params, searchParams }: Props) {
 
   const shop = shopResult.data;
   if (!shop) notFound();
+
+  // P0 demo containment (migration 67): a demo shop shows the standard
+  // paused notice while containment is on — same notice, no demo label.
+  const acceptingOrders =
+    shop.isAcceptingOrders &&
+    !(await isVendorBlockedFromOrders(shop.id));
 
   const productsResult = await loadProductsByShop(shop.id, {
     page: requestedPage,
@@ -206,7 +213,7 @@ export default async function ShopPage({ params, searchParams }: Props) {
                   ) : null}
                 </div>
               ) : null}
-              {!shop.isAcceptingOrders ? (
+              {!acceptingOrders ? (
                 <p
                   role="status"
                   className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
