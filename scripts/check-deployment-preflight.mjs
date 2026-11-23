@@ -107,6 +107,36 @@ if (!serviceRoleKey) {
   );
 }
 
+// P5 demo separation: the deployment must be able to name itself.
+// An unknown value fails the gate — a deployment that cannot say
+// whether it is production, staging, demo or development must not
+// ship. An unset value only warns (it defaults to development) but a
+// production deployment must set it explicitly.
+const environmentValue = envValue("GIFTO_ENVIRONMENT");
+if (environmentValue === null) {
+  record(
+    "warn",
+    "GIFTO_ENVIRONMENT",
+    "GIFTO_ENVIRONMENT is not set; it defaults to development. Production deployments must set it to production (see docs/DEMO_SEPARATION_CHECKLIST.md).",
+  );
+} else if (
+  !["production", "staging", "demo", "development"].includes(
+    environmentValue.toLowerCase(),
+  )
+) {
+  record(
+    "fail",
+    "GIFTO_ENVIRONMENT",
+    `GIFTO_ENVIRONMENT has an unknown value "${environmentValue}"; use production, staging, demo or development.`,
+  );
+} else {
+  record(
+    "ok",
+    "GIFTO_ENVIRONMENT",
+    `Deployment environment is ${environmentValue.toLowerCase()}.`,
+  );
+}
+
 let supabaseUrl = null;
 if (supabaseUrlValue) {
   try {

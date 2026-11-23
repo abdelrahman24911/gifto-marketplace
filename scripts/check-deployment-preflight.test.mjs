@@ -37,7 +37,7 @@ const GOOD_BUCKETS = {
   },
 };
 
-function runPreflight(buckets) {
+function runPreflight(buckets, extraEnv = {}) {
   return new Promise((resolve, reject) => {
     const server = createServer((req, res) => {
       const url = new URL(req.url, "http://127.0.0.1");
@@ -74,6 +74,10 @@ function runPreflight(buckets) {
           ...process.env,
           NEXT_PUBLIC_SUPABASE_URL: `http://127.0.0.1:${port}`,
           SUPABASE_SERVICE_ROLE_KEY: "mock-service-key",
+          // Pinned so the tests never depend on the ambient environment;
+          // the GIFTO_ENVIRONMENT cases below override it explicitly.
+          GIFTO_ENVIRONMENT: "production",
+          ...extraEnv,
         },
       });
       let stdout = "";
@@ -132,4 +136,24 @@ test("a bucket missing a required MIME type and a missing bucket both fail", asy
   assert.equal(byName["product-images bucket"], "fail");
   assert.equal(byName["occasion-images bucket"], "ok");
   assert.equal(byName["vendor-media bucket"], "ok");
+});
+
+test("GIFTO_ENVIRONMENT=demo records an ok environment check", async () => {
+  const { status, parsed } = await runPreflight(GOOD_BUCKETS, {
+    GIFTO_ENVIRONMENT: "demo",
+  });
+  assert.equal(status, 0);
+  const check = parsed.checks.find((c) => c.name === "GIFTO_ENVIRONMENT");
+  assert.equal(check.status, "ok");
+  assert.match(check.detail, /demo/);
+});
+
+test("an unknown GIFTO_ENVIRONMENT value fails the gate", async () => {
+  const { status, parsed } = await runPreflight(GOOD_BUCKETS, {
+    GIFTO_ENVIRONMENT: "live",
+  });
+  assert.equal(status, 1);
+  const check = parsed.checks.find((c) => c.name === "GIFTO_ENVIRONMENT");
+  assert.equal(check.status, "fail");
+  assert.match(check.detail, /production, staging, demo or development/);
 });

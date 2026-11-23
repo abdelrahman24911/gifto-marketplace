@@ -7,9 +7,14 @@ import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 
 import { NavigationGuardProvider } from "@/components/navigation-guard";
+import { EnvironmentBanner } from "@/components/environment-banner";
 import { LocaleHtmlSync } from "@/components/locale-html-sync";
 import { ToastProvider } from "@/components/toast-provider";
 import { LOCALE_DIRECTIONS, type AppLocale } from "@/i18n/routing";
+import {
+  getEnvironment,
+  type GiftoEnvironment,
+} from "@/lib/environment";
 import { isIndexingEnabled } from "@/lib/indexing";
 import { SOCIAL_IMAGE } from "@/lib/metadata";
 import { organizationJsonLd } from "@/lib/organization-json-ld";
@@ -97,6 +102,16 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   // Organization JSON-LD block below must carry it or the enforced
   // script-src blocks it. Rendered once here, for the whole site (P1-16).
   const nonce = (await headers()).get("x-nonce") ?? undefined;
+  // P5 demo separation: the banner labels demo/staging deployments on
+  // every page so test data is never mistaken for the real marketplace.
+  // A bad GIFTO_ENVIRONMENT value must never break rendering — the
+  // deployment preflight fails on it instead — so the read is guarded.
+  let environment: GiftoEnvironment = "development";
+  try {
+    environment = getEnvironment();
+  } catch {
+    environment = "development";
+  }
   // Client providers (toasts, navigation guards) sit above the locale segment,
   // so the messages must be supplied here rather than only in [locale].
   const messages = await getMessages();
@@ -109,6 +124,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} ${plexSansArabic.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-paper text-ink">
+        <EnvironmentBanner environment={environment} />
         <LocaleHtmlSync />
         <script
           nonce={nonce}
