@@ -56,13 +56,35 @@ merged, deployed, or written to any hosted system.
   on hydration and renders the 404 correctly; no-JS clients and naive
   crawlers see an empty page. Googlebot executes JS, so the SEO impact
   is limited.
-- **Fix attempted? No.** Removing `force-dynamic` risks breaking the
-  prerender pass the comment documents ("lets the root layout use
-  cookies() without breaking the not-found/prerender pass under
-  `cacheComponents`"), and Next has no supported knob to force
-  not-found content into the first flush for dynamic layouts. Per the
-  mission rule (fix if small and safe, otherwise record), this is
-  recorded as remaining.
+- **Fix attempted? Yes — Phase 2 investigation (2026-11-23), no safe
+  fix found.** Three small changes were built and measured in an
+  isolated worktree (production build, `next start`, same 404 URLs);
+  none was kept:
+  1. **Remove `force-dynamic` from the root layout.** The production
+     build still passed (all pages, 53/53), but `/definitely-not-a-route`
+     still returned 404 with **40 visible characters** — the empty DOM
+     is not caused by `force-dynamic`.
+  2. **`export const dynamic = "force-static"` on the root
+     `not-found.tsx`.** Build passed; the 404 DOM was unchanged (40
+     visible characters). A child segment cannot force a static 404
+     under a dynamic root layout.
+  3. **Next 16's experimental `globalNotFound` flag plus a
+     `global-not-found.tsx`.** Build passed, but the failing unprefixed
+     route was unchanged (40 visible characters). The flag also only
+     applies to unmatched routes, not to `notFound()` from an existing
+     route (e.g. `/shops/no-such-shop`), and it would duplicate the
+     root `<html>`, fonts, providers and banner — not small or safe.
+  `/ar/definitely-not-a-route` was measured alongside: it already
+  renders 312 visible characters because the `[locale]` segment matches
+  and the not-found UI is flushed inside that layout, confirming the
+  problem is specific to the dynamic root-only 404 path.
+- **Why it remains unresolved:** the root layout is async and dynamic
+  (awaits `getLocale()`, `headers()`, `getMessages()`), so Next streams
+  the shell first and the root 404 UI arrives in a later flight chunk.
+  Next has no supported knob to force not-found content into the first
+  flush for a dynamic root layout. Per the mission rule (fix only if
+  small and safe, otherwise record), no application code was changed;
+  browser users and JS-executing crawlers render the 404 correctly.
 - **Also observed**: `/occasions/ramdan-night` 404s in the fresh seed
   DB because the seed creates `ramadan-night` directly and migration
   68's redirect row only exists when the old slug existed. The
