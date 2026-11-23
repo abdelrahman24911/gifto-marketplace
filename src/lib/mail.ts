@@ -3,6 +3,7 @@ import "server-only";
 import nodemailer from "nodemailer";
 
 import { PUBLIC_REFERENCE_PATTERN } from "./guest-order";
+import { parseEnvironment } from "./environment";
 import { formatEgp } from "./money";
 import { ORDER_STATUS_LABELS } from "./orders";
 import { getSiteUrl } from "./site-url";
@@ -34,6 +35,13 @@ import type { OrderStatus } from "./supabase/database.types";
  * Templates are plain-text first; the HTML body is the same content in a
  * minimal wrapper. Amounts use the existing EGP formatter (integer
  * piasters). No guest token, reset link, or credential is ever logged.
+ *
+ * Demo boundary (P5): when GIFTO_ENVIRONMENT is "demo", every send is
+ * refused with `skipped: "demo-environment"` unless the owner opted in
+ * with GIFTO_DEMO_ALLOW_EMAIL=true. A demo deployment must never send
+ * a real email to a real customer — a demo notification looks exactly
+ * like a real Gifto email. The outbox retry refuses the same way, so a
+ * demo retry can never burn attempts or leak a send.
  */
 
 export type MailConfig = {
@@ -55,7 +63,11 @@ export type MailMessage = {
 
 export type MailSendResult =
   | { sent: true; messageId: string }
-  | { sent: false; skipped?: "unconfigured"; error?: string };
+  | {
+      sent: false;
+      skipped?: "unconfigured" | "demo-environment";
+      error?: string;
+    };
 
 /** Kinds of notification that may be queued in mail_outbox. */
 export type MailOutboxKind =
@@ -137,6 +149,40 @@ export function isMailConfigured(
   return getMailConfig(env) !== null;
 }
 
+/**
+ * Demo-environment mail boundary (P5 demo separation).
+ *
+ * A demo deployment must never send a real email to a real customer:
+ * demo data is test data, and a notification that escapes the demo
+ * looks exactly like a real Gifto email. Sending is therefore blocked
+ * whenever GIFTO_ENVIRONMENT is "demo", unless the owner explicitly
+ * opts in with GIFTO_DEMO_ALLOW_EMAIL=true — an opt-in that belongs
+ * only in the isolated demo deployment, for test sends, never in
+ * production. The block applies even to an injected transport (unit
+ * tests inject one): the environment, not the configuration, decides.
+ * An unparseable GIFTO_ENVIRONMENT is not "demo", so a misconfigured
+ * value does not silently block production mail — the deployment
+ * preflight fails on unknown values instead.
+ */
+export function isMailBlockedInDemo(
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  return (
+    parseEnvironment(env.GIFTO_ENVIRONMENT) === "demo" &&
+    env.GIFTO_DEMO_ALLOW_EMAIL?.trim().toLowerCase() !== "true"
+  );
+}
+
+function logDemoBlocked(to: string, subject: string): void {
+  console.error(
+    `[gifto-mail] NOT SENT to=${redactEmail(to)} subject="${subject}": ` +
+      "sending is disabled in the demo environment (GIFTO_ENVIRONMENT=demo). " +
+      "No real customer email may leave a demo deployment; set " +
+      "GIFTO_DEMO_ALLOW_EMAIL=true only in the isolated demo deployment " +
+      "if test sends are needed.",
+  );
+}
+
 function createMailTransport(config: MailConfig): Transporter {
   return nodemailer.createTransport({
     host: config.host,
@@ -208,6 +254,22 @@ export async function sendMail(
 
   if (!EMAIL_PATTERN.test(message.to)) {
     return { sent: false, error: "invalid recipient email" };
+  }
+
+  // P5: a demo environment never sends real email unless the owner
+  // explicitly opted in. The send is still enqueued (like the
+  // unconfigured path) so the attempt stays answerable from the
+  // outbox — but a retry is refused again while the block is on.
+  if (isMailBlockedInDemo()) {
+    logDemoBlocked(message.to, message.subject);
+    if (overrides.enqueue !== false) {
+      await enqueueMailOutbox(
+        message,
+        overrides.kind ?? "notification",
+        "demo environment: sending disabled",
+      );
+    }
+    return { sent: false, skipped: "demo-environment" };
   }
 
   if (!config && !overrides.transport) {
@@ -398,7 +460,7 @@ export async function processMailOutbox(
   sent: number;
   failed: number;
   remaining: number;
-  skipped?: "unconfigured";
+  skipped?: "unconfigured" | "demo-environment";
 }> {
   const limit =
     options.limit !== undefined && options.limit > 0
@@ -408,7 +470,7 @@ export async function processMailOutbox(
     sent: number;
     failed: number;
     remaining: number;
-    skipped?: "unconfigured";
+    skipped?: "unconfigured" | "demo-environment";
   } = { sent: 0, failed: 0, remaining: 0 };
   const config =
     options.config !== undefined ? options.config : getMailConfig();
@@ -427,6 +489,24 @@ export async function processMailOutbox(
       // The skipped run still never throws.
     }
     outcome.skipped = "unconfigured";
+    return outcome;
+  }
+  if (isMailBlockedInDemo()) {
+    // P5: a retry run in a demo environment does nothing at all — same
+    // shape as the unconfigured refusal, so no attempt is burned and no
+    // row is touched. The rows stay pending for a deployment where
+    // sending is allowed.
+    try {
+      const service = createServiceClient();
+      const { count } = await service
+        .from("mail_outbox")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "pending");
+      outcome.remaining = count ?? 0;
+    } catch {
+      // The refused run still never throws.
+    }
+    outcome.skipped = "demo-environment";
     return outcome;
   }
   try {

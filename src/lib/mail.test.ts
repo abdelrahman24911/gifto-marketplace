@@ -862,3 +862,117 @@ describe("mail outbox", () => {
     expect(rows[0].first_error).toBe("SMTP is not configured");
   });
 });
+
+/**
+ * Demo-environment mail boundary (P5): a demo deployment must never
+ * send a real email to a real customer, even when SMTP is configured
+ * and a transport is available. Only an explicit
+ * GIFTO_DEMO_ALLOW_EMAIL=true opt-in lifts the block.
+ */
+describe("demo environment mail guard", () => {
+  const originalEnv = { ...process.env };
+  // Installed per test (not at describe level): an earlier describe's
+  // per-test mockRestore() detaches a describe-level console.error spy.
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    serviceState.client = null;
+    delete process.env.GIFTO_ENVIRONMENT;
+    delete process.env.GIFTO_DEMO_ALLOW_EMAIL;
+    workingTransport.sendMail.mockClear();
+  });
+
+  afterEach(() => {
+    errorSpy.mockRestore();
+    serviceState.client = null;
+    delete process.env.GIFTO_ENVIRONMENT;
+    delete process.env.GIFTO_DEMO_ALLOW_EMAIL;
+    Object.assign(process.env, originalEnv);
+  });
+
+  const workingTransport = {
+    sendMail: vi.fn(async () => ({ messageId: "abc" })),
+  };
+
+  it("refuses a send in a demo environment even with a working transport", async () => {
+    process.env.GIFTO_ENVIRONMENT = "demo";
+    const result = await sendMail(
+      { to: "customer@example.com", subject: "Test", text: "hello" },
+      { transport: workingTransport as never },
+    );
+    expect(result).toEqual({ sent: false, skipped: "demo-environment" });
+    expect(workingTransport.sendMail).not.toHaveBeenCalled();
+    const logged = errorSpy.mock.calls.flat().join(" ");
+    expect(logged).toContain("demo environment");
+    expect(logged).not.toContain("customer@example.com");
+  });
+
+  it("sends in a demo environment only with the explicit opt-in", async () => {
+    process.env.GIFTO_ENVIRONMENT = "demo";
+    process.env.GIFTO_DEMO_ALLOW_EMAIL = "true";
+    const result = await sendMail(
+      { to: "customer@example.com", subject: "Test", text: "hello" },
+      { transport: workingTransport as never },
+    );
+    expect(result).toEqual({ sent: true, messageId: "abc" });
+    expect(workingTransport.sendMail).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not block sends outside a demo environment", async () => {
+    process.env.GIFTO_ENVIRONMENT = "production";
+    const result = await sendMail(
+      { to: "customer@example.com", subject: "Test", text: "hello" },
+      { transport: workingTransport as never },
+    );
+    expect(result.sent).toBe(true);
+  });
+
+  it("enqueues a demo-blocked notification instead of losing it", async () => {
+    process.env.GIFTO_ENVIRONMENT = "demo";
+    const fake = makeOutboxFake([]);
+    serviceState.client = fake;
+    const result = await sendMail(
+      { to: "customer@example.com", subject: "Your order shipped", text: "Hi" },
+      { transport: workingTransport as never, kind: "order_status" },
+    );
+    expect(result).toEqual({ sent: false, skipped: "demo-environment" });
+    expect(fake.inserts).toHaveLength(1);
+    expect(fake.inserts[0]).toMatchObject({
+      kind: "order_status",
+      status: "pending",
+      last_error: "demo environment: sending disabled",
+      first_error: "demo environment: sending disabled",
+    });
+  });
+
+  it("refuses an outbox retry run in a demo environment without touching a row", async () => {
+    process.env.GIFTO_ENVIRONMENT = "demo";
+    const rows: OutboxRow[] = [
+      {
+        id: "row-1",
+        kind: "order_status",
+        to_email: "customer@example.com",
+        subject: "Your order shipped",
+        body_text: "Hi",
+        body_html: null,
+        attempts: 4,
+        status: "pending",
+      },
+    ];
+    const fake = makeOutboxFake(rows);
+    serviceState.client = fake;
+    const outcome = await processMailOutbox({
+      transport: workingTransport as never,
+    });
+    expect(outcome).toEqual({
+      sent: 0,
+      failed: 0,
+      remaining: 1,
+      skipped: "demo-environment",
+    });
+    expect(rows[0].status).toBe("pending");
+    expect(rows[0].attempts).toBe(4);
+    expect(fake.updates).toHaveLength(0);
+  });
+});

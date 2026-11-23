@@ -53,6 +53,14 @@ export async function retryMailOutbox(
         "retrying now would not send anything.",
     };
   }
+  if (result.skipped === "demo-environment") {
+    return {
+      error:
+        "This is a demo environment — email sending is disabled here so " +
+        "no real customer ever gets a demo email. These rows stay pending " +
+        "for a deployment where sending is allowed.",
+    };
+  }
   revalidatePath("/admin/mail-outbox");
   return {
     success:
