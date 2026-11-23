@@ -58,27 +58,67 @@ const getSessionUser = cache(
  * Asks the Auth server whether the session is still valid (one network round
  * trip). Used for Server Actions and platform-admin access, where a revoked
  * session must not be honoured for the remainder of the token's lifetime.
+ *
+ * A transient Auth-server failure must NOT sign the admin out: the admin
+ * console runs this check on every page load, so one failed round trip used
+ * to end the session after ~1–2 minutes of use (QA, 2026-11-23). Only an
+ * explicit answer — no user, or a different user — redirects. A retryable
+ * failure (network error, 5xx) is retried once, then the locally verified
+ * claims are trusted for this render: the token is still JWKS-verified and
+ * unexpired, RLS still enforces every data read, and the next page load
+ * re-checks with the Auth server.
  */
-const getAuthServerUser = cache(async (): Promise<User | null> => {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+type AuthServerCheck =
+  | { status: "confirmed"; user: User | null }
+  | { status: "unavailable" };
 
-  return user ? { id: user.id, email: user.email } : null;
+function isTransientAuthError(error: {
+  name?: string;
+  status?: number | null;
+}): boolean {
+  if (error.name === "AuthRetryableFetchError") return true;
+  const status = error.status;
+  return (
+    typeof status === "number" && (status === 0 || (status >= 500 && status < 600))
+  );
+}
+
+const getAuthServerUser = cache(async (): Promise<AuthServerCheck> => {
+  const supabase = await createClient();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+    if (!error) {
+      return {
+        status: "confirmed",
+        user: user ? { id: user.id, email: user.email } : null,
+      };
+    }
+    // Explicit auth failure (bad/expired token, missing session): the session
+    // really is invalid — do not retry, do not trust the claims.
+    if (!isTransientAuthError(error)) {
+      return { status: "confirmed", user: null };
+    }
+  }
+  return { status: "unavailable" };
 });
 
 /**
  * Redirects to sign-in unless the Auth server confirms the same user is still
  * signed in. Runs concurrently with other work so it adds at most one overlapped
- * round trip.
+ * round trip. A transient Auth-server failure (see getAuthServerUser) leaves
+ * the session alone for this render instead of signing the user out.
  */
 export async function assertSessionStillValid(): Promise<void> {
-  const [{ user }, serverUser] = await Promise.all([
+  const [{ user }, server] = await Promise.all([
     getSessionUser(),
     getAuthServerUser(),
   ]);
-  if (!user || !serverUser || serverUser.id !== user.id) redirect("/login");
+  if (!user) redirect("/login");
+  if (server.status === "unavailable") return;
+  if (!server.user || server.user.id !== user.id) redirect("/login");
 }
 
 const getProfile = cache(async (): Promise<RequestProfile | null> => {

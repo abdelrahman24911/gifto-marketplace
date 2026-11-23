@@ -144,4 +144,79 @@ describe("requireUser / requirePlatformAdmin", () => {
       user: { id: USER_ID },
     });
   });
+
+  it("requirePlatformAdmin does NOT sign out on a transient Auth-server failure", async () => {
+    // QA 2026-11-23: the admin session dropped after ~1–2 minutes because
+    // one failed getUser() round trip was treated as an invalid session.
+    stubTables({ admin: true });
+    getClaims.mockResolvedValue({ data: { claims: { sub: USER_ID } } });
+    getUser.mockResolvedValue({
+      data: { user: null },
+      error: { name: "AuthRetryableFetchError", status: 0 },
+    });
+    const { requirePlatformAdmin } = await import("./auth");
+
+    await expect(requirePlatformAdmin()).resolves.toMatchObject({
+      user: { id: USER_ID },
+    });
+    // Retried exactly once, then trusted the verified claims for this render.
+    expect(getUser).toHaveBeenCalledTimes(2);
+  });
+
+  it("requirePlatformAdmin recovers when the retry succeeds", async () => {
+    stubTables({ admin: true });
+    getClaims.mockResolvedValue({ data: { claims: { sub: USER_ID } } });
+    getUser
+      .mockResolvedValueOnce({
+        data: { user: null },
+        error: { name: "AuthRetryableFetchError", status: 503 },
+      })
+      .mockResolvedValueOnce({ data: { user: { id: USER_ID } }, error: null });
+    const { requirePlatformAdmin } = await import("./auth");
+
+    await expect(requirePlatformAdmin()).resolves.toMatchObject({
+      user: { id: USER_ID },
+    });
+    expect(getUser).toHaveBeenCalledTimes(2);
+  });
+
+  it("requirePlatformAdmin still rejects an explicit 401 without retrying", async () => {
+    stubTables({ admin: true });
+    getClaims.mockResolvedValue({ data: { claims: { sub: USER_ID } } });
+    getUser.mockResolvedValue({
+      data: { user: null },
+      error: { name: "AuthApiError", status: 401 },
+    });
+    const { requirePlatformAdmin } = await import("./auth");
+
+    await expect(requirePlatformAdmin()).rejects.toThrow("REDIRECT:/login");
+    expect(getUser).toHaveBeenCalledTimes(1);
+  });
+
+  it("requirePlatformAdmin still rejects a missing session without retrying", async () => {
+    stubTables({ admin: true });
+    getClaims.mockResolvedValue({ data: { claims: { sub: USER_ID } } });
+    getUser.mockResolvedValue({
+      data: { user: null },
+      error: { name: "AuthSessionMissingError", status: 400 },
+    });
+    const { requirePlatformAdmin } = await import("./auth");
+
+    await expect(requirePlatformAdmin()).rejects.toThrow("REDIRECT:/login");
+    expect(getUser).toHaveBeenCalledTimes(1);
+  });
+
+  it("verified vendor actions also survive a transient Auth-server failure", async () => {
+    getClaims.mockResolvedValue({ data: { claims: { sub: USER_ID } } });
+    getUser.mockResolvedValue({
+      data: { user: null },
+      error: { name: "AuthRetryableFetchError", status: 0 },
+    });
+    const { requireVendorRole } = await import("./vendor");
+
+    await expect(
+      requireVendorRole(null, { verifyWithAuthServer: true }),
+    ).resolves.toMatchObject({ user: { id: USER_ID } });
+    expect(getUser).toHaveBeenCalledTimes(2);
+  });
 });
