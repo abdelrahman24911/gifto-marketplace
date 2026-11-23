@@ -31,6 +31,7 @@ import {
   orderStatusEmail,
   passwordResetEmail,
   processMailOutbox,
+  notifyOrderPlaced,
   refundCaseResolvedEmail,
   requeueMailOutbox,
   sendMail,
@@ -974,5 +975,101 @@ describe("demo environment mail guard", () => {
     expect(rows[0].status).toBe("pending");
     expect(rows[0].attempts).toBe(4);
     expect(fake.updates).toHaveLength(0);
+  });
+});
+
+describe("notifyOrderPlaced never breaks checkout", () => {
+  const originalEnv = { ...process.env };
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+
+  // Fake service client: fetchOrderForMail reads one order row; the
+  // outbox insert records enqueued notifications.
+  function makeOrderPlacedFake() {
+    const inserts: Record<string, unknown>[] = [];
+    const orderRow = {
+      id: "order-1",
+      user_id: null,
+      public_reference: "GFT-ABCDEF123456",
+      contact_email: "customer@example.com",
+      total_minor: 52000,
+      recipient_name: "Test Customer",
+      contact_phone: "+201001234567",
+      order_vendors: [
+        {
+          subtotal_minor: 52000,
+          vendor: { name: "Test Shop", contact_email: "shop@example.com" },
+          order_items: [{ quantity: 2 }],
+        },
+      ],
+    };
+    const client = {
+      inserts,
+      from(table: string) {
+        if (table === "orders") {
+          return {
+            select: () => ({
+              eq: () => ({
+                maybeSingle: async () => ({ data: orderRow, error: null }),
+              }),
+            }),
+          };
+        }
+        if (table === "mail_outbox") {
+          return {
+            insert: async (row: Record<string, unknown>) => {
+              inserts.push(row);
+              return { error: null };
+            },
+          };
+        }
+        throw new Error(`unexpected table ${table}`);
+      },
+    };
+    return client;
+  }
+
+  beforeEach(() => {
+    errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    serviceState.client = null;
+    delete process.env.GIFTO_ENVIRONMENT;
+    delete process.env.GIFTO_DEMO_ALLOW_EMAIL;
+  });
+
+  afterEach(() => {
+    errorSpy.mockRestore();
+    serviceState.client = null;
+    delete process.env.GIFTO_ENVIRONMENT;
+    delete process.env.GIFTO_DEMO_ALLOW_EMAIL;
+    Object.assign(process.env, originalEnv);
+  });
+
+  it("resolves (never throws) when the site URL is unusable in production", async () => {
+    // getSiteUrl() throws for a localhost site URL under NODE_ENV=production
+    // — the exact combination a local `next start` run has. The order is
+    // already placed at that point, so the notification must fail soft.
+    (process.env as { NODE_ENV?: string }).NODE_ENV = "production";
+    process.env.NEXT_PUBLIC_SITE_URL = "http://127.0.0.1:3100";
+    const fake = makeOrderPlacedFake();
+    serviceState.client = fake;
+
+    await expect(notifyOrderPlaced("order-1")).resolves.toBeUndefined();
+    expect(fake.inserts).toHaveLength(0);
+    expect(errorSpy.mock.calls.flat().join(" ")).toContain(
+      "order-placed notification failed",
+    );
+  });
+
+  it("enqueues vendor + customer notifications on the happy path", async () => {
+    (process.env as { NODE_ENV?: string }).NODE_ENV = "production";
+    process.env.NEXT_PUBLIC_SITE_URL = "https://gifto.example";
+    const fake = makeOrderPlacedFake();
+    serviceState.client = fake;
+
+    await expect(notifyOrderPlaced("order-1")).resolves.toBeUndefined();
+    expect(fake.inserts).toHaveLength(2);
+    expect(fake.inserts.map((row) => row.kind)).toEqual([
+      "order_placed_vendor",
+      "order_placed_customer",
+    ]);
   });
 });

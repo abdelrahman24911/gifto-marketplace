@@ -864,8 +864,29 @@ async function fetchOrderForMail(
   }
 }
 
-/** Vendor + customer email for a newly placed order. */
+/**
+ * Vendor + customer email for a newly placed order.
+ *
+ * Never throws: the order is already placed when this runs, so a broken
+ * site URL, a missing order row, or a failed send must not turn a
+ * successful checkout into an error for the customer — the send is
+ * enqueued to mail_outbox (or logged) instead. The other notifiers wrap
+ * the same way; this one was the only one that could still throw, via
+ * getSiteUrl() rejecting a localhost site URL in production.
+ */
 export async function notifyOrderPlaced(orderId: string): Promise<void> {
+  try {
+    await notifyOrderPlacedInner(orderId);
+  } catch (error) {
+    // A failed notification never rolls back the placed order.
+    console.error(
+      "[gifto-mail] order-placed notification failed:",
+      error instanceof Error ? error.message : error,
+    );
+  }
+}
+
+async function notifyOrderPlacedInner(orderId: string): Promise<void> {
   const order = await fetchOrderForMail(orderId);
   if (!order) return;
   const reference = order.public_reference ?? `#${order.id.slice(0, 8)}`;
