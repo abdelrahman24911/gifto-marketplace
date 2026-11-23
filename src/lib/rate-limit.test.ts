@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  authQuotaFailureMessage,
   authQuotaMessage,
   authRateBucket,
   checkAuthQuota,
@@ -17,6 +18,14 @@ vi.mock("@/lib/supabase/service", () => ({
 vi.mock("next/headers", () => ({
   headers: () => ({ get: headersGet }),
 }));
+
+beforeEach(() => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 function setCallerIp(ip: string) {
   headersGet.mockImplementation((name: string) => {
@@ -65,6 +74,21 @@ describe("authQuotaMessage", () => {
       expect(message).not.toMatch(/bucket|rpc|auth_rate_limits|consume_/i);
     }
   });
+
+  it("distinguishes missing configuration from a service outage", () => {
+    expect(authQuotaFailureMessage("configuration")).toContain(
+      "not configured",
+    );
+    expect(authQuotaFailureMessage("unavailable")).toContain(
+      "temporarily unavailable",
+    );
+    expect(authQuotaFailureMessage("configuration")).not.toBe(
+      authQuotaMessage("login"),
+    );
+    expect(authQuotaFailureMessage("unavailable")).not.toBe(
+      authQuotaMessage("login"),
+    );
+  });
 });
 
 describe("checkAuthQuota", () => {
@@ -82,6 +106,7 @@ describe("checkAuthQuota", () => {
     expect(result).toEqual({
       limited: false,
       unavailable: false,
+      failure: null,
       message: null,
     });
     expect(rpcMock).toHaveBeenCalledTimes(2);
@@ -104,8 +129,12 @@ describe("checkAuthQuota", () => {
       accountKey: "user@example.com",
     });
 
-    expect(result.limited).toBe(true);
-    expect(result.message).toBe(authQuotaMessage("login"));
+    expect(result).toMatchObject({
+      limited: true,
+      unavailable: false,
+      failure: "limit",
+      message: authQuotaMessage("login"),
+    });
     expect(rpcMock).toHaveBeenCalledTimes(1);
   });
 
@@ -118,15 +147,24 @@ describe("checkAuthQuota", () => {
       accountKey: "user@example.com",
     });
 
-    expect(result.limited).toBe(true);
-    expect(result.message).toBe(authQuotaMessage("login"));
+    expect(result).toMatchObject({
+      limited: true,
+      unavailable: false,
+      failure: "limit",
+      message: authQuotaMessage("login"),
+    });
     expect(rpcMock).toHaveBeenCalledTimes(2);
   });
 
   it("consumes only the IP bucket where no account exists", async () => {
     const result = await checkAuthQuota("signup");
 
-    expect(result.limited).toBe(false);
+    expect(result).toMatchObject({
+      limited: false,
+      unavailable: false,
+      failure: null,
+      message: null,
+    });
     expect(rpcMock).toHaveBeenCalledTimes(1);
     expect(rpcMock).toHaveBeenCalledWith("consume_auth_quota", {
       p_bucket: authRateBucket("signup", "203.0.113.7"),
@@ -135,16 +173,61 @@ describe("checkAuthQuota", () => {
     });
   });
 
-  it("fails closed when the quota RPC errors", async () => {
+  it("reports a missing RPC as a configuration error, not a rate limit", async () => {
+    rpcMock.mockResolvedValue({
+      data: null,
+      error: {
+        code: "PGRST202",
+        message:
+          "Could not find the function public.consume_auth_quota(p_bucket, p_limit, p_window_seconds) in the schema cache",
+      },
+    });
+
+    const result = await checkAuthQuota("login", {
+      accountKey: "user@example.com",
+    });
+
+    expect(result).toEqual({
+      limited: true,
+      unavailable: true,
+      failure: "configuration",
+      message: authQuotaFailureMessage("configuration"),
+    });
+    expect(result.message).not.toBe(authQuotaMessage("login"));
+    expect(rpcMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a missing table as a configuration error, not a rate limit", async () => {
+    rpcMock.mockResolvedValue({
+      data: null,
+      error: {
+        code: "PGRST205",
+        message:
+          "Could not find the table 'public.auth_rate_limits' in the schema cache",
+      },
+    });
+
+    const message = await checkMutationQuota("admin", "user-1");
+
+    expect(message).toBe(authQuotaFailureMessage("configuration"));
+    expect(message).not.toBe(authQuotaMessage("adminMutation"));
+    expect(rpcMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports other RPC failures as service unavailable, not a rate limit", async () => {
     rpcMock.mockResolvedValue({ data: null, error: { message: "boom" } });
 
     const result = await checkAuthQuota("login", {
       accountKey: "user@example.com",
     });
 
-    expect(result.limited).toBe(true);
-    expect(result.unavailable).toBe(true);
-    expect(result.message).toBe(authQuotaMessage("login"));
+    expect(result).toMatchObject({
+      limited: true,
+      unavailable: true,
+      failure: "unavailable",
+      message: authQuotaFailureMessage("unavailable"),
+    });
+    expect(result.message).not.toBe(authQuotaMessage("login"));
   });
 
   it("fails closed when the quota RPC throws", async () => {
@@ -152,8 +235,12 @@ describe("checkAuthQuota", () => {
 
     const result = await checkAuthQuota("login");
 
-    expect(result.limited).toBe(true);
-    expect(result.unavailable).toBe(true);
+    expect(result).toMatchObject({
+      limited: true,
+      unavailable: true,
+      failure: "unavailable",
+      message: authQuotaFailureMessage("unavailable"),
+    });
   });
 });
 

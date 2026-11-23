@@ -7,7 +7,10 @@ import { createClient } from "@/lib/supabase/client";
 import { getAuthCallbackUrl, getSafeAuthPath } from "@/lib/auth-redirect";
 import { useToast } from "@/components/toast-provider";
 
-import { checkLoginQuota, checkSignupQuota } from "@/app/[locale]/(auth)/quota-actions";
+import {
+  checkSignupQuota,
+  signInAccount,
+} from "@/app/[locale]/(auth)/quota-actions";
 
 type Mode = "login" | "signup";
 
@@ -51,58 +54,50 @@ export function AuthForm({ mode, initialError }: { mode: Mode; initialError?: st
     // P1-12: app-flow quota gate (IP + per-email for login, IP-only for
     // signup), fail-closed. A refusal shows the retry message and the
     // Supabase Auth call is skipped.
-    const gate =
-      mode === "login"
-        ? await checkLoginQuota(email)
-        : await checkSignupQuota();
+    // The proxy appends ?next=<path> for protected routes; only allow same-site
+    // absolute paths so the parameter cannot be used as an open redirect.
+    const requestedNext = new URLSearchParams(window.location.search).get("next");
+    const redirectTo = getSafeAuthPath(requestedNext);
+
+    if (mode === "login") {
+      const result = await signInAccount(email, password, redirectTo);
+      if (result?.error) {
+        setError(result.error);
+        setBusy(false);
+        return;
+      }
+      flash("Signed in - welcome back.", "success");
+      return;
+    }
+
+    const gate = await checkSignupQuota();
     if (gate.limited) {
       setError(gate.message ?? "Please wait and try again.");
       setBusy(false);
       return;
     }
 
-    // The proxy appends ?next=<path> for protected routes; only allow same-site
-    // absolute paths so the parameter cannot be used as an open redirect.
-    const requestedNext = new URLSearchParams(window.location.search).get("next");
-    const redirectTo = getSafeAuthPath(requestedNext);
-
     const supabase = createClient();
 
     try {
-      if (mode === "login") {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (signInError) {
-          setError(signInError.message);
-          return;
-        }
-        // R-08: the sign-in ends in a navigation, so the confirmation
-        // is flashed — a flashed toast is the path that survives it.
-        flash("Signed in — welcome back.", "success");
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { full_name: fullName },
+          emailRedirectTo: getAuthCallbackUrl(redirectTo),
+        },
+      });
+      if (signUpError) {
+        setError(signUpError.message);
+        return;
+      }
+      if (data.session) {
+        flash("Account created — welcome to Gifto.", "success");
         router.push(redirectTo);
         router.refresh();
       } else {
-        const { data, error: signUpError } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: { full_name: fullName },
-            emailRedirectTo: getAuthCallbackUrl(redirectTo),
-          },
-        });
-        if (signUpError) {
-          setError(signUpError.message);
-          return;
-        }
-        if (data.session) {
-          flash("Account created — welcome to Gifto.", "success");
-          router.push(redirectTo);
-          router.refresh();
-        } else {
-          setMessage("Check your email to confirm your account, then sign in.");
-        }
+        setMessage("Check your email to confirm your account, then sign in.");
       }
     } catch {
       setError("Something went wrong. Please try again.");

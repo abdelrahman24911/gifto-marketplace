@@ -149,6 +149,7 @@ async function consumeQuota(): Promise<QuotaResult> {
     const ip = clientIpFromHeaders(
       headerStore.get("x-forwarded-for"),
       headerStore.get("x-real-ip"),
+      headerStore.get("x-vercel-forwarded-for"),
     );
 
     const service = createServiceClient();

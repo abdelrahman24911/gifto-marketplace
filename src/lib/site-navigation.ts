@@ -27,10 +27,13 @@ export function buildStoreNav({
   categories,
   occasions,
   labels,
+  occasionName,
 }: {
   categories: readonly NamedSlug[];
   occasions: readonly NamedSlug[];
   labels: { home: string; occasions: string; categories: string; shops: string };
+  /** Optional localized label resolver; defaults to the presentation-only name. */
+  occasionName?: (occasion: NamedSlug) => string;
 }): StoreNavItem[] {
   return [
     { label: labels.home, href: "/" },
@@ -38,7 +41,9 @@ export function buildStoreNav({
       label: labels.occasions,
       href: "/occasions",
       items: occasions.map((occasion) => ({
-        label: occasionDisplayName(occasion.slug, occasion.name),
+        label: occasionName
+          ? occasionName(occasion)
+          : occasionDisplayName(occasion.slug, occasion.name),
         href: `/occasions/${occasion.slug}`,
       })),
     },

@@ -33,7 +33,7 @@ export function OccasionHero() {
           </p>
         </div>
 
-        <div className="gifto-rise pointer-events-none absolute -right-16 top-2 w-72 opacity-25 [animation-delay:120ms] sm:-right-10 sm:w-80 sm:opacity-30 md:relative md:right-auto md:top-auto md:col-start-2 md:row-start-1 md:w-full md:opacity-100 lg:max-w-none">
+        <div className="gifto-rise pointer-events-none absolute -right-16 top-2 hidden w-72 opacity-25 [animation-delay:120ms] sm:-right-10 sm:w-80 sm:opacity-30 md:relative md:right-auto md:top-auto md:col-start-2 md:row-start-1 md:block md:w-full md:opacity-100 lg:max-w-none">
           <OccasionHeroArt className="h-auto w-full" />
         </div>
       </Container>

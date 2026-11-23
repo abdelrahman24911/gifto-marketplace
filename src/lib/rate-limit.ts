@@ -16,12 +16,14 @@
  * rows older than 2 days on every call. See migration 39.
  *
  * Fail-closed (P1-12, step 3): auth actions fail closed. If the quota
- * check itself errors (database unreachable), the attempt is denied with
- * the retry message rather than let through — the quota RPC lives in the
- * same Postgres as the data the action needs, so a quota failure means
+ * check itself errors (database unreachable or migration 39 missing), the
+ * attempt is denied with an explicit configuration/service-unavailable
+ * message rather than a misleading retry message — the quota RPC lives in
+ * the same Postgres as the data the action needs, so a quota failure means
  * the action would almost certainly fail anyway, and failing closed never
- * lets abuse through a broken limiter. Checkout keeps its own fail-open
- * behaviour; this module does not change it.
+ * lets abuse through a broken limiter. Admin/vendor mutations remain
+ * fail-closed too; this module does not fail open. Checkout keeps its own
+ * fail-open behaviour; this module does not change it.
  *
  * Login/signup note: those flows call Supabase Auth directly from the
  * browser (see src/components/auth-form.tsx), so there is no server
@@ -148,27 +150,72 @@ export function authQuotaMessage(scope: AuthQuotaScope): string {
   return `Too many ${config.actionLabel}. Please wait ${config.waitLabel} and try again.`;
 }
 
+export type AuthQuotaFailure =
+  | "limit"
+  | "configuration"
+  | "unavailable";
+
+export function authQuotaFailureMessage(
+  failure: Exclude<AuthQuotaFailure, "limit">,
+): string {
+  if (failure === "configuration") {
+    return "This action is temporarily unavailable because the rate-limit service is not configured. Please contact support.";
+  }
+  return "The rate-limit service is temporarily unavailable. Please try again in a few minutes.";
+}
+
 export type AuthQuotaResult = {
   /** True when the attempt must not proceed. */
   limited: boolean;
   /** True when the quota service itself failed (fail-closed). */
   unavailable: boolean;
-  /** Retry message to show the caller when limited; null otherwise. */
+  /** Why the attempt was refused; null when it may proceed. */
+  failure: AuthQuotaFailure | null;
+  /** Message to show the caller when limited; null otherwise. */
   message: string | null;
 };
+
+type BucketFailure = Exclude<AuthQuotaFailure, "limit">;
+
+type ConsumeBucketResult =
+  | { ok: true; attempts: number }
+  | { ok: false; failure: BucketFailure; code: string | null };
+
+function classifyQuotaError(code: string | undefined): BucketFailure {
+  return code === "PGRST202" || code === "PGRST205"
+    ? "configuration"
+    : "unavailable";
+}
 
 async function consumeBucket(
   bucket: string,
   rule: QuotaRule,
-): Promise<number | null> {
+): Promise<ConsumeBucketResult> {
   const service = createServiceClient();
   const { data, error } = await service.rpc("consume_auth_quota", {
     p_bucket: bucket,
     p_limit: rule.limit,
     p_window_seconds: rule.windowSeconds,
   });
-  if (error || typeof data !== "number") return null;
-  return data;
+
+  if (error) {
+    const failure = classifyQuotaError(error.code);
+    console.error("[rate-limit] consume_auth_quota failed", {
+      code: error.code ?? null,
+      message: error.message,
+      failure,
+    });
+    return { ok: false, failure, code: error.code ?? null };
+  }
+
+  if (typeof data !== "number") {
+    console.error("[rate-limit] consume_auth_quota returned a non-numeric result", {
+      resultType: typeof data,
+    });
+    return { ok: false, failure: "unavailable", code: null };
+  }
+
+  return { ok: true, attempts: data };
 }
 
 /**
@@ -187,41 +234,54 @@ export async function checkAuthQuota(
   const limitedResult: AuthQuotaResult = {
     limited: true,
     unavailable: false,
+    failure: "limit",
     message: authQuotaMessage(scope),
   };
+
+  function unavailableResult(failure: BucketFailure): AuthQuotaResult {
+    return {
+      limited: true,
+      unavailable: true,
+      failure,
+      message: authQuotaFailureMessage(failure),
+    };
+  }
 
   try {
     const headerStore = await headers();
     const ip = clientIpFromHeaders(
       headerStore.get("x-forwarded-for"),
       headerStore.get("x-real-ip"),
+      headerStore.get("x-vercel-forwarded-for"),
     );
 
-    const ipAttempts = await consumeBucket(
+    const ipResult = await consumeBucket(
       authRateBucket(scope, ip),
       config.ip,
     );
-    if (ipAttempts === null) {
-      // Quota service failed: fail closed.
-      return { ...limitedResult, unavailable: true };
-    }
-    if (ipAttempts > config.ip.limit) return limitedResult;
+    if (!ipResult.ok) return unavailableResult(ipResult.failure);
+    if (ipResult.attempts > config.ip.limit) return limitedResult;
 
     if (config.account && options.accountKey) {
-      const accountAttempts = await consumeBucket(
+      const accountResult = await consumeBucket(
         authRateBucket(scope, options.accountKey),
         config.account,
       );
-      if (accountAttempts === null) {
-        return { ...limitedResult, unavailable: true };
-      }
-      if (accountAttempts > config.account.limit) return limitedResult;
+      if (!accountResult.ok) return unavailableResult(accountResult.failure);
+      if (accountResult.attempts > config.account.limit) return limitedResult;
     }
 
-    return { limited: false, unavailable: false, message: null };
-  } catch {
-    // headers() or the service client threw: fail closed.
-    return { ...limitedResult, unavailable: true };
+    return {
+      limited: false,
+      unavailable: false,
+      failure: null,
+      message: null,
+    };
+  } catch (error) {
+    console.error("[rate-limit] quota check threw", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return unavailableResult("unavailable");
   }
 }
 
@@ -229,7 +289,8 @@ export async function checkAuthQuota(
  * Quota check for admin/vendor mutation actions. Call immediately after
  * `requirePlatformAdmin()` / `requireVendorRole()` (which supply the
  * account id) and before the mutation. Returns the retry message when
- * the attempt must be refused, or null when it may proceed.
+ * genuinely over the limit, or an explicit configuration/service-unavailable
+ * message when the quota service cannot be checked. It never fails open.
  */
 export async function checkMutationQuota(
   kind: "admin" | "vendor",

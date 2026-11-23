@@ -14,6 +14,7 @@ import { WishlistLink } from "@/components/wishlist-link";
 import { Container } from "@/components/ui/section";
 import { getRequestContext } from "@/lib/auth";
 import { getCategories, getOccasions } from "@/lib/catalog";
+import { occasionDisplayName } from "@/lib/occasion-display";
 import { buildStoreNav, type StoreNavItem } from "@/lib/site-navigation";
 
 const cartLinkClass =
@@ -86,12 +87,12 @@ async function HeaderActions({
         signedIn={!!user}
         links={accountLinks}
         showSignOut={!!user}
-        className="hidden lg:flex"
+        className="hidden xl:flex"
       />
 
       <GuardedLink
         href={user ? "/account" : "/login"}
-        className="inline-flex h-10 w-10 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-berry-soft hover:text-berry-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry lg:hidden"
+        className="inline-flex h-10 w-10 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-berry-soft hover:text-berry-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry xl:hidden"
       >
         <UserIcon className="h-5 w-5" />
         <span className="sr-only">
@@ -124,7 +125,7 @@ function HeaderActionsFallback({
     <>
       <span
         aria-hidden
-        className="hidden h-10 items-center gap-1.5 rounded-full px-3 text-ink-soft lg:inline-flex"
+        className="hidden h-10 items-center gap-1.5 rounded-full px-3 text-ink-soft xl:inline-flex"
       >
         <UserIcon className="h-5 w-5" />
         <span className="h-4 w-14 animate-pulse rounded bg-line" />
@@ -132,7 +133,7 @@ function HeaderActionsFallback({
 
       <GuardedLink
         href="/login"
-        className="inline-flex h-10 w-10 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-berry-soft hover:text-berry-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry lg:hidden"
+        className="inline-flex h-10 w-10 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-berry-soft hover:text-berry-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry xl:hidden"
       >
         <UserIcon className="h-5 w-5" />
         <span className="sr-only">{signedOutLinks[0]?.label}</span>
@@ -152,7 +153,10 @@ function HeaderActionsFallback({
  * the account controls stream separately because they depend on the session.
  */
 export async function SiteHeader() {
-  const t = await getTranslations("common");
+  const [t, occasionT] = await Promise.all([
+    getTranslations("common"),
+    getTranslations("occasions"),
+  ]);
   const [categories, occasions] = await Promise.all([
     getCategories(),
     getOccasions(),
@@ -166,6 +170,8 @@ export async function SiteHeader() {
       categories: t("categories"),
       shops: t("shops"),
     },
+    occasionName: (occasion) =>
+      occasionDisplayName(occasion.slug, occasion.name, occasionT),
   });
   const signedOutLinks: HeaderLink[] = [
     { href: "/login", label: t("signIn") },
@@ -179,7 +185,7 @@ export async function SiteHeader() {
 
       <header className="sticky top-0 z-40 border-b border-line bg-paper/85 backdrop-blur">
         <Container>
-          <div className="flex h-16 items-center gap-3">
+          <div className="flex h-16 items-center gap-2 sm:gap-3">
             <GuardedLink
               href="/"
               className="flex items-center gap-2 rounded-full py-1 pr-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
@@ -193,8 +199,10 @@ export async function SiteHeader() {
             <StoreNav nav={nav} />
 
             <div className="ml-auto flex items-center gap-1 sm:gap-2">
-              <LocaleSwitcher className="hidden sm:inline-flex" />
-              <SearchForm className="hidden w-52 transition-[width] duration-300 focus-within:w-72 lg:flex" />
+              <span className="hidden sm:inline-flex">
+                <LocaleSwitcher />
+              </span>
+              <SearchForm className="hidden w-52 transition-[width] duration-300 focus-within:w-72 xl:flex" />
 
               <Suspense
                 fallback={

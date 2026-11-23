@@ -130,6 +130,16 @@ describe("checkoutRateBucket", () => {
 });
 
 describe("clientIpFromHeaders", () => {
+  it("prefers Vercel's platform-owned forwarding chain", () => {
+    expect(
+      clientIpFromHeaders(
+        "spoofed",
+        "9.9.9.9",
+        "203.0.113.7, 10.0.0.1",
+      ),
+    ).toBe("203.0.113.7");
+  });
+
   it("prefers the single-value real-ip header over the forwarded chain", () => {
     expect(clientIpFromHeaders("1.2.3.4, 5.6.7.8", "9.9.9.9")).toBe("9.9.9.9");
   });

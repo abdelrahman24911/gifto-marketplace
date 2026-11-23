@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import {
+  startTransition,
   useActionState,
   useCallback,
   useEffect,
@@ -21,6 +22,7 @@ import {
   OCCASION_NAME_MAX,
   OCCASION_NAME_MIN,
   OCCASION_SLUG_MAX,
+  attachPreservedOccasionImage,
   isOccasionFormDirty,
   isOccasionMatchMode,
   validateOccasionImageBasics,
@@ -57,17 +59,48 @@ export function OccasionForm({
   const [state, formAction, pending] = useActionState(saveOccasion, null);
   const [savedValues, setSavedValues] = useState(initialValues);
   const [lastSuccess, setLastSuccess] = useState<OccasionFormState>(null);
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [imageRemoved, setImageRemoved] = useState(false);
+  const [imageRemovedWarning, setImageRemovedWarning] = useState<string | null>(
+    null,
+  );
   const createSucceeded = mode === "create" && Boolean(state?.success);
   const values = state?.values ?? initialValues;
-  const imagePath =
-    state?.imagePath !== undefined ? state.imagePath : initialImagePath;
+  const imagePath = imageRemoved
+    ? null
+    : state?.imagePath !== undefined
+      ? state.imagePath
+      : initialImagePath;
 
   if (state?.success && state !== lastSuccess) {
     setLastSuccess(state);
     setSavedValues(state.values);
+    setSelectedImageFile(null);
+    setPreviewUrl(null);
+    setImageRemoved(false);
+    setImageRemovedWarning(null);
   }
 
   const baselineValues = state?.success ? state.values : savedValues;
+
+  useEffect(() => {
+    if (!previewUrl) return;
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
+
+  const handleImageSelected = useCallback((file: File | null) => {
+    setSelectedImageFile(file);
+    setPreviewUrl(file ? URL.createObjectURL(file) : null);
+    if (file) setImageRemoved(false);
+  }, []);
+
+  const handleImageRemoved = useCallback((warning?: string) => {
+    setImageRemoved(true);
+    setImageRemovedWarning(warning ?? null);
+    setSelectedImageFile(null);
+    setPreviewUrl(null);
+  }, []);
 
   return (
     <div className="mt-8">
@@ -89,9 +122,15 @@ export function OccasionForm({
           initialValues={values}
           baselineValues={baselineValues}
           initialImagePath={imagePath}
+          selectedImageFile={selectedImageFile}
+          previewUrl={previewUrl}
+          imageRemoved={imageRemoved}
+          imageRemovedWarning={imageRemovedWarning}
           serverState={state}
           formAction={formAction}
           pending={pending}
+          onImageSelected={handleImageSelected}
+          onImageRemoved={handleImageRemoved}
         />
       )}
     </div>
@@ -161,47 +200,47 @@ function OccasionFields({
   initialValues,
   baselineValues,
   initialImagePath,
+  selectedImageFile,
+  previewUrl,
+  imageRemoved,
+  imageRemovedWarning,
   serverState,
   formAction,
   pending,
+  onImageSelected,
+  onImageRemoved,
 }: {
   mode: "create" | "edit";
   occasionId?: string;
   initialValues: OccasionFormValues;
   baselineValues: OccasionFormValues;
   initialImagePath: string | null;
+  selectedImageFile: File | null;
+  previewUrl: string | null;
+  imageRemoved: boolean;
+  imageRemovedWarning: string | null;
   serverState: OccasionFormState;
   formAction: (payload: FormData) => void;
   pending: boolean;
+  onImageSelected: (file: File | null) => void;
+  onImageRemoved: (warning?: string) => void;
 }) {
   const imageInputId = useId();
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [values, setValues] = useState<OccasionFormValues>(initialValues);
   const [slugTouched, setSlugTouched] = useState(mode === "edit");
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
   const [clientErrors, setClientErrors] = useState<OccasionFieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
-  const [hasNewImage, setHasNewImage] = useState(false);
-  const [imageRemoved, setImageRemoved] = useState(false);
-  const [imageRemovedWarning, setImageRemovedWarning] = useState<string | null>(
-    null,
+  const currentImagePath = initialImagePath;
+  const selectedFileName = selectedImageFile?.name ?? null;
+  const dirty = isOccasionFormDirty(
+    values,
+    baselineValues,
+    Boolean(selectedImageFile),
   );
-  const currentImagePath = imageRemoved ? null : initialImagePath;
-  const dirty = isOccasionFormDirty(values, baselineValues, hasNewImage);
 
   useUnsavedChangesGuard(dirty);
-
-  useEffect(() => {
-    if (!previewUrl) return;
-    return () => URL.revokeObjectURL(previewUrl);
-  }, [previewUrl]);
-
-  const handleImageRemoved = useCallback((warning?: string) => {
-    setImageRemoved(true);
-    setImageRemovedWarning(warning ?? null);
-  }, []);
 
   const errors = { ...serverState?.fieldErrors, ...clientErrors };
   const visibleError = serverState?.error ?? formError;
@@ -218,10 +257,8 @@ function OccasionFields({
 
   function clearFile() {
     if (imageInputRef.current) imageInputRef.current.value = "";
-    setPreviewUrl(null);
-    setSelectedFileName(null);
+    onImageSelected(null);
     setImageError(null);
-    setHasNewImage(false);
     setClientErrors((current) => ({ ...current, image: undefined }));
   }
 
@@ -230,26 +267,20 @@ function OccasionFields({
     setClientErrors((current) => ({ ...current, image: undefined }));
 
     if (!file) {
-      setPreviewUrl(null);
-      setSelectedFileName(null);
+      onImageSelected(null);
       setImageError(null);
-      setHasNewImage(false);
       return;
     }
 
     const basics = validateOccasionImageBasics(file);
     if (!basics.ok) {
-      setPreviewUrl(null);
-      setSelectedFileName(null);
+      onImageSelected(null);
       setImageError(basics.error);
-      setHasNewImage(true);
       return;
     }
 
     setImageError(null);
-    setSelectedFileName(file.name);
-    setPreviewUrl(URL.createObjectURL(file));
-    setHasNewImage(true);
+    onImageSelected(file);
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -271,9 +302,21 @@ function OccasionFields({
       event.preventDefault();
       setClientErrors(nextErrors);
       setFormError("Check the highlighted fields and try again.");
-    } else {
-      setClientErrors({});
-      setFormError(null);
+      return;
+    }
+
+    setClientErrors({});
+    setFormError(null);
+
+    const freshFile = imageInputRef.current?.files?.[0] ?? null;
+    const hasFreshFile = Boolean(freshFile && freshFile.size > 0);
+
+    if (!hasFreshFile && selectedImageFile) {
+      event.preventDefault();
+      const formData = new FormData(event.currentTarget);
+      startTransition(() => {
+        formAction(attachPreservedOccasionImage(formData, selectedImageFile));
+      });
     }
   }
 
@@ -476,7 +519,7 @@ function OccasionFields({
                 {mode === "edit" && occasionId && currentImagePath && !previewUrl ? (
                   <RemoveOccasionImageButton
                     occasionId={occasionId}
-                    onRemoved={handleImageRemoved}
+                    onRemoved={onImageRemoved}
                   />
                 ) : null}
                 <input

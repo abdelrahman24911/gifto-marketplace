@@ -1,19 +1,20 @@
 "use server";
 
+import { redirect } from "next/navigation";
+
+import { getSafeAuthPath } from "@/lib/auth-redirect";
 import { checkAuthQuota } from "@/lib/rate-limit";
+import { createClient } from "@/lib/supabase/server";
 
 export type AuthQuotaGate = { limited: boolean; message?: string };
+export type SignInState = { error: string } | null;
 
 /**
  * App-flow quota gate for login (P1-12, H-12).
  *
- * Login and signup call Supabase Auth directly from the browser, so there
- * is no server action to gate; the client calls this first and only
- * touches Supabase Auth when the gate allows it. The limit is IP (20 per
- * 15 minutes) plus per-email (10 per 15 minutes), fail-closed. A caller
- * who talks to Supabase Auth directly bypasses this gate and relies on
- * Supabase's own Auth limits, which are UNVERIFIED — see
- * docs/HOSTED_STATE.md.
+ * Login is gated by the server-side signInAccount action below, which
+ * performs the quota check before Supabase Auth and sets the session cookies
+ * on the request. The retained helper is for compatibility with older callers.
  */
 export async function checkLoginQuota(email: string): Promise<AuthQuotaGate> {
   const quota = await checkAuthQuota("login", {
@@ -33,4 +34,40 @@ export async function checkSignupQuota(): Promise<AuthQuotaGate> {
   return quota.limited
     ? { limited: true, message: quota.message ?? "Please wait and try again." }
     : { limited: false };
+}
+
+/**
+ * Authenticates through the request-scoped server client so Supabase session
+ * cookies are committed before the protected-route redirect. This avoids a
+ * browser-navigation race that could redirect back to /login after sign-in.
+ */
+export async function signInAccount(
+  email: string,
+  password: string,
+  requestedNext?: string | null,
+): Promise<SignInState> {
+  const normalizedEmail = email.trim().toLowerCase();
+
+  const quota = await checkAuthQuota("login", {
+    accountKey: normalizedEmail,
+  });
+  if (quota.limited) {
+    return {
+      error: quota.message ?? "Please wait and try again.",
+    };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signInWithPassword({
+    email: normalizedEmail,
+    password,
+  });
+
+  if (error) {
+    return {
+      error: error.message,
+    };
+  }
+
+  redirect(getSafeAuthPath(requestedNext));
 }

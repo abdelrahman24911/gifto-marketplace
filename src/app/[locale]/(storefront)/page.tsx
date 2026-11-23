@@ -5,7 +5,7 @@ import { CategoryTile } from "@/components/category-tile";
 import { GiftFinderSection } from "@/components/home/gift-finder-section";
 import { HomeHero } from "@/components/home/hero";
 import { HowItWorks } from "@/components/home/how-it-works";
-import { OccasionTile } from "@/components/occasion-tile";
+import { OccasionCarousel } from "@/components/occasion-carousel";
 import { ProductCard } from "@/components/product-card";
 import { ShopCard } from "@/components/shop-card";
 import { GuardedLink } from "@/components/navigation-guard";
@@ -44,6 +44,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function HomePage() {
   const t = await getTranslations("home");
   const tc = await getTranslations("common");
+  const to = await getTranslations("occasions");
   const [
     occasions,
     categories,
@@ -70,7 +71,7 @@ export default async function HomePage() {
 
   const giftFinderOccasions = occasions.ok
     ? occasions.data.map((occasion) => ({
-        name: occasionDisplayName(occasion.slug, occasion.name),
+        name: occasionDisplayName(occasion.slug, occasion.name, to),
         slug: occasion.slug,
       }))
     : [];
@@ -80,35 +81,45 @@ export default async function HomePage() {
       <HomeHero />
 
       {/* Shop by occasion */}
-      <section className="py-16 sm:py-20">
+      <section className="py-10 sm:py-12">
         <Container>
-          <SectionHeading
-            eyebrow={t("occasionsEyebrow")}
-            title={t("occasionsTitle")}
-            description={t("occasionsDescription")}
-            href="/occasions"
-            linkLabel={t("exploreAllOccasions")}
-          />
           {occasions.ok ? (
             occasions.data.length > 0 ? (
-              <div className="grid gap-4 sm:grid-cols-2 lg:gap-6">
-                {occasions.data.slice(0, 6).map((occasion, index) => (
-                  <OccasionTile
-                    key={occasion.id}
-                    occasion={occasion}
-                    index={index}
-                  />
-                ))}
-              </div>
+              <OccasionCarousel
+                occasions={occasions.data}
+                eyebrow={t("occasionsEyebrow")}
+                title={t("occasionsTitle")}
+                description={t("occasionsDescription")}
+                exploreHref="/occasions"
+                exploreLabel={t("exploreAllOccasions")}
+              />
             ) : (
-              <EmptyState title={t("occasionsEmpty")}>
-                {t("occasionsEmptyBody")}
-              </EmptyState>
+              <>
+                <SectionHeading
+                  eyebrow={t("occasionsEyebrow")}
+                  title={t("occasionsTitle")}
+                  description={t("occasionsDescription")}
+                  href="/occasions"
+                  linkLabel={t("exploreAllOccasions")}
+                />
+                <EmptyState title={t("occasionsEmpty")}>
+                  {t("occasionsEmptyBody")}
+                </EmptyState>
+              </>
             )
           ) : (
-            <SectionError title={t("occasionsError")}>
-              {tc("refreshToRetry")}
-            </SectionError>
+            <>
+              <SectionHeading
+                eyebrow={t("occasionsEyebrow")}
+                title={t("occasionsTitle")}
+                description={t("occasionsDescription")}
+                href="/occasions"
+                linkLabel={t("exploreAllOccasions")}
+              />
+              <SectionError title={t("occasionsError")}>
+                {tc("refreshToRetry")}
+              </SectionError>
+            </>
           )}
         </Container>
       </section>

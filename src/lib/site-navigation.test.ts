@@ -41,6 +41,19 @@ describe("buildStoreNav", () => {
     ]);
   });
 
+  it("uses localized occasion labels when a resolver is provided", () => {
+    const nav = buildStoreNav({
+      categories: [],
+      occasions: [{ name: "Graduation", slug: "graduation" }],
+      labels: { home: "Home", occasions: "Occasions", categories: "Categories", shops: "Shops" },
+      occasionName: () => "التخرج",
+    });
+
+    expect(nav[1].items).toEqual([
+      { href: "/occasions/graduation", label: "التخرج" },
+    ]);
+  });
+
   it("still offers the directory link when a listing read is empty", () => {
     const nav = buildStoreNav({ categories: [], occasions: [], labels: { home: "Home", occasions: "Occasions", categories: "Categories", shops: "Shops" }, });
 

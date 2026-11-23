@@ -19,7 +19,7 @@ export function StoreNav({ nav }: { nav: StoreNavItem[] }) {
   return (
     <nav
       aria-label="Store sections"
-      className="ml-2 hidden items-center gap-1 lg:flex"
+      className="ml-2 hidden items-center gap-1 xl:flex"
     >
       {nav.map((item) => {
         const active =

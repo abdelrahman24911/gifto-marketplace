@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { isIP } from "node:net";
 
 /**
  * Server-only helpers for guest checkout.
@@ -105,11 +106,10 @@ export function checkoutRateBucket(ip: string): string {
  * Extracts a caller address for rate-limit bucketing.
  *
  * `x-real-ip` is a single-value header that a correctly configured edge proxy
- * overwrites on every request, so it is preferred. `x-forwarded-for` is a
- * comma-separated chain that clients can freely prepend to, so the *last*
- * value (the one the closest trusted proxy appended) is used as the fallback —
- * taking the first entry would let a caller rotate spoofed addresses and defeat
- * the rate limit entirely.
+ * overwrites on every request, so it is preferred. `x-vercel-forwarded-for`
+ * is Vercel's platform-owned forwarding chain and is preferred when present.
+ * `x-forwarded-for` is client-influenced, so only validated IP candidates from
+ * the chain are accepted and the last appended hop is used as the fallback.
  *
  * The returned value is clamped and reduced to a comparable form; it is hashed
  * by `checkoutRateBucket` and never stored raw.
@@ -117,7 +117,14 @@ export function checkoutRateBucket(ip: string): string {
 export function clientIpFromHeaders(
   forwardedFor: string | null,
   realIp: string | null,
+  vercelForwardedFor?: string | null,
 ): string {
+  const vercel = vercelForwardedFor
+    ?.split(",")
+    .map((part) => normalizeIpCandidate(part))
+    .find((part): part is string => part !== null);
+  if (vercel) return vercel;
+
   const real = normalizeIpCandidate(realIp);
   if (real) return real;
 
@@ -134,7 +141,7 @@ function normalizeIpCandidate(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
   if (!trimmed) return null;
   const lowered = trimmed.toLowerCase();
-  if (lowered.length > 100) return null;
+  if (lowered.length > 100 || isIP(lowered) === 0) return null;
   return lowered;
 }
 

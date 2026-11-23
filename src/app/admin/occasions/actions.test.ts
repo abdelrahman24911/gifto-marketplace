@@ -370,6 +370,46 @@ beforeEach(() => {
   state.supabase = makeClient();
 });
 
+describe("mutation quota gate", () => {
+  const configurationError =
+    "Rate limiting is not configured on this deployment. No changes were made.";
+
+  it("returns a configuration error before creating an occasion or uploading its image", async () => {
+    state.quotaError = configurationError;
+    const client = state.supabase as ReturnType<typeof makeClient>;
+
+    const result = await saveOccasion(
+      null,
+      form({ ...baseFields, image: imageFile() }),
+    );
+
+    expect(result).toMatchObject({
+      error: configurationError,
+    });
+    expect(client.calls).toEqual([]);
+    expect(client.operations).toEqual([]);
+    expect(client.uploads).toEqual([]);
+    expect(client.occasions).toEqual([]);
+  });
+
+  it("returns a configuration error before removing an occasion image", async () => {
+    state.quotaError = configurationError;
+    const client = state.supabase as ReturnType<typeof makeClient>;
+
+    const result = await removeOccasionImage(
+      null,
+      form({ occasion_id: ROW_ID }),
+    );
+
+    expect(result).toEqual({
+      attempt: 1,
+      error: configurationError,
+    });
+    expect(client.calls).toEqual([]);
+    expect(client.operations).toEqual([]);
+  });
+});
+
 describe("saveOccasion authorization and validation", () => {
   it("rejects unauthorized callers before touching the database", async () => {
     state.authRejected = true;

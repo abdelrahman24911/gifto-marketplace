@@ -278,6 +278,25 @@ export function buildOccasionImagePath(
   return `${occasionId}/${crypto.randomUUID()}.${extension}`;
 }
 
+export function attachPreservedOccasionImage(
+  formData: FormData,
+  preservedFile: File | null,
+): FormData {
+  if (!preservedFile) return formData;
+
+  const current = formData.get("image");
+  const hasFile =
+    typeof current !== "string" &&
+    current !== null &&
+    current.size > 0;
+
+  if (!hasFile) {
+    formData.set("image", preservedFile, preservedFile.name);
+  }
+
+  return formData;
+}
+
 /** Guards cleanup so an admin action can never remove an unrelated object. */
 export function occasionImagePathBelongsTo(
   path: string,

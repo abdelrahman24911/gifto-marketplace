@@ -34,6 +34,7 @@ export function OccasionFallbackArt({
 
   return (
     <div
+      aria-hidden
       className={`relative flex h-full w-full items-center justify-center overflow-hidden bg-gradient-to-br ${palette.background} ${className}`}
     >
       <span

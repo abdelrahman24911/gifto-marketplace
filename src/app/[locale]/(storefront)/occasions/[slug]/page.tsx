@@ -31,7 +31,10 @@ import {
   type CatalogOccasion,
 } from "@/lib/catalog";
 import { pageMetadata } from "@/lib/metadata";
-import { occasionDisplayName } from "@/lib/occasion-display";
+import {
+  isSeedPlaceholderImage,
+  occasionDisplayName,
+} from "@/lib/occasion-display";
 import {
   clampPage,
   DEFAULT_PAGE_SIZE,
@@ -67,6 +70,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const name = occasionDisplayName(
     result.data.occasion.slug,
     result.data.occasion.name,
+    t,
   );
 
   return pageMetadata({
@@ -78,27 +82,37 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   });
 }
 
-function OccasionDetailMedia({ occasion }: { occasion: CatalogOccasion }) {
-  const name = occasionDisplayName(occasion.slug, occasion.name);
+function OccasionDetailMedia({
+  occasion,
+  name,
+}: {
+  occasion: CatalogOccasion;
+  name: string;
+}) {
+  const fallbackArt = (
+    <OccasionFallbackArt
+      initial={name.trim().charAt(0).toUpperCase() || "?"}
+      tone={occasion.slug.length}
+    />
+  );
 
   return (
     <div className="relative h-32 overflow-hidden rounded-[1.5rem] border border-line/70 bg-berry-soft/60 shadow-[0_24px_55px_-36px_rgba(121,13,43,0.5)] sm:h-44 md:h-auto md:aspect-[4/3] md:rounded-[1.75rem]">
-      <ProductImage
-        path={occasion.imagePath}
-        alt={occasion.imageAlt ?? name}
-        name={name}
-        bucket={OCCASION_IMAGES_BUCKET}
-        className="h-full w-full object-cover"
-        rounded="rounded-none"
-        sizes="(min-width: 1024px) 40vw, (min-width: 768px) 45vw, 100vw"
-        preload={!!occasion.imagePath}
-        fallback={
-          <OccasionFallbackArt
-            initial={name.trim().charAt(0).toUpperCase() || "?"}
-            tone={occasion.slug.length}
-          />
-        }
-      />
+      {isSeedPlaceholderImage(occasion.imagePath) ? (
+        fallbackArt
+      ) : (
+        <ProductImage
+          path={occasion.imagePath}
+          alt={occasion.imageAlt ?? name}
+          name={name}
+          bucket={OCCASION_IMAGES_BUCKET}
+          className="h-full w-full object-cover"
+          rounded="rounded-none"
+          sizes="(min-width: 1024px) 40vw, (min-width: 768px) 45vw, 100vw"
+          preload={!!occasion.imagePath}
+          fallback={fallbackArt}
+        />
+      )}
       <span
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-gradient-to-t from-berry-deep/15 via-transparent to-paper/10"
@@ -152,7 +166,11 @@ export default async function OccasionPage({ params, searchParams }: Props) {
   }
 
   const occasion = lookup.occasion;
-  const occasionName = occasionDisplayName(occasion.slug, occasion.name);
+  const occasionName = occasionDisplayName(
+    occasion.slug,
+    occasion.name,
+    t,
+  );
   const [productsResult, occasions, recommendations] = await Promise.all([
     loadProductsByOccasion(occasion.id, {
       page: requestedPage,
@@ -226,7 +244,7 @@ export default async function OccasionPage({ params, searchParams }: Props) {
             </div>
 
             <div className="gifto-rise [animation-delay:100ms] md:justify-self-end md:w-full">
-              <OccasionDetailMedia occasion={occasion} />
+              <OccasionDetailMedia occasion={occasion} name={occasionName} />
             </div>
           </div>
         </Container>
@@ -339,7 +357,7 @@ export default async function OccasionPage({ params, searchParams }: Props) {
                   href={`/occasions/${other.slug}`}
                   className="group inline-flex min-h-11 items-center gap-2 rounded-full border border-line bg-paper-soft/80 px-4 py-2 text-sm font-medium text-ink transition-colors hover:border-berry/35 hover:bg-berry-soft/60 hover:text-berry-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
                 >
-                  {occasionDisplayName(other.slug, other.name)}
+                  {occasionDisplayName(other.slug, other.name, t)}
                   <ArrowRightIcon className="h-3.5 w-3.5 text-berry/60 transition-transform duration-300 group-hover:translate-x-0.5 motion-reduce:transition-none rtl:-scale-x-100" />
                 </Link>
               ))}

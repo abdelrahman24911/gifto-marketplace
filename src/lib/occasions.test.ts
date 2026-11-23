@@ -6,6 +6,7 @@ import {
   OCCASION_IMAGE_MAX_BYTES,
   OCCASION_NAME_MAX,
   OCCASION_SLUG_MAX,
+  attachPreservedOccasionImage,
   buildOccasionImagePath,
   detectOccasionImageType,
   filterOccasions,
@@ -273,6 +274,55 @@ describe("image validation", () => {
       ok: false,
       error: expect.stringContaining("does not look like"),
     });
+  });
+});
+
+describe("preserved occasion images", () => {
+  it("re-attaches a preserved file when the rebuilt form has none", () => {
+    const formData = new FormData();
+    formData.set("name", "Eid al-Fitr");
+    const preserved = imageFile("preserved.png", "image/png");
+
+    attachPreservedOccasionImage(formData, preserved);
+
+    const attached = formData.get("image");
+    expect(attached).toBeInstanceOf(File);
+    expect((attached as File).name).toBe("preserved.png");
+  });
+
+  it("replaces an empty file input with the preserved file", () => {
+    const formData = new FormData();
+    formData.set(
+      "image",
+      new File([], "", { type: "application/octet-stream" }),
+    );
+    const preserved = imageFile("preserved.png", "image/png");
+
+    attachPreservedOccasionImage(formData, preserved);
+
+    expect((formData.get("image") as File).name).toBe("preserved.png");
+  });
+
+  it("does not replace a freshly selected file", () => {
+    const formData = new FormData();
+    const fresh = imageFile("fresh.png", "image/png");
+    formData.set("image", fresh);
+
+    attachPreservedOccasionImage(
+      formData,
+      imageFile("preserved.png", "image/png"),
+    );
+
+    expect((formData.get("image") as File).name).toBe("fresh.png");
+  });
+
+  it("leaves the form untouched when nothing was preserved", () => {
+    const formData = new FormData();
+    formData.set("name", "Eid al-Fitr");
+
+    attachPreservedOccasionImage(formData, null);
+
+    expect(formData.get("image")).toBeNull();
   });
 });
 

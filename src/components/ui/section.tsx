@@ -32,13 +32,18 @@ export function SectionHeading({
   description,
   href,
   linkLabel,
+  actions,
 }: {
   eyebrow?: string;
   title: string;
   description?: string;
   href?: string;
   linkLabel?: string;
+  /** Optional controls (for example carousel arrows) beside the link. */
+  actions?: ReactNode;
 }) {
+  const hasActions = Boolean(actions) || Boolean(href && linkLabel);
+
   return (
     <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
       <div className="max-w-2xl">
@@ -50,14 +55,19 @@ export function SectionHeading({
           <p className="mt-3 text-ink-soft">{description}</p>
         ) : null}
       </div>
-      {href && linkLabel ? (
-        <GuardedLink
-          href={href}
-          className="group inline-flex items-center gap-1.5 rounded-sm text-sm font-medium text-berry hover:text-berry-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
-        >
-          {linkLabel}
-          <ArrowRightIcon className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
-        </GuardedLink>
+      {hasActions ? (
+        <div className="flex items-center gap-3">
+          {href && linkLabel ? (
+            <GuardedLink
+              href={href}
+              className="group inline-flex items-center gap-1.5 rounded-sm text-sm font-medium text-berry hover:text-berry-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
+            >
+              {linkLabel}
+              <ArrowRightIcon className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
+            </GuardedLink>
+          ) : null}
+          {actions}
+        </div>
       ) : null}
     </div>
   );
