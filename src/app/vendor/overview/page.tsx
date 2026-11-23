@@ -474,7 +474,7 @@ export default async function VendorOverviewPage({
                 return (
                   <li key={suborder.id}>
                     <Link
-                      href={`/vendor/orders?vendor=${access.vendorId}&status=${suborder.status}`}
+                      href={`/vendor/orders/${suborder.id}?vendor=${access.vendorId}`}
                       className="flex items-center justify-between gap-3 rounded-xl border border-berry/15 bg-paper/70 px-3 py-2.5 transition-colors hover:border-berry/35 hover:bg-paper"
                     >
                       <span className="min-w-0">

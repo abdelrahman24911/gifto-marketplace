@@ -401,8 +401,13 @@ export default async function VendorOrdersPage({
                   <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line bg-paper px-4 py-4 sm:px-5">
                     <div className="min-w-0">
                       <p className="font-display text-xl leading-tight text-ink">
-                        {order?.public_reference ??
-                          `Order #${suborder.id.slice(0, 8)}`}
+                        <Link
+                          href={`/vendor/orders/${suborder.id}?vendor=${access.vendorId}`}
+                          className="transition-colors hover:text-berry"
+                        >
+                          {order?.public_reference ??
+                            `Order #${suborder.id.slice(0, 8)}`}
+                        </Link>
                       </p>
                       <p className="mt-1 text-xs text-ink-mute">
                         Line {suborder.id.slice(0, 8)} · placed{" "}
