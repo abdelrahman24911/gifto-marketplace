@@ -141,7 +141,7 @@ export default async function VendorOrdersPage({
   let listQuery = supabase
     .from("order_vendors")
     .select(
-      "id, status, subtotal_minor, created_at, courier_name, tracking_ref, handed_over_at, order:orders(id, public_reference, recipient_name, contact_phone, address_line, city, governorate, notes, gift_wrap, gift_message, preferred_delivery_date, delivery_time_note, created_at), order_items(id, product_name, quantity, unit_price_minor, line_total_minor)",
+      "id, status, subtotal_minor, created_at, courier_name, tracking_ref, handed_over_at, order:orders(id, public_reference, recipient_name, contact_phone, address_line, city, governorate, notes, gift_wrap, gift_message, preferred_delivery_date, delivery_time_note, created_at), order_items(id, product_name, quantity, unit_price_minor, line_total_minor), refund_cases(id)",
       { count: "exact" },
     )
     .eq("vendor_id", access.vendorId);
@@ -520,6 +520,21 @@ export default async function VendorOrdersPage({
                           {formatEgp(suborder.subtotal_minor)}
                         </span>
                       </div>
+                      {status === "returned" &&
+                      (suborder.refund_cases ?? []).length > 0 ? (
+                        <p className="mt-2 text-xs">
+                          <Link
+                            href={`/vendor/refunds?vendor=${access.vendorId}&q=${encodeURIComponent(order?.public_reference ?? suborder.id)}`}
+                            className="font-medium text-berry hover:text-berry-deep"
+                          >
+                            View the refund{" "}
+                            {(suborder.refund_cases ?? []).length === 1
+                              ? "case"
+                              : "cases"}{" "}
+                            for this order →
+                          </Link>
+                        </p>
+                      ) : null}
                     </div>
                   </div>
 
