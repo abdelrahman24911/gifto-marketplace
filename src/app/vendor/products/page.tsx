@@ -5,6 +5,11 @@ import { Pagination } from "@/components/pagination";
 import { ProductImage } from "@/components/product-image";
 import { formatEgp } from "@/lib/money";
 import {
+  PRODUCT_SORTS,
+  parseProductSort,
+  productSortLabel,
+} from "@/lib/product-sort";
+import {
   DEFAULT_PAGE_SIZE,
   clampPage,
   pageWindow,
@@ -20,6 +25,7 @@ import {
   VendorStatStrip,
 } from "../ui";
 
+import type { ProductSort } from "@/lib/product-sort";
 import type { ProductStatus } from "@/lib/supabase/database.types";
 
 export const metadata = { title: "Manage products — Gifto" };
@@ -52,13 +58,27 @@ function productsHref(
   filter = "all",
   page = 1,
   query = "",
+  sort: ProductSort = "newest",
 ) {
   const params = new URLSearchParams({ vendor: vendorId });
   if (filter !== "all") params.set("status", filter);
   if (query) params.set("q", query);
+  if (sort !== "newest") params.set("sort", sort);
   if (page > 1) params.set("page", String(page));
   return `/vendor/products?${params.toString()}`;
 }
+
+const EMPTY_TITLES: Record<string, string> = {
+  all: "No products here yet",
+  low: "No low-stock products",
+  active: "No active products",
+  draft: "No drafts",
+  archived: "No archived products",
+};
+
+const EMPTY_BODIES: Record<string, string> = {
+  low: `Every active product has more than ${LOW_STOCK_THRESHOLD} units.`,
+};
 
 function isProductStatus(value: string): value is ProductStatus {
   return PRODUCT_STATUSES.includes(value as ProductStatus);
@@ -72,6 +92,7 @@ export default async function VendorProductsPage({
     page?: string;
     status?: string;
     q?: string;
+    sort?: string;
   }>;
 }) {
   const {
@@ -79,10 +100,12 @@ export default async function VendorProductsPage({
     page: pageParam,
     status: statusParam,
     q: query,
+    sort: sortParam,
   } = await searchParams;
   const { supabase, access, canManage } = await requireVendorRole(vendor);
 
   const filter = statusParam ?? "all";
+  const sort = parseProductSort(sortParam);
   const search = (query ?? "").trim().slice(0, 80);
   const searchTerm = search.replace(/[%_\\]/g, " ").replace(/\s+/g, " ").trim();
   const requestedPage = parsePage(pageParam);
@@ -108,6 +131,29 @@ export default async function VendorProductsPage({
     listQuery = listQuery.ilike("name", `%${searchTerm}%`);
   }
 
+  if (sort === "name") {
+    listQuery = listQuery
+      .order("name", { ascending: true })
+      .order("id", { ascending: true });
+  } else if (sort === "price-asc") {
+    listQuery = listQuery
+      .order("price_minor", { ascending: true })
+      .order("id", { ascending: true });
+  } else if (sort === "price-desc") {
+    listQuery = listQuery
+      .order("price_minor", { ascending: false })
+      .order("id", { ascending: true });
+  } else if (sort === "stock") {
+    listQuery = listQuery
+      .order("stock", { ascending: true })
+      .order("name", { ascending: true })
+      .order("id", { ascending: true });
+  } else {
+    listQuery = listQuery
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false });
+  }
+
   const countQuery = (status?: ProductStatus) => {
     let count = supabase
       .from("products")
@@ -124,10 +170,7 @@ export default async function VendorProductsPage({
     draftCountResult,
     lowCountResult,
   ] = await Promise.all([
-    listQuery
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false })
-      .range(range.from, range.to),
+    listQuery.range(range.from, range.to),
     countQuery(),
     countQuery("active"),
     countQuery("draft"),
@@ -153,7 +196,7 @@ export default async function VendorProductsPage({
     }
     const lastPage = clampPage(requestedPage, total);
     if (lastPage !== requestedPage) {
-      redirect(productsHref(access.vendorId, filter, lastPage, search));
+      redirect(productsHref(access.vendorId, filter, lastPage, search, sort));
     }
   }
 
@@ -257,7 +300,7 @@ export default async function VendorProductsPage({
           {FILTERS.map((option) => (
             <VendorFilterPill
               key={option.value}
-              href={productsHref(access.vendorId, option.value, 1, search)}
+              href={productsHref(access.vendorId, option.value, 1, search, sort)}
               active={filter === option.value}
             >
               {option.label}
@@ -273,6 +316,9 @@ export default async function VendorProductsPage({
           <input type="hidden" name="vendor" value={access.vendorId} />
           {filter !== "all" ? (
             <input type="hidden" name="status" value={filter} />
+          ) : null}
+          {sort !== "newest" ? (
+            <input type="hidden" name="sort" value={sort} />
           ) : null}
           <label htmlFor="product-search" className="sr-only">
             Search products
@@ -294,12 +340,50 @@ export default async function VendorProductsPage({
           </button>
           {search ? (
             <Link
-              href={productsHref(access.vendorId, filter)}
+              href={productsHref(access.vendorId, filter, 1, "", sort)}
               className="shrink-0 text-sm font-medium text-ink-soft hover:text-berry"
             >
               Clear
             </Link>
           ) : null}
+        </form>
+
+        <form
+          action="/vendor/products"
+          method="get"
+          className="flex items-center gap-2"
+        >
+          <input type="hidden" name="vendor" value={access.vendorId} />
+          {filter !== "all" ? (
+            <input type="hidden" name="status" value={filter} />
+          ) : null}
+          {search ? (
+            <input type="hidden" name="q" value={search} />
+          ) : null}
+          <label
+            htmlFor="product-sort"
+            className="shrink-0 text-sm font-medium text-ink-soft"
+          >
+            Sort by
+          </label>
+          <select
+            id="product-sort"
+            name="sort"
+            defaultValue={sort}
+            className="rounded-full border border-line-strong bg-paper px-3.5 py-2.5 text-sm text-ink focus:border-berry focus:outline-none focus:ring-2 focus:ring-berry/20"
+          >
+            {PRODUCT_SORTS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="submit"
+            className="shrink-0 rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-paper transition-colors hover:bg-wine-deep"
+          >
+            Apply
+          </button>
         </form>
       </div>
 
@@ -309,20 +393,35 @@ export default async function VendorProductsPage({
           {total === 1 ? "product" : "products"}
           {searchTerm ? ` · matching “${search}”` : ""}
         </p>
-        <p>{countsFailed ? "Catalog counts are partial" : "All figures live"}</p>
+        <p>
+          {countsFailed
+            ? "Catalog counts are partial"
+            : `Sorted: ${productSortLabel(sort)}`}
+        </p>
       </div>
 
       <section className="mt-5">
         {rows.length === 0 ? (
           <VendorEmpty
-            title={searchTerm ? "No products match" : "No products here yet"}
+            title={
+              searchTerm
+                ? "No products match"
+                : (EMPTY_TITLES[filter] ?? EMPTY_TITLES.all)
+            }
             action={
               searchTerm ? (
                 <Link
-                  href={productsHref(access.vendorId, filter)}
+                  href={productsHref(access.vendorId, filter, 1, "", sort)}
                   className="text-sm font-medium text-berry hover:text-berry-deep"
                 >
                   Clear search
+                </Link>
+              ) : filter !== "all" ? (
+                <Link
+                  href={productsHref(access.vendorId, "all", 1, "", sort)}
+                  className="text-sm font-medium text-berry hover:text-berry-deep"
+                >
+                  Show all products
                 </Link>
               ) : canManage ? (
                 <Link
@@ -336,11 +435,12 @@ export default async function VendorProductsPage({
           >
             {searchTerm
               ? "Try a shorter name or a different status filter."
-              : filter !== "all"
-                ? "Nothing in this view. Switch filters to see the rest of the catalog."
-                : canManage
-                  ? "Build the collection customers will browse on your shop page."
-                  : "The shop has not added any products yet."}
+              : (EMPTY_BODIES[filter] ??
+                (filter !== "all"
+                  ? "Nothing in this view. Switch filters to see the rest of the catalog."
+                  : canManage
+                    ? "Build the collection customers will browse on your shop page."
+                    : "The shop has not added any products yet."))}
           </VendorEmpty>
         ) : (
           <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -450,7 +550,7 @@ export default async function VendorProductsPage({
           pageSize={DEFAULT_PAGE_SIZE}
           label="Products pages"
           buildHref={(page) =>
-            productsHref(access.vendorId, filter, page, search)
+            productsHref(access.vendorId, filter, page, search, sort)
           }
         />
       </section>
