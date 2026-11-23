@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { FilterPill } from "@/components/dashboard/filter-pill";
 import { ArrowUpRightIcon } from "@/components/dashboard/icons";
 
 export function AdminPageHeader({
@@ -153,9 +154,9 @@ export function AdminFilterPill({
   children: ReactNode;
 }) {
   return (
-    <Link
+    <FilterPill
       href={href}
-      aria-current={active ? "page" : undefined}
+      active={active}
       className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-berry/35 ${
         active
           ? "border-ink bg-ink text-paper"
@@ -163,7 +164,7 @@ export function AdminFilterPill({
       }`}
     >
       {children}
-    </Link>
+    </FilterPill>
   );
 }
 
