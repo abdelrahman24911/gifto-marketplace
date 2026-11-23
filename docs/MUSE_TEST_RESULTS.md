@@ -226,15 +226,60 @@ actions — the seeded wishlist row exists in the DB.
 
 | Item | Status |
 |---|---|
-| Environment banner (demo/staging, never production) | VERIFIED server-side HTML in both envs (shown in demo, absent in production). Visual rendering needs a browser — UNVERIFIED |
+| Environment banner (demo/staging, never production) | VERIFIED in a real browser (see local browser pass below) |
 | Mail blocked in demo environment, end-to-end | VERIFIED (see above) |
-| Finance tab pending state | UNVERIFIED — needs a browser |
-| ConfirmSubmit flows | UNVERIFIED — needs a browser |
-| Support preview / reply flows | Reply VERIFIED via action; preview needs a browser — UNVERIFIED |
-| CSV downloads | Content + headers VERIFIED via HTTP GET; the download behaviour itself needs a browser — UNVERIFIED |
+| Finance tab pending state | VERIFIED in a real browser (see below) |
+| ConfirmSubmit flows | VERIFIED in a real browser (see below) |
+| Support preview / reply flows | Reply VERIFIED via action; preview VERIFIED in a real browser (see below) |
+| CSV downloads | Content + headers VERIFIED via HTTP GET; download behaviour VERIFIED in a real browser (see below) |
 | Magic-byte image rejection in a real upload | VERIFIED via the real `uploadProductImages` action |
-| Filter-pill pending state | UNVERIFIED — needs a browser |
-| Wishlist sync | Page renders; DB row exists; client-side sync needs a browser or action-level check — UNVERIFIED |
+| Filter-pill pending state | VERIFIED in a real browser (see below) |
+| Wishlist sync | VERIFIED after fixing a real bug (see below) |
+
+## Local browser pass on Windows (2026-11-23)
+
+The Chromium download that blocked the original pass was already
+available on this machine (Playwright `chromium-1254`), so the seven
+browser-only items were executed against the local stack (Supabase
+migrations 1–71 + seed, production build, admin E2E lane on port 3100).
+Command:
+
+`npx playwright test --config playwright.admin.config.ts e2e/admin/mission-browser-pass.spec.ts e2e/admin/environment-banner.spec.ts`
+
+**8/8 PASS** (1 worker). New coverage:
+
+| Item | Browser evidence |
+|---|---|
+| Finance tab pending state | Clicking **Settlements** sets `aria-busy`, shows the spinner and `opacity-60` while the RSC request is held; releases into **Settlement history** |
+| ConfirmSubmit | Shop status: **Apply** only previews "Change E2E Mobile Shop from Active to Suspended?", **Cancel** leaves the DB `active`, **Confirm** persists and reports `Status set to “suspended”.`, then restored to active |
+| Support preview | **Review request** shows the exact topic/subject/body, **Edit request** returns filled fields, **Send** reports success and persists an `open` `support_requests` row with the same body |
+| CSV downloads | Real download events for `/admin/products/export` (`gifto-products.csv`, contains the E2E rose), `/admin/commissions/export` (`gifto-commissions.csv`), `/vendor/finance/export` (`gifto-finance-ledger-all.csv`); headers verified |
+| Filter-pill pending state | Admin product **Active** filter shows `aria-busy`, spinner and `opacity-60` while held, then lands on `status=active` with `aria-current="page"` |
+| Wishlist sync | Save as a customer → DB row → **clear localStorage and reload** → button restored from the account copy → remove on `/wishlist` empties both UI and DB |
+| Environment banner | Separate `next start` instances: demo (amber, `data-environment="demo"`), staging (sky), production and development render no banner; screenshots saved under `test-results/browser-pass/` |
+
+**Bug found and fixed during this pass:** `listWishlistItems` embedded
+`vendor:vendors(...)` on the base `vendors` table. Migration 20 removed
+the authenticated read policy for that table, so the embed came back
+`null` for every signed-in customer and the restore path silently
+dropped all saved items — the wishlist only survived through
+localStorage. The action now reads product `vendor_id` and resolves
+names from `public_vendors`; the browser test above proves cross-device
+restore by clearing localStorage before reloading.
+
+Changed for this pass: `src/app/[locale]/(storefront)/wishlist/actions.ts`
+(fix), `e2e/admin/fixture-admin.ts` + `global-setup.ts` (E2E customer),
+`e2e/admin/mission-browser-pass.spec.ts` and
+`e2e/admin/environment-banner.spec.ts` (new coverage).
+
+Harness note: `e2e/admin/dashboard-mobile.spec.ts` signs in for every
+test (13 admin + 10 vendor tests). It cannot pass as a whole within the
+15-minute window: the login quota (10 per account / 20 per IP) rejects
+the 11th admin sign-in with "Too many sign-in attempts". 18/23 passed
+when run alone after clearing quota; the five failures are all that
+quota alert at login, not page or layout failures. The mission specs
+above use five sign-ins total and stay inside the quota. A storage-state
+reuse refactor of the older spec is the real fix for full-lane runs.
 
 ## Final gates at HEAD `c5c2bdf` (2026-11-23)
 
@@ -289,10 +334,13 @@ in the original stack).
 - **No automatic mail-outbox retry worker** — pilot: manual admin
   retry is fine; public launch needs a cron/worker within the
   existing 5-attempt / 2-requeue caps.
-- **Browser-unverified items** in the table above (finance tabs,
-  ConfirmSubmit, support preview, CSV download behaviour, filter
-  pills, wishlist sync, banner visual rendering).
-- **Playwright execution** — blocked on the Chromium download
-  approval (see top). All browser-dependent verification is therefore
-  outstanding.
+- **Browser-unverified items** — none on this machine: all seven were
+  executed in Chromium; see the local browser pass above. (The original
+  Muse environment could not download Chromium; this run used the
+  already-installed browser.)
+- **Wishlist restore fix** — included locally with the browser pass;
+  re-run the gates below before shipping this change.
+- **Full admin E2E lane** — `dashboard-mobile.spec.ts` hits the local
+  login quota because it signs in per test; targeted runs pass. Reuse a
+  saved storage state before using the whole lane as a release gate.
 - **Owner-side items** — see `docs/MUSE_PRODUCTION_BLOCKERS.md`.

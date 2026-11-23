@@ -17,6 +17,8 @@ export const E2E_VENDOR_PASSWORD = "GiftoLocalE2E!2026";
 export const E2E_VENDOR_ID = "d1111111-1111-4111-8111-111111111111";
 export const E2E_VENDOR_SLUG = "e2e-mobile-shop";
 export const E2E_VENDOR_NAME = "E2E Mobile Shop";
+export const E2E_CUSTOMER_EMAIL = "e2e-customer@gifto.test";
+export const E2E_CUSTOMER_PASSWORD = "GiftoLocalE2E!2026";
 export const FIXTURE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 export const FIXTURE_SLUG = "e2e-navigation-guard";
 export const FIXTURE_NAME = "E2E Navigation Guard";
@@ -281,7 +283,13 @@ export async function cleanupE2EData(): Promise<void> {
 
   for (const user of users.users) {
     const email = user.email?.toLowerCase();
-    if (email !== E2E_ADMIN_EMAIL && email !== E2E_VENDOR_EMAIL) continue;
+    if (
+      email !== E2E_ADMIN_EMAIL &&
+      email !== E2E_VENDOR_EMAIL &&
+      email !== E2E_CUSTOMER_EMAIL
+    ) {
+      continue;
+    }
     const { error: userError } = await supabase.auth.admin.deleteUser(user.id);
     if (userError) {
       throw new Error(`Could not delete the E2E user: ${userError.message}`);
@@ -356,6 +364,22 @@ export async function seedVendor(): Promise<string> {
     throw new Error(
       `Could not make the E2E vendor a shop owner: ${memberError.message}`,
     );
+  }
+
+  return data.user.id;
+}
+
+export async function seedCustomer(): Promise<string> {
+  const supabase = getAdminClient();
+  const { data, error } = await supabase.auth.admin.createUser({
+    email: E2E_CUSTOMER_EMAIL,
+    password: E2E_CUSTOMER_PASSWORD,
+    email_confirm: true,
+    user_metadata: { full_name: "E2E Customer" },
+  });
+
+  if (error || !data.user) {
+    throw new Error(`Could not create the E2E customer: ${error?.message}`);
   }
 
   return data.user.id;

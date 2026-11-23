@@ -28,7 +28,7 @@ type WishlistProductRow = {
   slug: string;
   price_minor: number;
   stock: number;
-  vendor: WishlistVendorRow | WishlistVendorRow[] | null;
+  vendor_id: string;
   product_images: { path: string; position: number }[] | null;
 };
 
@@ -47,7 +47,7 @@ export async function listWishlistItems(): Promise<WishlistItem[]> {
   const { data, error } = await supabase
     .from("wishlists")
     .select(
-      "product_id, product:products(id, name, slug, price_minor, stock, vendor:vendors(id, name, slug), product_images(path, position))",
+      "product_id, product:products(id, name, slug, price_minor, stock, vendor_id, product_images(path, position))",
     )
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
@@ -55,13 +55,27 @@ export async function listWishlistItems(): Promise<WishlistItem[]> {
 
   if (error || !data) return [];
 
-  const items: WishlistItem[] = [];
+  const products: WishlistProductRow[] = [];
   for (const row of data) {
     const product = Array.isArray(row.product) ? row.product[0] : row.product;
-    if (!product) continue;
-    const vendor = Array.isArray(product.vendor)
-      ? product.vendor[0]
-      : product.vendor;
+    if (product) products.push(product);
+  }
+
+  const vendorIds = [...new Set(products.map((product) => product.vendor_id))];
+  const vendorsById = new Map<string, WishlistVendorRow>();
+  if (vendorIds.length > 0) {
+    const { data: vendors } = await supabase
+      .from("public_vendors")
+      .select("id, name, slug")
+      .in("id", vendorIds);
+    for (const vendor of vendors ?? []) {
+      vendorsById.set(vendor.id, vendor);
+    }
+  }
+
+  const items: WishlistItem[] = [];
+  for (const product of products) {
+    const vendor = vendorsById.get(product.vendor_id);
     if (!vendor) continue;
     const images = [...(product.product_images ?? [])].sort(
       (a, b) => a.position - b.position,
