@@ -11,6 +11,10 @@ import {
   startOfBusinessDayOffset,
 } from "@/lib/business-time";
 import {
+  courierLikePattern,
+  normalizeCourierSearch,
+} from "@/lib/logistics-search";
+import {
   DEFAULT_PAGE_SIZE,
   clampPage,
   pageWindow,
@@ -41,13 +45,9 @@ export default async function AdminLogisticsPage({
     await searchParams;
   const { supabase } = await requirePlatformAdmin();
 
-  // Courier names are matched with ilike, so strip the pattern characters
-  // the same way the orders list sanitizes its search term.
-  const courier = (courierParam ?? "")
-    .replace(/[,()" %_\\]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 80);
+  // Escape LIKE metacharacters so "%" and "_" match literally.
+  const courier = normalizeCourierSearch(courierParam);
+  const courierPattern = courierLikePattern(courierParam);
   const dateParts = businessDateFromKey(dateParam ?? "");
   const dateKey = dateParts
     ? `${String(dateParts.year).padStart(4, "0")}-${String(dateParts.month).padStart(2, "0")}-${String(dateParts.day).padStart(2, "0")}`
@@ -67,8 +67,8 @@ export default async function AdminLogisticsPage({
     .in("status", ["shipped", "delivered"])
     .not("courier_name", "is", null);
 
-  if (courier) {
-    listQuery = listQuery.ilike("courier_name", `%${courier}%`);
+  if (courierPattern) {
+    listQuery = listQuery.ilike("courier_name", courierPattern);
   }
 
   if (dateParts) {
