@@ -37,7 +37,7 @@ merged, deployed, or written to any hosted system.
 
 ## Issues found in this pass
 
-### F-01 — 404 pages serve an empty DOM (REMAINING, Medium-Low)
+### F-01 — 404 pages serve an empty DOM (INVESTIGATED - no safe fix, Medium-Low)
 
 - **Evidence**: `/shops/no-such-shop`, `/categories/no-such`, and
   `/definitely-not-a-route` all return 404 with 40 visible characters
@@ -366,3 +366,76 @@ in the original stack).
   login quota because it signs in per test; targeted runs pass. Reuse a
   saved storage state before using the whole lane as a release gate.
 - **Owner-side items** — see `docs/MUSE_PRODUCTION_BLOCKERS.md`.
+
+## Post-pilot polish pass at HEAD `2c6c019` (2026-11-23)
+
+Commits in this pass: `8134be2` (browser pass), `65ecefc` (mail
+outbox cron worker), `1c5d971` (F-01 investigation record), `1cd8e8a`
+(BreadcrumbList), `2c6c019` (review stars on listings).
+
+### Item results
+
+| Item | Result | Evidence |
+|---|---|---|
+| Automatic mail-outbox retry worker | **DONE** | `65ecefc`; cron route + tests, `vercel.json`, `CRON_SECRET` docs |
+| i18n key guard wired into CI | **ALREADY DONE** | `.github/workflows/ci.yml` line 41 runs `npm run check:i18n` (R-06) |
+| Review stars on product listings | **DONE** | `2c6c019`; bulk approved-review query in `src/lib/catalog.ts`, stars in `ProductCard`, all six listing surfaces, 3 new tests |
+| BreadcrumbList beyond shop/product | **DONE** | `1cd8e8a`; category and occasion pages emit locale-prefixed BreadcrumbList JSON-LD with the CSP nonce |
+| F-01 404 empty DOM | **INVESTIGATED, NO SAFE FIX** | `1c5d971`; three approaches rejected (see below) |
+| Unescaped LIKE in admin logistics search | **BLOCKED** | Concurrent agent has uncommitted WIP in `src/app/admin/logistics/page.tsx`; not touched |
+| Vendor/admin dashboards English-only | **NOT CHANGED** | Intentional pilot limitation (`vendorAdminEnglishOnly` copy); localisation is a larger batch |
+| Live tracking integration | **NOT STARTED** | Needs a carrier API and owner credentials; no safe local change |
+| Search similarity threshold / Arabic fuzzy proof | **NOT STARTED** | Needs a live/local Postgres with `pg_trgm`; local Supabase is down (503) |
+| Settlement reconciliation / return-courier charge / delivery-date enforcement | **NOT STARTED** | Financial/fulfilment behaviour changes; owner decisions and migration work |
+
+### F-01 investigation outcome
+
+The empty-DOM 404 is specific to dynamic root-only paths. All three
+attempts left the unprefixed 404 at 40 visible characters:
+removing root `force-dynamic`, `force-static` on root `not-found.tsx`,
+and Next 16 `experimental.globalNotFound` + `global-not-found.tsx`.
+`/ar/definitely-not-a-route` already rendered 312 visible characters
+without the flag, so the flag had no effect. No application code was
+changed; the findings are recorded in the F-01 section above.
+
+### Gates at `2c6c019`
+
+Run in a clean detached worktree (`node_modules` junctioned, `.env.local`
+copied), so concurrent agent WIP in the main checkout could not affect
+the result.
+
+| Gate | Command | Result |
+|---|---|---|
+| i18n keys | `npm run check:i18n` | PASS (788 translator calls) |
+| Lint | `npm run lint` | PASS |
+| Typecheck | `npm run typecheck` | PASS |
+| Vitest | `npm test` | **686/686 (76 files)** (+3 catalog tests) |
+| Production build | `npm run build` | PASS (webpack, 53/53 static pages; Tailwind verification OK) |
+
+Not re-run this pass: RLS suites, C1 rehearsal, Playwright. Local
+Supabase is down (`/rest/v1/` 503) and Chromium is unavailable, and
+these commits add no migrations or schema changes; the prior 18/18 RLS
+and ALL CHECKS PASSED C1 results still apply to the unchanged database
+chain. Consequence: the new BreadcrumbList JSON-LD and listing stars
+are build/unit verified only, not runtime-verified against a database.
+
+### Review stars implementation notes
+
+- `CatalogProduct.reviewSummary` is optional; listings attach it with
+  one bulk `product_reviews` query (`.in(product_id).eq(status=approved)`).
+- A failed review read returns the products unchanged, so stars never
+  take down a listing.
+- `ProductCard` renders stars only when `count > 0`, using existing
+  `product.reviewsAverage` / `product.reviewCount` keys; no new i18n.
+- Catalogue reads are cached for 60 seconds, so new approvals can take
+  up to a minute to appear on listing cards.
+
+### Remaining after this pass
+
+- Item 3a (logistics LIKE escaping): apply once the concurrent agent's
+  edits to `src/app/admin/logistics/page.tsx` are settled. Correct
+  helper shape: backslash-escape `\`, `%`, `_` and strip `*` (PostgREST
+  maps `*` to `%` unconditionally, so `*` cannot be escaped).
+- Browser/runtime verification of review stars and BreadcrumbList once
+  a database is reachable.
+- Owner-side items in `docs/MUSE_PRODUCTION_BLOCKERS.md` are unchanged.
