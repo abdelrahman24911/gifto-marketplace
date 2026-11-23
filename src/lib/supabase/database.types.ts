@@ -418,6 +418,9 @@ export type Database = {
           subject: string;
           body: string;
           status: SupportRequestStatus;
+          admin_reply: string | null;
+          replied_at: string | null;
+          replied_by: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -429,6 +432,9 @@ export type Database = {
           subject: string;
           body: string;
           status?: SupportRequestStatus;
+          admin_reply?: string | null;
+          replied_at?: string | null;
+          replied_by?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -440,6 +446,9 @@ export type Database = {
           subject?: string;
           body?: string;
           status?: SupportRequestStatus;
+          admin_reply?: string | null;
+          replied_at?: string | null;
+          replied_by?: string | null;
           created_at?: string;
           updated_at?: string;
         };

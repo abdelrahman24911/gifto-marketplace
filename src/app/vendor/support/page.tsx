@@ -32,7 +32,7 @@ export default async function VendorSupportPage({
 
   const { data: recentRequests } = await supabase
     .from("support_requests")
-    .select("id, category, subject, status, created_at")
+    .select("id, category, subject, status, admin_reply, replied_at, created_at")
     .eq("vendor_id", access.vendorId)
     .order("created_at", { ascending: false })
     .limit(5);
@@ -179,6 +179,24 @@ export default async function VendorSupportPage({
                         },
                       )}
                     </p>
+                    {request.admin_reply ? (
+                      <div className="mt-2 rounded-lg border border-line bg-paper-soft px-3 py-2">
+                        <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-ink-mute">
+                          Gifto replied
+                          {request.replied_at
+                            ? ` · ${new Date(request.replied_at).toLocaleDateString("en-GB", {
+                                day: "numeric",
+                                month: "short",
+                                year: "numeric",
+                                timeZone: BUSINESS_TIME_ZONE,
+                              })}`
+                            : ""}
+                        </p>
+                        <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-ink-soft">
+                          {request.admin_reply}
+                        </p>
+                      </div>
+                    ) : null}
                   </li>
                 ))}
               </ul>

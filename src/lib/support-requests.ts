@@ -14,6 +14,16 @@ export const SUPPORT_SUBJECT_MIN = 5;
 export const SUPPORT_SUBJECT_MAX = 120;
 export const SUPPORT_BODY_MIN = 20;
 export const SUPPORT_BODY_MAX = 4000;
+export const SUPPORT_REPLY_MAX = 4000;
+
+/** An empty reply means "leave the stored reply unchanged". */
+export function validateAdminReply(reply: string): string | null {
+  if (reply.trim().length === 0) return null;
+  if (reply.trim().length > SUPPORT_REPLY_MAX) {
+    return `A reply must be ${SUPPORT_REPLY_MAX} characters or fewer.`;
+  }
+  return null;
+}
 
 export function isSupportCategory(value: string): value is SupportCategory {
   return SUPPORT_CATEGORIES.some((category) => category.value === value);

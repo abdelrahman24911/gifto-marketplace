@@ -621,10 +621,15 @@ export function refundCaseResolvedEmail(input: {
 export function supportStatusEmail(input: {
   subject: string;
   status: string;
+  reply?: string;
 }): MailMessage {
+  const replyText = input.reply?.trim()
+    ? `\n\nGifto replied:\n${input.reply.trim()}\n`
+    : "";
   const text =
-    `Your Gifto support request "${input.subject}" is now: ${input.status}.\n\n` +
-    `Open your vendor dashboard to see the request and any follow-up from the Gifto team.`;
+    `Your Gifto support request "${input.subject}" is now: ${input.status}.\n` +
+    replyText +
+    `\nOpen your vendor dashboard to see the request and any follow-up from the Gifto team.`;
   return {
     to: "",
     subject: `Support request update: ${input.subject}`,
@@ -1009,6 +1014,7 @@ export async function sendPasswordResetEmail(
 export async function notifySupportRequestStatusChanged(
   requestId: string,
   status: string,
+  reply?: string,
 ): Promise<void> {
   try {
     const service = createServiceClient();
@@ -1024,7 +1030,7 @@ export async function notifySupportRequestStatusChanged(
     };
     if (!row.vendor?.contact_email) return;
     await sendMail({
-      ...supportStatusEmail({ subject: row.subject, status }),
+      ...supportStatusEmail({ subject: row.subject, status, reply }),
       to: row.vendor.contact_email,
     },
     { kind: "support_status" });

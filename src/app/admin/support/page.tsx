@@ -94,7 +94,7 @@ export default async function AdminSupportPage({
   let listQuery = supabase
     .from("support_requests")
     .select(
-      "id, category, subject, body, status, created_at, vendor:vendors(name, slug), creator:profiles(full_name)",
+      "id, category, subject, body, status, admin_reply, replied_at, created_at, vendor:vendors(name, slug), creator:profiles(full_name)",
       { count: "exact" },
     )
     .order("created_at", { ascending: false })
@@ -182,7 +182,7 @@ export default async function AdminSupportPage({
         <AdminPageHeader
           eyebrow="Partner care"
           title="Support queue"
-          description="Manual triage for requests submitted from vendor dashboards. Status changes are recorded here and, when email is configured, emailed to the shop's contact address."
+          description="Manual triage for requests submitted from vendor dashboards. Reply in-app — the shop sees it in their dashboard — and status changes are emailed when email is configured."
         />
       </div>
 
@@ -385,11 +385,16 @@ export default async function AdminSupportPage({
                           ) : null}
                         </p>
                       </div>
-                      <SupportStatusForm id={request.id} status={request.status} />
                     </div>
                     <p className="mt-4 whitespace-pre-line border-t border-line pt-4 text-sm leading-relaxed text-ink-soft">
                       {request.body}
                     </p>
+                    <SupportStatusForm
+                      id={request.id}
+                      status={request.status}
+                      reply={request.admin_reply}
+                      repliedAt={request.replied_at}
+                    />
                   </li>
                 );
               })}

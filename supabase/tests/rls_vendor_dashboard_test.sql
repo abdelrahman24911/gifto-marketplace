@@ -971,4 +971,75 @@ begin
   raise notice 'TEST 19 PASSED: ownership hands over once a second owner exists';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST 20 (Batch 2, migration 69): admins can reply in-app; vendors cannot
+-- touch reply columns; replies are capped at 4000 characters
+-- ---------------------------------------------------------------------------
+set role authenticated;
+set request.jwt.claim.sub = '11000000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"11000000-0000-0000-0000-000000000001"}';
+do $$
+declare
+  n int;
+  v_reply text;
+  v_replied_at timestamptz;
+  v_replied_by uuid;
+begin
+  update public.support_requests
+     set admin_reply = 'We are looking into the export issue and will update you here.',
+         replied_at = now(),
+         replied_by = '11000000-0000-0000-0000-000000000001'
+   where subject = 'Cannot export orders';
+  get diagnostics n = row_count;
+  if n <> 1 then
+    raise exception 'TEST 20 FAILED: admin updated % support rows with a reply', n;
+  end if;
+
+  select admin_reply, replied_at, replied_by
+    into v_reply, v_replied_at, v_replied_by
+    from public.support_requests
+   where subject = 'Cannot export orders';
+  if v_reply <> 'We are looking into the export issue and will update you here.' then
+    raise exception 'TEST 20 FAILED: admin reply did not persist';
+  end if;
+  if v_replied_at is null then
+    raise exception 'TEST 20 FAILED: replied_at was not stored';
+  end if;
+  if v_replied_by <> '11000000-0000-0000-0000-000000000001' then
+    raise exception 'TEST 20 FAILED: replied_by was not stored';
+  end if;
+
+  begin
+    update public.support_requests
+       set admin_reply = repeat('x', 4001)
+     where subject = 'Cannot export orders';
+    raise exception 'TEST 20 FAILED: a 4001-character reply was accepted';
+  exception when check_violation then
+    null;
+  end;
+
+  select admin_reply into v_reply from public.support_requests
+   where subject = 'Cannot export orders';
+  if v_reply <> 'We are looking into the export issue and will update you here.' then
+    raise exception 'TEST 20 FAILED: rejected reply overwrote the stored reply';
+  end if;
+
+  raise notice 'TEST 20 PASSED: admin replies are stored and length-capped';
+end $$;
+
+set request.jwt.claim.sub = '22000000-0000-0000-0000-000000000002';
+set request.jwt.claims = '{"sub":"22000000-0000-0000-0000-000000000002"}';
+do $$
+declare n int;
+begin
+  update public.support_requests
+     set admin_reply = 'A vendor must not be able to write the admin reply.'
+   where subject = 'Cannot export orders';
+  get diagnostics n = row_count;
+  if n <> 0 then
+    raise exception 'TEST 20 FAILED: vendor updated % support rows with a reply', n;
+  end if;
+  raise notice 'TEST 20 PASSED: vendors cannot write admin replies';
+end $$;
+
 rollback;
