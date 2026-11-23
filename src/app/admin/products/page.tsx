@@ -214,6 +214,15 @@ export default async function AdminProductsPage({
   const vendors = vendorsResult.rows;
   const filtersActive =
     Boolean(query) || statusFilter !== "all" || Boolean(shopFilter);
+  const exportHref = (() => {
+    const params = new URLSearchParams();
+    if (query) params.set("q", query);
+    if (statusFilter !== "all") params.set("status", statusFilter);
+    if (shopFilter) params.set("shop", shopFilter);
+    if (sort !== "newest") params.set("sort", sort);
+    const search = params.toString();
+    return search ? `/admin/products/export?${search}` : "/admin/products/export";
+  })();
   const countValue = (
     result: { count: number | null; error: unknown },
   ) => (result.error ? "—" : (result.count ?? 0));
@@ -232,6 +241,15 @@ export default async function AdminProductsPage({
           eyebrow="Catalog oversight"
           title="Products"
           description="A read-only view of every gift listing across the marketplace. Use the shop and status filters to investigate catalog coverage; vendors remain responsible for their own listings."
+          actions={
+            <a
+              href={exportHref}
+              download
+              className="inline-flex items-center gap-2 rounded-full border border-line-strong bg-paper px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-berry/40 hover:bg-berry-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
+            >
+              Download CSV
+            </a>
+          }
         />
       </div>
 
