@@ -5,6 +5,11 @@ import { Pagination } from "@/components/pagination";
 import { Breadcrumb, EmptyState } from "@/components/ui/section";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { startOfBusinessDayOffset } from "@/lib/business-time";
+import {
+  maskEmail,
+  maskName,
+  maskPhone,
+} from "@/lib/mask-contact";
 import { formatEgp } from "@/lib/money";
 import { ORDER_STATUS_LABELS, isOrderStatus } from "@/lib/orders";
 import {
@@ -181,7 +186,7 @@ export default async function AdminOrdersPage({
         <AdminPageHeader
           eyebrow="Operations"
           title="Orders"
-          description="Search, inspect and intervene in marketplace orders. Vendors drive normal progress; administration handles exceptions with recorded reasons."
+          description="Search, inspect and intervene in marketplace orders. Vendors drive normal progress; administration handles exceptions with recorded reasons. Contact details are masked in this list — open an order for the full details."
         />
       </div>
 
@@ -390,17 +395,21 @@ export default async function AdminOrdersPage({
                   <dl className="mt-4 grid gap-x-6 gap-y-2 rounded-xl border border-line bg-paper px-4 py-3 text-sm sm:grid-cols-2">
                     <div className="flex gap-1.5">
                       <dt className="shrink-0 text-ink-mute">Recipient</dt>
-                      <dd className="text-ink">{order.recipient_name}</dd>
+                      <dd className="text-ink">
+                        {maskName(order.recipient_name)}
+                      </dd>
                     </div>
                     <div className="flex gap-1.5">
                       <dt className="shrink-0 text-ink-mute">Phone</dt>
-                      <dd className="text-ink">{order.contact_phone}</dd>
+                      <dd className="text-ink">
+                        {maskPhone(order.contact_phone)}
+                      </dd>
                     </div>
                     {order.contact_email ? (
                       <div className="flex min-w-0 gap-1.5">
                         <dt className="shrink-0 text-ink-mute">Email</dt>
                         <dd className="break-all text-ink">
-                          {order.contact_email}
+                          {maskEmail(order.contact_email)}
                         </dd>
                       </div>
                     ) : null}
