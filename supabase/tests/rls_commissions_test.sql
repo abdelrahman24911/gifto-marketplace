@@ -1579,4 +1579,22 @@ begin
   raise notice 'TEST 22 PASSED: void releases lines and the next batch re-batches the same commissions with the same total';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST 23 (Batch 3, P4): the admin window and vendor ledger reads have
+-- indexes on earned_at. The overview/analytics pages filter
+-- commission_entries by earned_at over a 30-day window, and the vendor
+-- finance ledger reads by vendor with an earned_at range ordered by
+-- earned_at desc; without these the queries scan the whole table.
+-- ---------------------------------------------------------------------------
+do $$
+begin
+  if not exists (select 1 from pg_indexes where indexname = 'commission_entries_earned_idx') then
+    raise exception 'TEST 23 FAILED: commission_entries_earned_idx missing';
+  end if;
+  if not exists (select 1 from pg_indexes where indexname = 'commission_entries_vendor_earned_idx') then
+    raise exception 'TEST 23 FAILED: commission_entries_vendor_earned_idx missing';
+  end if;
+  raise notice 'TEST 23 PASSED: commission_entries earned_at indexes exist';
+end $$;
+
 rollback;

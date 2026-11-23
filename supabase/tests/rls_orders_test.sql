@@ -1601,4 +1601,17 @@ end $$;
 
 reset role;
 
+-- ---------------------------------------------------------------------------
+-- TEST 21 (Batch 3, P4): the admin window reads have an index on created_at.
+-- The overview/analytics pages filter orders by created_at over a 30-day
+-- window on every load; without this index the query scans the whole table.
+-- ---------------------------------------------------------------------------
+do $$
+begin
+  if not exists (select 1 from pg_indexes where indexname = 'orders_created_idx') then
+    raise exception 'TEST 21 FAILED: orders_created_idx missing';
+  end if;
+  raise notice 'TEST 21 PASSED: orders_created_idx exists';
+end $$;
+
 rollback;
