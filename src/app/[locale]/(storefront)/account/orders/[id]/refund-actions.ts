@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/auth";
 import { parseEgpToMinor } from "@/lib/money";
 import { notifyRefundCaseOpened } from "@/lib/mail";
 import { checkAuthQuota } from "@/lib/rate-limit";
+import { safeDbError } from "@/lib/safe-db-error";
 import { refundReasonError } from "@/lib/refunds";
 
 export type OpenRefundState =
@@ -62,10 +63,10 @@ export async function openRefundCase(
 
   if (error) {
     return {
-      error:
-        error.code === "23514" || error.code === "42501" || error.code === "22023"
-          ? error.message
-          : "The refund request could not be opened. Refresh the page and try again.",
+      error: safeDbError(
+        error,
+        "The refund request could not be opened. Refresh the page and try again.",
+      ),
       attempt,
     };
   }
@@ -117,10 +118,10 @@ export async function escalateRefundCase(
 
   if (error) {
     return {
-      error:
-        error.code === "23514" || error.code === "42501" || error.code === "22023"
-          ? error.message
-          : "The escalation could not be sent. Refresh the page and try again.",
+      error: safeDbError(
+        error,
+        "The escalation could not be sent. Refresh the page and try again.",
+      ),
       attempt,
     };
   }
@@ -165,10 +166,10 @@ export async function cancelRefundCase(
 
   if (error) {
     return {
-      error:
-        error.code === "23514" || error.code === "42501" || error.code === "22023"
-          ? error.message
-          : "The refund request could not be cancelled. Refresh the page and try again.",
+      error: safeDbError(
+        error,
+        "The refund request could not be cancelled. Refresh the page and try again.",
+      ),
       attempt,
     };
   }

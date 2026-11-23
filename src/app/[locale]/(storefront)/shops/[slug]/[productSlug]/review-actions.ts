@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { requireUser } from "@/lib/auth";
 import { checkAuthQuota } from "@/lib/rate-limit";
+import { safeDbError } from "@/lib/safe-db-error";
 
 export type SubmitReviewState =
   | { error: string; attempt: number }
@@ -63,12 +64,10 @@ export async function submitReview(
 
   if (error) {
     return {
-      error:
-        error.code === "23514" ||
-        error.code === "42501" ||
-        error.code === "22023"
-          ? error.message
-          : "Your review could not be submitted. Refresh the page and try again.",
+      error: safeDbError(
+        error,
+        "Your review could not be submitted. Refresh the page and try again.",
+      ),
       attempt,
     };
   }

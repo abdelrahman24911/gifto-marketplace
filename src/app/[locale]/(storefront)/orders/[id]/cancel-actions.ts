@@ -9,6 +9,7 @@ import {
   sha256Hex,
 } from "@/lib/guest-order";
 import { checkAuthQuota } from "@/lib/rate-limit";
+import { safeDbError } from "@/lib/safe-db-error";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export type GuestCancelState =
@@ -59,10 +60,10 @@ export async function cancelGuestOrder(
 
   if (error) {
     return {
-      error:
-        error.code === "23514" || error.code === "42501" || error.code === "22023"
-          ? error.message
-          : "The order could not be cancelled. Refresh the page and try again.",
+      error: safeDbError(
+        error,
+        "The order could not be cancelled. Refresh the page and try again.",
+      ),
       attempt,
     };
   }

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { requireUser } from "@/lib/auth";
 import { checkAuthQuota } from "@/lib/rate-limit";
+import { safeDbError } from "@/lib/safe-db-error";
 
 export type CancelOrderState =
   | { error: string; attempt: number }
@@ -38,7 +39,14 @@ export async function cancelOrder(
     p_order_id: orderId,
   });
 
-  if (error) return { error: error.message, attempt };
+  if (error)
+    return {
+      error: safeDbError(
+        error,
+        "The order could not be cancelled. Refresh the page and try again.",
+      ),
+      attempt,
+    };
 
   revalidatePath("/account/orders");
   revalidatePath(`/account/orders/${orderId}`);
