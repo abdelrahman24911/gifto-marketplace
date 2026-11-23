@@ -27,10 +27,12 @@ import type { OrderStatus } from "./supabase/database.types";
  * logs them with the `[gifto-mail]` prefix for ops retry, and returns a
  * result instead of throwing. Callers `await` the helpers but never branch
  * on them. Skipped/failed notification sends are also written to the
- * mail_outbox table (migration 63) so an admin can retry them from
- * /admin/mail-outbox; recovery, password-reset and staff-invite emails
- * are never enqueued — their single-use links must not be persisted, and
- * a retry after expiry would be useless.
+ * mail_outbox table (migration 63) so they can be retried from
+ * /admin/mail-outbox or automatically by the cron route
+ * (/api/cron/mail-outbox, scheduled in vercel.json); recovery,
+ * password-reset and staff-invite emails are never enqueued — their
+ * single-use links must not be persisted, and a retry after expiry
+ * would be useless.
  *
  * Templates are plain-text first; the HTML body is the same content in a
  * minimal wrapper. Amounts use the existing EGP formatter (integer
@@ -438,10 +440,13 @@ export async function requeueMailOutbox(
 
 /**
  * Retries pending outbox rows, oldest first (admin-triggered from
- * /admin/mail-outbox; a future cron route can call the same function).
- * Each row is sent with `enqueue: false` so a failed retry never
- * re-enqueues itself. After MAIL_OUTBOX_MAX_ATTEMPTS the row is marked
- * 'failed' (terminal) instead of spinning forever. Never throws.
+ * /admin/mail-outbox, and automatically by the cron route
+ * /api/cron/mail-outbox every 5 minutes). Each row is sent with
+ * `enqueue: false` so a failed retry never re-enqueues itself. After
+ * MAIL_OUTBOX_MAX_ATTEMPTS the row is marked 'failed' (terminal)
+ * instead of spinning forever. Terminally failed rows are never picked
+ * up here: only an admin requeue (capped by migration 65 / S-10) moves
+ * them back to pending. Never throws.
  *
  * S-06: a retry run with no SMTP provider configured does nothing at
  * all — it returns `{ skipped: "unconfigured" }` without touching any

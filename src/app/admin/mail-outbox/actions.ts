@@ -17,10 +17,12 @@ export type MailOutboxActionState = {
 
 /**
  * Retries pending mail-outbox rows (migration 63). Admin-only, quota
- * guarded like the other admin mutations. Retries are admin-triggered:
- * there is no cron infrastructure in this repo yet, so nothing retries
- * on its own. The retry never re-enqueues a failed send — a row that
- * fails again stays pending (or terminal 'failed' after 5 attempts).
+ * guarded like the other admin mutations. Retries also run
+ * automatically every 5 minutes from the CRON_SECRET-protected
+ * /api/cron/mail-outbox route (vercel.json); this action is the manual
+ * path and uses the same processMailOutbox caps. The retry never
+ * re-enqueues a failed send — a row that fails again stays pending (or
+ * terminal 'failed' after 5 attempts).
  *
  * S-06: the retry is refused while no SMTP provider is configured.
  * processMailOutbox already refuses such a run without touching any

@@ -29,8 +29,9 @@ function formatDateTime(value: string | null): string {
  * Mail outbox (migration 63): notification emails that were skipped
  * (no SMTP provider configured) or failed to send, queued for retry.
  * Recovery, password-reset and staff-invite emails are never queued —
- * their single-use links must not be persisted. Retries are
- * admin-triggered; there is no automatic worker yet.
+ * their single-use links must not be persisted. Retries run
+ * automatically every 5 minutes via /api/cron/mail-outbox (scheduled in
+ * vercel.json) and can also be triggered here by an admin.
  */
 export default async function AdminMailOutboxPage() {
   const { supabase } = await requirePlatformAdmin();

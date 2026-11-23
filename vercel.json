@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/mail-outbox",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

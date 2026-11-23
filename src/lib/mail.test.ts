@@ -865,6 +865,142 @@ describe("mail outbox", () => {
 });
 
 /**
+ * Automatic retry worker (Phase 2, item 1): the cron route calls
+ * processMailOutbox, so the worker must enforce the existing caps and
+ * the demo/unconfigured refusals on every run. These tests pin the
+ * behaviours the route relies on.
+ */
+describe("automatic mail-outbox retry worker", () => {
+  const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  function makeRow(overrides: Partial<OutboxRow> = {}): OutboxRow {
+    return {
+      id: "row-1",
+      kind: "order_status",
+      to_email: "customer@example.com",
+      subject: "Your order shipped",
+      body_text: "Hi",
+      body_html: null,
+      attempts: 0,
+      status: "pending",
+      requeue_count: 0,
+      first_error: null,
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    serviceState.client = null;
+    errorSpy.mockClear();
+  });
+
+  afterEach(() => {
+    serviceState.client = null;
+    errorSpy.mockClear();
+  });
+
+  it("delivers a row on a successful retry after an earlier failure", async () => {
+    const rows = [
+      makeRow({
+        attempts: 1,
+        last_error: "connection refused",
+        first_error: "connection refused",
+      }),
+    ];
+    const fake = makeOutboxFake(rows);
+    serviceState.client = fake;
+    const transport = {
+      sendMail: vi.fn(async () => ({ messageId: "ok" })),
+    };
+
+    const outcome = await processMailOutbox({ transport: transport as never });
+
+    expect(outcome).toEqual({ sent: 1, failed: 0, remaining: 0 });
+    expect(transport.sendMail).toHaveBeenCalledTimes(1);
+    expect(rows[0].status).toBe("sent");
+    expect(rows[0].attempts).toBe(2);
+    // The original failure stays answerable after a successful retry.
+    expect(rows[0].first_error).toBe("connection refused");
+  });
+
+  it("does not send a pending row that already reached the 5-attempt cap", async () => {
+    const rows = [makeRow({ attempts: 5 })];
+    const fake = makeOutboxFake(rows);
+    serviceState.client = fake;
+    const transport = {
+      sendMail: vi.fn(async () => ({ messageId: "ok" })),
+    };
+
+    const outcome = await processMailOutbox({ transport: transport as never });
+
+    expect(outcome).toEqual({ sent: 0, failed: 1, remaining: 0 });
+    expect(transport.sendMail).not.toHaveBeenCalled();
+    expect(rows[0].status).toBe("failed");
+    expect(rows[0].attempts).toBe(5);
+    expect(rows[0].last_error).toBe("retry limit reached");
+  });
+
+  it("terminal-fails a row after exactly 5 failed attempts and never retries it again", async () => {
+    const rows = [makeRow()];
+    const fake = makeOutboxFake(rows);
+    serviceState.client = fake;
+    const transport = {
+      sendMail: vi.fn(async () => {
+        throw new Error("connection refused");
+      }),
+    };
+
+    for (let run = 1; run <= 5; run += 1) {
+      const outcome = await processMailOutbox({
+        transport: transport as never,
+      });
+      expect(outcome.sent).toBe(0);
+      expect(outcome.failed).toBe(1);
+      expect(rows[0].attempts).toBe(run);
+    }
+
+    expect(rows[0].status).toBe("failed");
+    expect(rows[0].attempts).toBe(5);
+    expect(rows[0].first_error).toBe("connection refused");
+    expect(transport.sendMail).toHaveBeenCalledTimes(5);
+
+    // A sixth automatic run must not touch the terminal row. Requeueing
+    // is an explicit admin action, capped at MAIL_OUTBOX_MAX_REQUEUES.
+    const after = await processMailOutbox({
+      transport: transport as never,
+    });
+    expect(after).toEqual({ sent: 0, failed: 0, remaining: 0 });
+    expect(transport.sendMail).toHaveBeenCalledTimes(5);
+    expect(rows[0].status).toBe("failed");
+  });
+
+  it("never requeues or retries a terminally failed row automatically", async () => {
+    const rows = [
+      makeRow({
+        status: "failed",
+        attempts: 5,
+        last_error: "connection refused",
+        first_error: "connection refused",
+        requeue_count: 0,
+      }),
+    ];
+    const fake = makeOutboxFake(rows);
+    serviceState.client = fake;
+    const transport = {
+      sendMail: vi.fn(async () => ({ messageId: "ok" })),
+    };
+
+    const outcome = await processMailOutbox({ transport: transport as never });
+
+    expect(outcome).toEqual({ sent: 0, failed: 0, remaining: 0 });
+    expect(transport.sendMail).not.toHaveBeenCalled();
+    expect(rows[0].status).toBe("failed");
+    expect(rows[0].requeue_count).toBe(0);
+    expect(fake.updates).toHaveLength(0);
+  });
+});
+
+/**
  * Demo-environment mail boundary (P5): a demo deployment must never
  * send a real email to a real customer, even when SMTP is configured
  * and a transport is available. Only an explicit
