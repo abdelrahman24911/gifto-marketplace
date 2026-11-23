@@ -52,8 +52,11 @@ export function AuthForm({ mode, initialError }: { mode: Mode; initialError?: st
     }
 
     // P1-12: app-flow quota gate (IP + per-email for login, IP-only for
-    // signup), fail-closed. A refusal shows the retry message and the
-    // Supabase Auth call is skipped.
+    // signup), fail-closed. A refusal shows the quota message and the
+    // Supabase Auth call is skipped: the real "too many attempts" message
+    // for a genuine limit, or a distinct service-unavailable message when
+    // the quota service itself failed (never the retry message for that
+    // case — see src/lib/rate-limit.ts).
     // The proxy appends ?next=<path> for protected routes; only allow same-site
     // absolute paths so the parameter cannot be used as an open redirect.
     const requestedNext = new URLSearchParams(window.location.search).get("next");
