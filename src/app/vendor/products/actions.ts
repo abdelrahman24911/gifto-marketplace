@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { revalidatePublicCatalog } from "@/lib/catalog-cache";
+import { deleteConfirmationMatches } from "@/lib/confirm-delete";
 import { parseEgpToMinor } from "@/lib/money";
 import { requireVendorRole } from "@/lib/vendor";
 import { checkMutationQuota } from "@/lib/rate-limit";
@@ -218,6 +219,7 @@ export async function deleteProduct(
   const attempt =
     (prev && typeof prev.attempt === "number" ? prev.attempt : 0) + 1;
   const productId = String(formData.get("product_id") ?? "").trim();
+  const confirmation = String(formData.get("confirmation") ?? "");
 
   if (!productId) return { error: "Missing product id.", attempt };
 
@@ -228,6 +230,25 @@ export async function deleteProduct(
 
   const quotaError = await checkMutationQuota("vendor", user.id);
   if (quotaError) return { error: quotaError, attempt };
+
+  // Typed confirmation: the vendor must type the product's exact name.
+  // Enforced here, not just in the button, so a crafted POST cannot skip it.
+  // (QA 2026-11-23: the old button deleted the demo "Plant Pot" product
+  // with a single unconfirmed click.)
+  const { data: product } = await supabase
+    .from("products")
+    .select("id, name")
+    .eq("id", productId)
+    .eq("vendor_id", access.vendorId)
+    .maybeSingle();
+
+  if (!product) return { error: "Product not found.", attempt };
+  if (!deleteConfirmationMatches(product.name, confirmation)) {
+    return {
+      error: `Type “${product.name}” exactly to confirm deletion.`,
+      attempt,
+    };
+  }
 
   // Collect image paths first so the Storage objects can be cleaned up after
   // the rows cascade away. Best-effort: a failed object removal leaves an
