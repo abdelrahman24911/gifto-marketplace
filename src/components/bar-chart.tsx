@@ -1,4 +1,5 @@
 import type { AdminSeriesPoint } from "@/lib/admin-metrics";
+import { chartLabelIndices } from "@/lib/chart-labels";
 
 type SeriesPoint = Pick<AdminSeriesPoint, "key" | "label" | "value">;
 
@@ -17,7 +18,10 @@ export function BarChart({
 }) {
   const max = Math.max(1, ...points.map((point) => point.value));
   const hasData = points.some((point) => point.value > 0);
-  const labelStep = Math.max(1, Math.ceil(points.length / 8));
+  // Labels are ~36px wide in ~16px columns: neighbours must never both show,
+  // and the last label is only forced on when it cannot collide (see
+  // src/lib/chart-labels.ts — the QA-reported "22 No23 No" overlap).
+  const shownLabels = chartLabelIndices(points.length);
 
   if (!hasData) {
     return (
@@ -41,8 +45,7 @@ export function BarChart({
               point.value > 0
                 ? Math.max(3, Math.round((point.value / max) * 100))
                 : 0;
-            const showLabel =
-              index % labelStep === 0 || index === points.length - 1;
+            const showLabel = shownLabels.has(index);
 
             return (
               <div
@@ -68,7 +71,8 @@ export function BarChart({
                 </div>
                 <span
                   aria-hidden
-                  className="min-h-4 whitespace-nowrap text-[10px] leading-tight text-ink-mute"
+                  title={showLabel ? point.label : undefined}
+                  className="block min-h-4 w-12 shrink-0 truncate text-center text-[10px] leading-tight text-ink-mute"
                 >
                   {showLabel ? point.label : ""}
                 </span>
