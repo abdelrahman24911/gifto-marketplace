@@ -56,7 +56,7 @@ export function CategoryForm() {
           required
           minLength={2}
           maxLength={80}
-          placeholder="Gift boxes"
+          placeholder="e.g. Gift boxes"
           className={inputClass}
         />
       </label>
@@ -67,7 +67,7 @@ export function CategoryForm() {
           type="text"
           name="description"
           maxLength={200}
-          placeholder="A short line shown on the category page"
+          placeholder="e.g. A short line shown on the category page"
           className={inputClass}
         />
       </label>

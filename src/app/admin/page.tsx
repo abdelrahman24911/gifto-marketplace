@@ -256,7 +256,7 @@ export default async function AdminPage() {
               value: commissionsResult.failed
                 ? "—"
                 : formatEgp(metrics.commissionEarnedMinor),
-              hint: "Earned on delivery",
+              hint: "Earned on delivery only — placed orders that have not been delivered yet earn nothing",
               emphasis: "positive",
             },
           ]}

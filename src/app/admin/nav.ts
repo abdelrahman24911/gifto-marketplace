@@ -32,7 +32,7 @@ export const adminNavGroups: DashboardNavGroup[] = [
       },
       { label: "Refunds", href: "/admin/refunds", icon: "orders" },
       {
-        label: "Price refusals",
+        label: "Price-change refusals",
         href: "/admin/price-consent-refusals",
         icon: "orders",
       },

@@ -304,7 +304,7 @@ export default async function AdminCommissionsPage({
               value: commissionsResult.failed
                 ? "—"
                 : formatEgp(earned.commissionMinor),
-              hint: `${earned.count} entries · ${formatEgp(earned.grossMinor)} gross`,
+              hint: `${earned.count} entries · ${formatEgp(earned.grossMinor)} gross · reversed excluded`,
               emphasis: "positive",
             },
             {

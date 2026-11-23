@@ -279,7 +279,7 @@ export default async function AdminReviewsPage({
             </AdminNotice>
           </div>
         ) : null}
-        {moderated.length === 0 ? (
+        {!moderatedFailed && moderated.length === 0 ? (
           <div className="mt-4">
             <EmptyState title="Nothing moderated yet">
               Approved and rejected reviews will appear here.
