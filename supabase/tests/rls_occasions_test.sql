@@ -1391,6 +1391,56 @@ begin
   raise notice 'TEST 21I PASSED: bucket settings match the occasion media policy';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST 22: occasion-images objects can be renamed by an admin inside the
+-- occasion folder, but cannot leave it, and vendors cannot update them.
+-- (The UPDATE policy was untested before this: insert/delete were covered
+-- by TEST 21, update by nothing.)
+-- ---------------------------------------------------------------------------
+set role authenticated;
+set request.jwt.claim.sub = 'a0000000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"a0000000-0000-0000-0000-000000000001"}';
+do $$
+declare n int;
+begin
+  insert into storage.objects (bucket_id, name, owner)
+  values ('occasion-images',
+          'c1000000-0000-0000-0000-000000000001/rename-me.jpg',
+          auth.uid());
+
+  update storage.objects set name =
+    'c1000000-0000-0000-0000-000000000001/renamed.jpg'
+  where bucket_id = 'occasion-images'
+    and name = 'c1000000-0000-0000-0000-000000000001/rename-me.jpg';
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'TEST 22A FAILED: admin renamed % occasion image rows', n; end if;
+
+  begin
+    update storage.objects set name =
+      '00000000-0000-0000-0000-000000000000/renamed.jpg'
+    where bucket_id = 'occasion-images'
+      and name = 'c1000000-0000-0000-0000-000000000001/renamed.jpg';
+    raise exception 'TEST 22B FAILED: occasion image moved to an unknown occasion';
+  exception when insufficient_privilege then
+    null;
+  end;
+  raise notice 'TEST 22 PASSED: admin rename stays inside the occasion folder';
+end $$;
+
+set request.jwt.claim.sub = 'a0000000-0000-0000-0000-000000000002';
+set request.jwt.claims = '{"sub":"a0000000-0000-0000-0000-000000000002"}';
+do $$
+declare n int;
+begin
+  update storage.objects set name =
+    'c1000000-0000-0000-0000-000000000001/vendor.jpg'
+  where bucket_id = 'occasion-images'
+    and name = 'c1000000-0000-0000-0000-000000000001/renamed.jpg';
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'TEST 22C FAILED: vendor updated % occasion image rows', n; end if;
+  raise notice 'TEST 22 PASSED: vendors cannot update occasion images';
+end $$;
+
 reset role;
 
 rollback;

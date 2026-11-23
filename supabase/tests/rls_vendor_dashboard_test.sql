@@ -971,6 +971,29 @@ begin
   raise notice 'TEST 19 PASSED: ownership hands over once a second owner exists';
 end $$;
 
+-- Restore the seed roster as the database owner: at this point the caller
+-- (22000000) is only a manager, so restoring under that role would silently
+-- affect 0 rows under the members UPDATE policy (owners only). Assert the
+-- row counts so a silent no-op fails loudly instead.
+reset role;
+do $$
+declare n int;
+begin
+  -- Restore the owner first: demoting the only owner before restoring
+  -- would trip the last-owner guard ("promote another owner first").
+  update public.vendor_members set role = 'owner'
+   where vendor_id = 'c1000000-0000-0000-0000-0000000000aa'
+     and profile_id = '22000000-0000-0000-0000-000000000002';
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'TEST 19 FAILED: owner role was not restored'; end if;
+  update public.vendor_members set role = 'staff'
+   where vendor_id = 'c1000000-0000-0000-0000-0000000000aa'
+     and profile_id = '33000000-0000-0000-0000-000000000003';
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'TEST 19 FAILED: staff role was not restored'; end if;
+  raise notice 'TEST 19 PASSED: seed roster restored for later tests';
+end $$;
+
 -- ---------------------------------------------------------------------------
 -- TEST 20 (Batch 2, migration 69): admins can reply in-app; vendors cannot
 -- touch reply columns; replies are capped at 4000 characters
@@ -1040,6 +1063,51 @@ begin
     raise exception 'TEST 20 FAILED: vendor updated % support rows with a reply', n;
   end if;
   raise notice 'TEST 20 PASSED: vendors cannot write admin replies';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 21: vendor-media objects can be renamed inside their own folder, but
+-- cannot leave the branding/cover folders, and staff cannot update them.
+-- (The UPDATE policy was untested before this: insert/delete were covered
+-- by TEST 9/10, update by nothing.)
+-- ---------------------------------------------------------------------------
+set role authenticated;
+set request.jwt.claim.sub = '22000000-0000-0000-0000-000000000002';
+set request.jwt.claims = '{"sub":"22000000-0000-0000-0000-000000000002"}';
+do $$
+declare n int;
+begin
+  update storage.objects set name =
+    'c1000000-0000-0000-0000-0000000000aa/branding/logo-v2.png'
+  where bucket_id = 'vendor-media'
+    and name = 'c1000000-0000-0000-0000-0000000000aa/branding/logo-new.png';
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'TEST 21A FAILED: owner renamed % media rows', n; end if;
+
+  begin
+    update storage.objects set name =
+      'c1000000-0000-0000-0000-0000000000aa/secrets/logo-v2.png'
+    where bucket_id = 'vendor-media'
+      and name = 'c1000000-0000-0000-0000-0000000000aa/branding/logo-v2.png';
+    raise exception 'TEST 21B FAILED: media moved outside branding/cover';
+  exception when insufficient_privilege then
+    null;
+  end;
+  raise notice 'TEST 21 PASSED: vendor-media rename stays inside its folder';
+end $$;
+
+set request.jwt.claim.sub = '33000000-0000-0000-0000-000000000003';
+set request.jwt.claims = '{"sub":"33000000-0000-0000-0000-000000000003"}';
+do $$
+declare n int;
+begin
+  update storage.objects set name =
+    'c1000000-0000-0000-0000-0000000000aa/branding/logo-staff.png'
+  where bucket_id = 'vendor-media'
+    and name = 'c1000000-0000-0000-0000-0000000000aa/branding/logo-v2.png';
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'TEST 21C FAILED: staff updated % media rows', n; end if;
+  raise notice 'TEST 21 PASSED: staff cannot update vendor media';
 end $$;
 
 rollback;

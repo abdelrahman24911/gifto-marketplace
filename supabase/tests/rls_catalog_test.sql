@@ -661,6 +661,38 @@ begin
   raise notice 'TEST 21E PASSED: search pagination returns page 2 with total 2';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- TEST 22: product-images objects cannot be updated in place. There is no
+-- UPDATE policy on purpose — uploads use fresh UUID paths, so an update is
+-- never needed and must stay denied even for the owning manager.
+-- ---------------------------------------------------------------------------
+set role authenticated;
+set request.jwt.claim.sub = 'a1000000-0000-0000-0000-00000000000a';
+set request.jwt.claims = '{"sub":"a1000000-0000-0000-0000-00000000000a"}';
+do $$
+declare n int;
+begin
+  insert into storage.objects (bucket_id, name, owner)
+  values ('product-images',
+          'e1000000-0000-0000-0000-0000000000aa/d1000000-0000-0000-0000-000000000001/update-me.jpg',
+          auth.uid());
+
+  update storage.objects set name =
+    'e1000000-0000-0000-0000-0000000000aa/d1000000-0000-0000-0000-000000000001/renamed.jpg'
+  where bucket_id = 'product-images'
+    and name = 'e1000000-0000-0000-0000-0000000000aa/d1000000-0000-0000-0000-000000000001/update-me.jpg';
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'TEST 22 FAILED: owner updated % product image rows', n; end if;
+  if not exists (
+    select 1 from storage.objects
+    where bucket_id = 'product-images'
+      and name = 'e1000000-0000-0000-0000-0000000000aa/d1000000-0000-0000-0000-000000000001/update-me.jpg'
+  ) then
+    raise exception 'TEST 22 FAILED: product image disappeared';
+  end if;
+  raise notice 'TEST 22 PASSED: product-images objects cannot be updated in place';
+end $$;
+
 reset role;
 
 rollback;
