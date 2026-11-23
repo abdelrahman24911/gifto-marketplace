@@ -6,6 +6,7 @@ import {
   commissionEntriesById,
   getEntryFinanceState,
   isTransferMethod,
+  returnedCommissionNote,
   settlementAdjustmentsMinor,
   settlementEarnedCommissionMinor,
   settlementEffectiveStatus,
@@ -470,5 +471,97 @@ describe("P1-05 payout proof helpers", () => {
         { amount_minor: 200 },
       ]),
     ).toBe(0);
+  });
+});
+
+describe("returnedCommissionNote", () => {
+  const earned = { amount_minor: 15000, status: "earned" as const };
+  const reversed = { amount_minor: 15000, status: "reversed" as const };
+
+  it("says nothing for lines that are not returned", () => {
+    expect(
+      returnedCommissionNote({
+        status: "delivered",
+        commission: earned,
+        clawbacks: [],
+      }),
+    ).toBeNull();
+  });
+
+  it("says nothing when no commission was ever earned", () => {
+    expect(
+      returnedCommissionNote({
+        status: "returned",
+        commission: null,
+        clawbacks: [],
+      }),
+    ).toBeNull();
+  });
+
+  it("explains a reversal before settlement", () => {
+    expect(
+      returnedCommissionNote({
+        status: "returned",
+        commission: reversed,
+        clawbacks: [],
+      }),
+    ).toBe("Commission reversed — this line was returned before settlement.");
+  });
+
+  it("flags an earned commission with no clawback yet", () => {
+    expect(
+      returnedCommissionNote({
+        status: "returned",
+        commission: earned,
+        clawbacks: [],
+      }),
+    ).toBe("Returned — commission recovery not yet recorded.");
+  });
+
+  it("reports an outstanding clawback with its amount", () => {
+    expect(
+      returnedCommissionNote({
+        status: "returned",
+        commission: earned,
+        clawbacks: [{ amount_minor: -15000, status: "outstanding" }],
+      }),
+    ).toBe("Returned — commission recovery outstanding (EGP 150.00 clawback).");
+  });
+
+  it("reports a clawback recovered in a later settlement", () => {
+    expect(
+      returnedCommissionNote({
+        status: "returned",
+        commission: earned,
+        clawbacks: [{ amount_minor: -15000, status: "consumed" }],
+      }),
+    ).toBe(
+      "Returned — commission recovered in a later settlement (EGP 150.00).",
+    );
+  });
+
+  it("reports a direct repayment", () => {
+    expect(
+      returnedCommissionNote({
+        status: "returned",
+        commission: earned,
+        clawbacks: [{ amount_minor: -15000, status: "direct_repayment" }],
+      }),
+    ).toBe(
+      "Returned — commission repaid directly by the vendor (EGP 150.00).",
+    );
+  });
+
+  it("prefers the outstanding clawback when several exist", () => {
+    expect(
+      returnedCommissionNote({
+        status: "returned",
+        commission: earned,
+        clawbacks: [
+          { amount_minor: -15000, status: "consumed" },
+          { amount_minor: -15000, status: "outstanding" },
+        ],
+      }),
+    ).toBe("Returned — commission recovery outstanding (EGP 150.00 clawback).");
   });
 });

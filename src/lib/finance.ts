@@ -1,3 +1,4 @@
+import { formatEgp } from "@/lib/money";
 import type {
   CommissionStatus,
   SettlementStatus,
@@ -172,6 +173,47 @@ export function clawbackRemainingMinor(
       0,
     )
   );
+}
+
+/**
+ * Explains a returned shop line's commission in the orders list and detail
+ * pages. A returned line's commission is either reversed before settlement
+ * (the list already strikes it through — the note says why) or, when the
+ * commission was already paid out, recovered through a clawback (migration
+ * 43, D-08). Without the note the plain "earned" figure reads as if Gifto
+ * kept money on a returned order. Returns null for any line that is not
+ * returned, or where no commission was ever earned.
+ */
+export function returnedCommissionNote(input: {
+  status: string;
+  commission: { amount_minor: number; status: CommissionStatus } | null;
+  // status is a plain text column (CHECK-constrained), so the select type
+  // is string, not CommissionClawbackStatus.
+  clawbacks: readonly { amount_minor: number; status: string }[];
+}): string | null {
+  if (input.status !== "returned") return null;
+  const entry = input.commission;
+  if (!entry) return null;
+  if (entry.status === "reversed") {
+    return "Commission reversed — this line was returned before settlement.";
+  }
+  // Prefer an outstanding clawback: it is the one the admin still has to
+  // chase; a consumed or repaid one is history.
+  const clawback =
+    input.clawbacks.find((row) => row.status === "outstanding") ??
+    input.clawbacks[0] ??
+    null;
+  if (!clawback) {
+    return "Returned — commission recovery not yet recorded.";
+  }
+  const amount = formatEgp(Math.abs(clawback.amount_minor));
+  if (clawback.status === "outstanding") {
+    return `Returned — commission recovery outstanding (${amount} clawback).`;
+  }
+  if (clawback.status === "consumed") {
+    return `Returned — commission recovered in a later settlement (${amount}).`;
+  }
+  return `Returned — commission repaid directly by the vendor (${amount}).`;
 }
 
 export const FINANCE_ENTRY_STATE_LABELS: Record<FinanceEntryState, string> = {

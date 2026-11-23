@@ -5,6 +5,7 @@ import { Pagination } from "@/components/pagination";
 import { Breadcrumb, EmptyState } from "@/components/ui/section";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { startOfBusinessDayOffset } from "@/lib/business-time";
+import { returnedCommissionNote } from "@/lib/finance";
 import {
   maskEmail,
   maskName,
@@ -117,7 +118,7 @@ export default async function AdminOrdersPage({
   let listQuery = supabase
     .from("orders")
     .select(
-      "id, public_reference, user_id, status, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, contact_email, city, governorate, created_at, order_vendors(id, status, subtotal_minor, commission_rate, vendor:vendors(name, slug), order_items(product_name, quantity, line_total_minor), commission_entries(amount_minor, status))",
+      "id, public_reference, user_id, status, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, contact_email, city, governorate, created_at, order_vendors(id, status, subtotal_minor, commission_rate, vendor:vendors(name, slug), order_items(product_name, quantity, line_total_minor), commission_entries(amount_minor, status, commission_clawbacks(amount_minor, status)))",
       { count: "exact" },
     );
 
@@ -438,6 +439,11 @@ export default async function AdminOrdersPage({
                           ? suborder.status
                           : "placed";
                         const commission = suborder.commission_entries;
+                        const commissionNote = returnedCommissionNote({
+                          status: suborder.status ?? "",
+                          commission: commission ?? null,
+                          clawbacks: commission?.commission_clawbacks ?? [],
+                        });
 
                         return (
                           <div
@@ -506,6 +512,11 @@ export default async function AdminOrdersPage({
                                 )}
                               </span>
                             </div>
+                            {commissionNote ? (
+                              <p className="mt-2 text-xs leading-relaxed text-ink-mute">
+                                {commissionNote}
+                              </p>
+                            ) : null}
                           </div>
                         );
                       })}

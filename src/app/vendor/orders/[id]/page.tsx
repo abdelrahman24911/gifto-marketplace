@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
+import { returnedCommissionNote } from "@/lib/finance";
 import { formatEgp } from "@/lib/money";
 import {
   ORDER_STATUS_LABELS,
@@ -43,7 +44,7 @@ export default async function VendorOrderDetailPage({
     supabase
       .from("order_vendors")
       .select(
-        "id, status, subtotal_minor, delivery_fee_minor, commission_rate, confirmed_at, shipped_at, delivered_at, cancelled_at, courier_name, tracking_ref, handed_over_at, created_at, order:orders(id, public_reference, recipient_name, contact_phone, contact_email, address_line, city, governorate, notes, gift_wrap, gift_message, preferred_delivery_date, delivery_time_note, created_at), order_items(id, product_id, product_name, product_slug, quantity, unit_price_minor, line_total_minor), commission_entries(amount_minor, status)",
+        "id, status, subtotal_minor, delivery_fee_minor, commission_rate, confirmed_at, shipped_at, delivered_at, cancelled_at, courier_name, tracking_ref, handed_over_at, created_at, order:orders(id, public_reference, recipient_name, contact_phone, contact_email, address_line, city, governorate, notes, gift_wrap, gift_message, preferred_delivery_date, delivery_time_note, created_at), order_items(id, product_id, product_name, product_slug, quantity, unit_price_minor, line_total_minor), commission_entries(amount_minor, status, commission_clawbacks(amount_minor, status))",
       )
       .eq("id", id)
       .eq("vendor_id", access.vendorId)
@@ -100,6 +101,11 @@ export default async function VendorOrderDetailPage({
   const events = eventsResult.data ?? [];
   const refundCase = (refundResult.data ?? [])[0] ?? null;
   const commission = suborder.commission_entries;
+  const commissionNote = returnedCommissionNote({
+    status: suborder.status ?? "",
+    commission: commission ?? null,
+    clawbacks: commission?.commission_clawbacks ?? [],
+  });
   const reference = order?.public_reference ?? `#${suborder.id.slice(0, 8)}`;
 
   return (
@@ -242,12 +248,14 @@ export default async function VendorOrderDetailPage({
               {formatEgp(suborder.subtotal_minor)}
             </span>
           </div>
-          {commission ? (
+          {commissionNote ? (
+            <p className="mt-2 text-xs leading-relaxed text-ink-mute">
+              {commissionNote}
+            </p>
+          ) : commission ? (
             <p className="mt-2 text-xs text-ink-mute">
-              Gifto commission {formatEgp(commission.amount_minor)} ·{" "}
-              {commission.status === "reversed"
-                ? "reversed (this line was returned)"
-                : "earned on delivery"}
+              Gifto commission {formatEgp(commission.amount_minor)} · earned
+              on delivery
             </p>
           ) : null}
         </section>

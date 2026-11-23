@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { Breadcrumb, EmptyState } from "@/components/ui/section";
 import { requirePlatformAdmin } from "@/lib/auth";
+import { returnedCommissionNote } from "@/lib/finance";
 import { formatEgp } from "@/lib/money";
 import {
   ADDRESS_CORRECTION_REASONS,
@@ -50,7 +51,7 @@ export default async function AdminOrderDetailPage({
       supabase
         .from("orders")
         .select(
-          "id, public_reference, user_id, status, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, contact_email, address_line, city, governorate, notes, gift_wrap, gift_message, preferred_delivery_date, delivery_time_note, created_at, updated_at, order_vendors(id, status, subtotal_minor, delivery_fee_minor, commission_rate, confirmed_at, shipped_at, delivered_at, cancelled_at, courier_name, tracking_ref, handed_over_at, created_at, vendor:vendors(name, slug), order_items(id, product_id, product_name, product_slug, quantity, unit_price_minor, line_total_minor), commission_entries(amount_minor, status))",
+          "id, public_reference, user_id, status, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, contact_email, address_line, city, governorate, notes, gift_wrap, gift_message, preferred_delivery_date, delivery_time_note, created_at, updated_at, order_vendors(id, status, subtotal_minor, delivery_fee_minor, commission_rate, confirmed_at, shipped_at, delivered_at, cancelled_at, courier_name, tracking_ref, handed_over_at, created_at, vendor:vendors(name, slug), order_items(id, product_id, product_name, product_slug, quantity, unit_price_minor, line_total_minor), commission_entries(amount_minor, status, commission_clawbacks(amount_minor, status)))",
         )
         .eq("id", id)
         .maybeSingle(),
@@ -189,6 +190,11 @@ export default async function AdminOrderDetailPage({
               ? suborder.status
               : "placed";
             const commission = suborder.commission_entries;
+            const commissionNote = returnedCommissionNote({
+              status: suborder.status ?? "",
+              commission: commission ?? null,
+              clawbacks: commission?.commission_clawbacks ?? [],
+            });
             const suborderEvents = events.filter(
               (event) => event.order_vendor_id === suborder.id,
             );
@@ -278,6 +284,11 @@ export default async function AdminOrderDetailPage({
                       </span>
                     </span>
                   </div>
+                  {commissionNote ? (
+                    <p className="mt-2 text-xs leading-relaxed text-ink-mute">
+                      {commissionNote}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="mt-5">
