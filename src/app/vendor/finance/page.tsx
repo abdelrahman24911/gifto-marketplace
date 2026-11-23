@@ -733,9 +733,11 @@ export default async function VendorFinancePage({
               </VendorNotice>
               <RefreshButton />
             </div>
-          ) : ledgerRows.length === 0 ? (
-            <div className="mt-4">
-              <VendorEmpty
+          ) : (
+            <>
+              {ledgerRows.length === 0 ? (
+                <div className="mt-4">
+                  <VendorEmpty
                 title={
                   range === "all"
                     ? "No commission earned yet"
@@ -755,11 +757,10 @@ export default async function VendorFinancePage({
                 {range === "all"
                   ? "Delivered suborders appear here once commission is recorded."
                   : "Try a longer date range to see earlier delivered lines."}
-              </VendorEmpty>
-            </div>
-          ) : (
-            <>
-              <ul className="mt-4 flex flex-col divide-y divide-line overflow-hidden rounded-2xl border border-line bg-paper-soft">
+                  </VendorEmpty>
+                </div>
+              ) : (
+                <ul className="mt-4 flex flex-col divide-y divide-line overflow-hidden rounded-2xl border border-line bg-paper-soft">
                 {ledgerRows.map((entry) => {
                 const state = getEntryFinanceState(entry, lookup);
                 const settlement = settlementByEntry.get(entry.id);
@@ -810,8 +811,9 @@ export default async function VendorFinancePage({
                     </div>
                   </li>
                 );
-              })}
-              </ul>
+                  })}
+                </ul>
+              )}
               <Pagination
                 page={currentPage}
                 total={ledgerTotal}
