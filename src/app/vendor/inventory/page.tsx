@@ -3,6 +3,13 @@ import { redirect } from "next/navigation";
 
 import { Pagination } from "@/components/pagination";
 import {
+  INVENTORY_SORTS,
+  inventorySortLabel,
+  parseInventorySort,
+} from "@/lib/inventory";
+
+import type { InventorySort } from "@/lib/inventory";
+import {
   DEFAULT_PAGE_SIZE,
   clampPage,
   pageWindow,
@@ -41,10 +48,12 @@ function inventoryHref(
   filter = "all",
   page = 1,
   query = "",
+  sort: InventorySort = "low",
 ) {
   const params = new URLSearchParams({ vendor: vendorId });
   if (filter !== "all") params.set("status", filter);
   if (query) params.set("q", query);
+  if (sort !== "low") params.set("sort", sort);
   if (page > 1) params.set("page", String(page));
   return `/vendor/inventory?${params.toString()}`;
 }
@@ -57,6 +66,7 @@ export default async function VendorInventoryPage({
     status?: string;
     page?: string;
     q?: string;
+    sort?: string;
   }>;
 }) {
   const {
@@ -64,10 +74,12 @@ export default async function VendorInventoryPage({
     status: filterParam,
     page: pageParam,
     q: query,
+    sort: sortParam,
   } = await searchParams;
   const { supabase, access, canManage } = await requireVendorRole(vendor);
 
   const filter = filterParam === "low" || filterParam === "out" ? filterParam : "all";
+  const sort = parseInventorySort(sortParam);
   const search = (query ?? "").trim().slice(0, 80);
   const searchTerm = search.replace(/[%_\\]/g, " ").replace(/\s+/g, " ").trim();
   const requestedPage = parsePage(pageParam);
@@ -75,7 +87,7 @@ export default async function VendorInventoryPage({
 
   let listQuery = supabase
     .from("products")
-    .select("id, name, status, stock", { count: "exact" })
+    .select("id, name, status, stock, created_at", { count: "exact" })
     .eq("vendor_id", access.vendorId);
 
   if (filter === "low") {
@@ -88,6 +100,28 @@ export default async function VendorInventoryPage({
 
   if (searchTerm) {
     listQuery = listQuery.ilike("name", `%${searchTerm}%`);
+  }
+
+  // The default order is lowest stock first so what needs restocking is on
+  // top; the sort control makes that explicit and changeable.
+  if (sort === "high") {
+    listQuery = listQuery
+      .order("stock", { ascending: false })
+      .order("name", { ascending: true })
+      .order("id", { ascending: true });
+  } else if (sort === "name") {
+    listQuery = listQuery
+      .order("name", { ascending: true })
+      .order("id", { ascending: true });
+  } else if (sort === "newest") {
+    listQuery = listQuery
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true });
+  } else {
+    listQuery = listQuery
+      .order("stock", { ascending: true })
+      .order("name", { ascending: true })
+      .order("id", { ascending: true });
   }
 
   const countProducts = (status?: ProductStatus) => {
@@ -106,11 +140,7 @@ export default async function VendorInventoryPage({
     lowCountResult,
     outCountResult,
   ] = await Promise.all([
-    listQuery
-      .order("stock", { ascending: true })
-      .order("name", { ascending: true })
-      .order("id", { ascending: true })
-      .range(range.from, range.to),
+    listQuery.range(range.from, range.to),
     countProducts(),
     countProducts("active"),
     supabase
@@ -141,7 +171,7 @@ export default async function VendorInventoryPage({
     }
     const lastPage = clampPage(requestedPage, total);
     if (lastPage !== requestedPage) {
-      redirect(inventoryHref(access.vendorId, filter, lastPage, search));
+      redirect(inventoryHref(access.vendorId, filter, lastPage, search, sort));
     }
   }
 
@@ -229,6 +259,7 @@ export default async function VendorInventoryPage({
                 option.value,
                 1,
                 search,
+                sort,
               )}
               active={filter === option.value}
             >
@@ -245,6 +276,9 @@ export default async function VendorInventoryPage({
           <input type="hidden" name="vendor" value={access.vendorId} />
           {filter !== "all" ? (
             <input type="hidden" name="status" value={filter} />
+          ) : null}
+          {sort !== "low" ? (
+            <input type="hidden" name="sort" value={sort} />
           ) : null}
           <label htmlFor="inventory-search" className="sr-only">
             Search inventory
@@ -266,12 +300,50 @@ export default async function VendorInventoryPage({
           </button>
           {search ? (
             <Link
-              href={inventoryHref(access.vendorId, filter)}
+              href={inventoryHref(access.vendorId, filter, 1, "", sort)}
               className="shrink-0 text-sm font-medium text-ink-soft hover:text-berry"
             >
               Clear
             </Link>
           ) : null}
+        </form>
+
+        <form
+          action="/vendor/inventory"
+          method="get"
+          className="flex items-center gap-2"
+        >
+          <input type="hidden" name="vendor" value={access.vendorId} />
+          {filter !== "all" ? (
+            <input type="hidden" name="status" value={filter} />
+          ) : null}
+          {search ? (
+            <input type="hidden" name="q" value={search} />
+          ) : null}
+          <label
+            htmlFor="inventory-sort"
+            className="shrink-0 text-sm font-medium text-ink-soft"
+          >
+            Sort by
+          </label>
+          <select
+            id="inventory-sort"
+            name="sort"
+            defaultValue={sort}
+            className="rounded-full border border-line-strong bg-paper px-3.5 py-2.5 text-sm text-ink focus:border-berry focus:outline-none focus:ring-2 focus:ring-berry/20"
+          >
+            {INVENTORY_SORTS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="submit"
+            className="shrink-0 rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-paper transition-colors hover:bg-wine-deep"
+          >
+            Apply
+          </button>
         </form>
       </div>
 
@@ -284,7 +356,7 @@ export default async function VendorInventoryPage({
         <p>
           {countsFailed
             ? "Stock counts are partial"
-            : `Low-stock threshold: ${LOW_STOCK_THRESHOLD}`}
+            : `Sorted: ${inventorySortLabel(sort)} · Low-stock threshold: ${LOW_STOCK_THRESHOLD}`}
         </p>
       </div>
 
@@ -303,7 +375,7 @@ export default async function VendorInventoryPage({
             action={
               searchTerm ? (
                 <Link
-                  href={inventoryHref(access.vendorId, filter)}
+                  href={inventoryHref(access.vendorId, filter, 1, "", sort)}
                   className="text-sm font-medium text-berry hover:text-berry-deep"
                 >
                   Clear search
@@ -395,7 +467,7 @@ export default async function VendorInventoryPage({
           pageSize={DEFAULT_PAGE_SIZE}
           label="Inventory pages"
           buildHref={(page) =>
-            inventoryHref(access.vendorId, filter, page, search)
+            inventoryHref(access.vendorId, filter, page, search, sort)
           }
         />
       </section>

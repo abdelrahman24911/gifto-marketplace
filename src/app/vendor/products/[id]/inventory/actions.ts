@@ -3,10 +3,10 @@
 import { revalidatePath } from "next/cache";
 
 import { CATALOG_TAGS, revalidatePublicCatalog } from "@/lib/catalog-cache";
+import { validateStockNote } from "@/lib/inventory";
 import { requireVendorRole } from "@/lib/vendor";
 import { checkMutationQuota } from "@/lib/rate-limit";
 
-const NOTE_MAX = 280;
 const DELTA_MAX = 1_000_000;
 
 export type AdjustStockState =
@@ -45,8 +45,9 @@ export async function adjustStock(
   }
 
   const note = String(formData.get("note") ?? "").trim();
-  if (note.length > NOTE_MAX) {
-    return { error: `A note must be ${NOTE_MAX} characters or fewer.`, attempt };
+  const noteError = validateStockNote(note);
+  if (noteError) {
+    return { error: noteError, attempt };
   }
 
   const { supabase, access, canManage, user } = await requireVendorRole(

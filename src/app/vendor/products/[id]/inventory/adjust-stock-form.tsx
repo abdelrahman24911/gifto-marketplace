@@ -64,14 +64,19 @@ export function AdjustStockForm({
         </label>
 
         <label className={labelClass}>
-          Reason (optional)
+          Reason
           <input
             type="text"
             name="note"
+            required
             maxLength={280}
             placeholder="e.g. Restock from supplier"
             className={inputClass}
           />
+          <span className="text-xs font-normal text-ink-mute">
+            Required — every manual change is recorded in the audit trail
+            with this reason
+          </span>
         </label>
       </div>
 
