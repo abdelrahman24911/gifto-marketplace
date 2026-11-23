@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 
+import { ConfirmSubmit } from "@/components/dashboard/confirm-submit";
 import {
   TAG_DESCRIPTION_MAX,
   TAG_NAME_MAX,
@@ -83,17 +84,17 @@ export function TagControls({ tag }: { tag: AdminTagRow }) {
             name="state"
             value={tag.is_active ? "inactive" : "active"}
           />
-          <button
-            type="submit"
-            disabled={togglePending}
+          <ConfirmSubmit
+            label={tag.is_active ? "Deactivate" : "Activate"}
+            pendingLabel="Saving..."
+            pending={togglePending}
+            summary={
+              tag.is_active
+                ? `Deactivate “${tag.name}”? It stays on the ${tag.productCount} ${tag.productCount === 1 ? "product" : "products"} already using it, but vendors can no longer pick it.`
+                : `Activate “${tag.name}” so vendors can pick it again?`
+            }
             className="rounded-full border border-line-strong bg-paper-soft px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:bg-paper-deep disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {togglePending
-              ? "Saving..."
-              : tag.is_active
-                ? "Deactivate"
-                : "Activate"}
-          </button>
+          />
         </form>
       </div>
 

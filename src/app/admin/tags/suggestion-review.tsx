@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 
+import { ConfirmSubmit } from "@/components/dashboard/confirm-submit";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
 import { TAG_DESCRIPTION_MAX } from "@/lib/tagging";
 
@@ -79,24 +80,24 @@ export function SuggestionReview({
         ) : null}
 
         <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            type="submit"
+          <ConfirmSubmit
+            label="Approve tag"
+            pendingLabel="Saving..."
+            pending={pending}
+            summary={`Approve the tag “${name}” so vendors can use it?`}
             name="decision"
             value="approve"
-            disabled={pending}
             className="rounded-full bg-berry px-4 py-2 text-sm font-semibold text-paper transition-colors hover:bg-berry-deep disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {pending ? "Saving..." : "Approve tag"}
-          </button>
-          <button
-            type="submit"
+          />
+          <ConfirmSubmit
+            label="Reject"
+            pendingLabel="Saving..."
+            pending={pending}
+            summary={`Reject the tag suggestion “${name}”?`}
             name="decision"
             value="reject"
-            disabled={pending}
             className="rounded-full border border-line-strong bg-paper px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-paper-deep disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Reject
-          </button>
+          />
         </div>
       </form>
     </li>

@@ -2,6 +2,8 @@
 
 import { useActionState } from "react";
 
+import { ConfirmSubmit } from "@/components/dashboard/confirm-submit";
+
 import { setVendorAcceptingOrders, type PauseActionState } from "./actions";
 
 const buttonClass =
@@ -57,21 +59,21 @@ export function PauseOrders({
             name="is_accepting_orders"
             value={accepting ? "false" : "true"}
           />
-          <button
-            type="submit"
-            disabled={pending}
+          <ConfirmSubmit
+            label={accepting ? "Pause new orders" : "Resume orders"}
+            pendingLabel="Saving…"
+            pending={pending}
+            summary={
+              accepting
+                ? "Pause new orders? Your shop and products stay visible, but customers cannot check out."
+                : "Resume orders? Customers will be able to check out again."
+            }
             className={
               accepting
                 ? "rounded-full border border-warning/30 bg-warning-soft px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
                 : buttonClass
             }
-          >
-            {pending
-              ? "Saving…"
-              : accepting
-                ? "Pause new orders"
-                : "Resume orders"}
-          </button>
+          />
         </form>
       ) : (
         <p className="mt-4 text-xs text-ink-mute">

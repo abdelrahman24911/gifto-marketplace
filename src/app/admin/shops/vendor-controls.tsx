@@ -1,6 +1,9 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { useActionState } from "react";
+
+import { ConfirmSubmit } from "@/components/dashboard/confirm-submit";
 
 import { setCommissionRate, setVendorStatus } from "../actions";
 
@@ -40,6 +43,23 @@ export function VendorControls({ vendor }: { vendor: Vendor }) {
   const rateMessage = rateState?.vendorId === vendor.id ? rateState : null;
   const currentPercent = Number(vendor.commission_rate) * 100;
 
+  // Controlled inputs so the confirm step can state the exact change
+  // ("Active → Suspended", "10% → 12%") before anything is submitted.
+  const [statusValue, setStatusValue] = useState<VendorStatus>(vendor.status);
+  const [rateInput, setRateInput] = useState(String(currentPercent));
+  // The rate input submits on Enter, so its confirm step is a form-level
+  // gate rather than a button: the first submit (click or Enter) shows the
+  // summary, the second one acts.
+  const [rateConfirming, setRateConfirming] = useState(false);
+  const rateWasPending = useRef(false);
+  useEffect(() => {
+    if (rateWasPending.current && !ratePending) setRateConfirming(false);
+    rateWasPending.current = ratePending;
+  }, [ratePending]);
+
+  const statusLabel = (value: VendorStatus) =>
+    STATUS_OPTIONS.find((option) => option.value === value)?.label ?? value;
+
   return (
     <div className="grid gap-4 border-t border-line/70 pt-4 sm:grid-cols-2">
       <form action={statusAction} className="flex flex-col gap-2">
@@ -54,7 +74,10 @@ export function VendorControls({ vendor }: { vendor: Vendor }) {
           <select
             id={`status-${vendor.id}`}
             name="status"
-            defaultValue={vendor.status}
+            value={statusValue}
+            onChange={(event) =>
+              setStatusValue(event.target.value as VendorStatus)
+            }
             className={inputClass}
           >
             {STATUS_OPTIONS.map((option) => (
@@ -63,13 +86,14 @@ export function VendorControls({ vendor }: { vendor: Vendor }) {
               </option>
             ))}
           </select>
-          <button
-            type="submit"
-            disabled={statusPending}
+          <ConfirmSubmit
+            label="Apply"
+            pendingLabel="Saving…"
+            pending={statusPending}
+            disabled={statusValue === vendor.status}
+            summary={`Change ${vendor.name} from ${statusLabel(vendor.status)} to ${statusLabel(statusValue)}?`}
             className={buttonClass}
-          >
-            {statusPending ? "Saving…" : "Apply"}
-          </button>
+          />
         </div>
         {statusMessage?.error ? (
           <span role="alert" className="text-xs text-danger">
@@ -82,7 +106,16 @@ export function VendorControls({ vendor }: { vendor: Vendor }) {
         ) : null}
       </form>
 
-      <form action={rateAction} className="flex flex-col gap-2">
+      <form
+        action={rateAction}
+        onSubmit={(event) => {
+          if (!rateConfirming) {
+            event.preventDefault();
+            setRateConfirming(true);
+          }
+        }}
+        className="flex flex-col gap-2"
+      >
         <input type="hidden" name="vendor_id" value={vendor.id} />
         <label
           className="text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-ink-mute"
@@ -99,7 +132,8 @@ export function VendorControls({ vendor }: { vendor: Vendor }) {
               min={0}
               max={100}
               step={0.01}
-              defaultValue={currentPercent}
+              value={rateInput}
+              onChange={(event) => setRateInput(event.target.value)}
               className={`${inputClass} w-28 pr-7`}
             />
             <span
@@ -109,10 +143,34 @@ export function VendorControls({ vendor }: { vendor: Vendor }) {
               %
             </span>
           </div>
-          <button type="submit" disabled={ratePending} className={buttonClass}>
-            {ratePending ? "Saving…" : "Save rate"}
+          <button
+            type="submit"
+            disabled={ratePending || rateInput === String(currentPercent)}
+            className={buttonClass}
+          >
+            {ratePending
+              ? "Saving…"
+              : rateConfirming
+                ? "Confirm"
+                : "Save rate"}
           </button>
+          {rateConfirming ? (
+            <button
+              type="button"
+              onClick={() => setRateConfirming(false)}
+              disabled={ratePending}
+              className={buttonClass}
+            >
+              Cancel
+            </button>
+          ) : null}
         </div>
+        {rateConfirming ? (
+          <p role="alert" className="text-xs font-medium leading-relaxed text-ink">
+            Change {vendor.name} commission from {currentPercent}% to{" "}
+            {rateInput || "—"}%? Applies to future orders only.
+          </p>
+        ) : null}
         <p className="text-[0.68rem] leading-relaxed text-ink-mute">
           Applies to future orders only.
         </p>

@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 
+import { ConfirmSubmit } from "@/components/dashboard/confirm-submit";
 import {
   SUPPORT_STATUSES,
   SUPPORT_STATUS_LABELS,
@@ -25,6 +26,7 @@ export function SupportStatusForm({
     SupportStatusState,
     FormData
   >(updateSupportRequestStatus, null);
+  const [nextStatus, setNextStatus] = useState<SupportRequestStatus>(status);
 
   return (
     <form action={submit} className="flex flex-wrap items-center gap-2">
@@ -35,7 +37,10 @@ export function SupportStatusForm({
       <select
         id={`support-status-${id}`}
         name="status"
-        defaultValue={status}
+        value={nextStatus}
+        onChange={(event) =>
+          setNextStatus(event.target.value as SupportRequestStatus)
+        }
         className="rounded-full border border-line-strong bg-paper px-3 py-1.5 text-xs text-ink focus:border-berry focus:outline-none focus:ring-2 focus:ring-berry/15"
       >
         {SUPPORT_STATUSES.map((value) => (
@@ -44,13 +49,14 @@ export function SupportStatusForm({
           </option>
         ))}
       </select>
-      <button
-        type="submit"
-        disabled={pending}
+      <ConfirmSubmit
+        label="Update"
+        pendingLabel="Saving…"
+        pending={pending}
+        disabled={nextStatus === status}
+        summary={`Change this request from ${SUPPORT_STATUS_LABELS[status]} to ${SUPPORT_STATUS_LABELS[nextStatus]}?`}
         className="rounded-full border border-line-strong bg-paper-soft px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:border-berry/40 hover:bg-berry-soft disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {pending ? "Saving…" : "Update"}
-      </button>
+      />
       {state && "error" in state ? (
         <span role="alert" className="text-xs text-danger">
           {state.error}

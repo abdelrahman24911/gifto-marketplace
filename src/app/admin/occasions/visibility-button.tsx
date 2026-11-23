@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect } from "react";
 
+import { ConfirmSubmit } from "@/components/dashboard/confirm-submit";
+
 import { setOccasionVisibility } from "./actions";
 
 export function VisibilityButton({
@@ -32,22 +34,22 @@ export function VisibilityButton({
         name="next_state"
         value={isActive ? "hidden" : "published"}
       />
-      <button
-        type="submit"
-        disabled={pending}
-        aria-label={
+      <ConfirmSubmit
+        label={isActive ? "Hide" : "Publish"}
+        pendingLabel="Saving…"
+        pending={pending}
+        ariaLabel={isActive ? `Hide ${occasionName}` : `Publish ${occasionName}`}
+        summary={
           isActive
-            ? `Hide ${occasionName}`
-            : `Publish ${occasionName}`
+            ? `Hide “${occasionName}” from the public occasions page?`
+            : `Publish “${occasionName}” so customers can see it?`
         }
         className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
           isActive
             ? "border-line-strong bg-paper text-ink-soft hover:border-berry/40 hover:text-berry-deep"
             : "border-berry/25 bg-berry-soft text-berry-deep hover:bg-berry-tint"
         }`}
-      >
-        {pending ? "Saving…" : isActive ? "Hide" : "Publish"}
-      </button>
+      />
       {state?.error ? (
         <span role="alert" className="max-w-40 text-xs text-red-700">
           {state.error}
