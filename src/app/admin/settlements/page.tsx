@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Pagination } from "@/components/pagination";
+import { RefreshButton } from "@/components/dashboard/refresh-button";
 import { Breadcrumb, EmptyState } from "@/components/ui/section";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
@@ -346,9 +347,10 @@ export default async function AdminSettlementsPage({
         <div className="mt-4">
           <AdminNotice tone="danger" role="alert">
             {settlementsFailed
-              ? "Settlement and commission state could not be loaded. Refresh the page to try again."
-              : "Commission entries could not be loaded, so settlement balances are unavailable. Refresh the page to try again."}
+              ? "Settlement and commission state could not be loaded."
+              : "Commission entries could not be loaded, so settlement balances are unavailable."}
           </AdminNotice>
+          <RefreshButton />
         </div>
       ) : null}
 

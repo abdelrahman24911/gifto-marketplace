@@ -4,7 +4,7 @@ import { useActionState } from "react";
 
 import { retryMailOutbox, type MailOutboxActionState } from "./actions";
 
-export function MailOutboxRetryForm() {
+export function MailOutboxRetryForm({ disabled = false }: { disabled?: boolean }) {
   const [state, formAction, pending] = useActionState<
     MailOutboxActionState,
     FormData
@@ -14,7 +14,12 @@ export function MailOutboxRetryForm() {
     <form action={formAction}>
       <button
         type="submit"
-        disabled={pending}
+        disabled={disabled || pending}
+        title={
+          disabled
+            ? "SMTP is not configured — retrying would not send anything"
+            : undefined
+        }
         className="rounded-full bg-berry px-4 py-2 text-sm font-semibold text-paper transition-colors hover:bg-berry-deep disabled:cursor-not-allowed disabled:opacity-60"
       >
         {pending ? "Retrying…" : "Retry pending emails"}

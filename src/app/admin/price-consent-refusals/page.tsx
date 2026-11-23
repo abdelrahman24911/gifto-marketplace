@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { Pagination } from "@/components/pagination";
+import { RefreshButton } from "@/components/dashboard/refresh-button";
 import { Breadcrumb, EmptyState } from "@/components/ui/section";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
@@ -167,9 +168,12 @@ export default async function AdminPriceConsentRefusalsPage({
       />
 
       {listResult.error ? (
-        <AdminNotice tone="danger" role="alert">
-          Price-change refusals could not be loaded.
-        </AdminNotice>
+        <div className="mt-4">
+          <AdminNotice tone="danger" role="alert">
+            Price-change refusals could not be loaded.
+          </AdminNotice>
+          <RefreshButton />
+        </div>
       ) : refusals.length === 0 ? (
         <EmptyState title="No refused checkouts yet">
           When checkout refuses an order because a price changed, the

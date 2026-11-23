@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Pagination } from "@/components/pagination";
+import { RefreshButton } from "@/components/dashboard/refresh-button";
 import { Breadcrumb, EmptyState } from "@/components/ui/section";
 import { requirePlatformAdmin } from "@/lib/auth";
 import {
@@ -156,9 +157,12 @@ export default async function AdminLogisticsPage({
         </form>
 
         {listResult.error ? (
-          <p className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-            The logistics list could not be loaded. Try again.
-          </p>
+          <div className="mt-6">
+            <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              The logistics list could not be loaded.
+            </p>
+            <RefreshButton />
+          </div>
         ) : rows.length === 0 ? (
           <div className="mt-6">
             <EmptyState title="No shipped suborders">

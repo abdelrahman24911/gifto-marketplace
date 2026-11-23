@@ -1,4 +1,5 @@
 import { Breadcrumb, EmptyState } from "@/components/ui/section";
+import { RefreshButton } from "@/components/dashboard/refresh-button";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
 import { MAIL_OUTBOX_MAX_REQUEUES, isMailConfigured } from "@/lib/mail";
@@ -71,9 +72,12 @@ export default async function AdminMailOutboxPage() {
       />
 
       {error ? (
-        <AdminNotice tone="danger" role="alert">
-          The mail queue could not be loaded.
-        </AdminNotice>
+        <div className="mt-4">
+          <AdminNotice tone="danger" role="alert">
+            The mail queue could not be loaded.
+          </AdminNotice>
+          <RefreshButton />
+        </div>
       ) : null}
 
       {!mailConfigured ? (
@@ -85,63 +89,68 @@ export default async function AdminMailOutboxPage() {
         </AdminNotice>
       ) : null}
 
-      <div className="mt-4 flex flex-wrap items-center gap-4">
-        <p className="text-sm text-ink-mute">
-          {pending.length} pending · {failed.length} failed (showing latest)
-        </p>
-        <MailOutboxRetryForm />
-      </div>
+      {error ? null : (
+        <>
+          <div className="mt-4 flex flex-wrap items-center gap-4">
+            <p className="text-sm text-ink-mute">
+              {pending.length} pending · {failed.length} failed (showing
+              latest)
+            </p>
+            <MailOutboxRetryForm disabled={!mailConfigured} />
+          </div>
 
-      {pending.length === 0 && failed.length === 0 ? (
-        <EmptyState title="Mail queue is empty">
-          No skipped or failed notification emails are waiting. When a send
-          is skipped or fails, it appears here for retry.
-        </EmptyState>
-      ) : (
-        <ol className="mt-4 flex flex-col gap-2">
-          {[...pending, ...failed].map((row) => (
-            <li
-              key={row.id}
-              className="rounded-xl border border-line bg-paper px-4 py-3 text-sm"
-            >
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <p className="font-medium text-ink">{row.subject}</p>
-                <span
-                  className={`rounded-full border px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-wide ${STATUS_STYLES[row.status] ?? ""}`}
-                >
-                  {row.status}
-                </span>
-              </div>
-              <p className="mt-0.5 text-xs text-ink-mute">
-                To {row.to_email} · {row.kind} · queued{" "}
-                {formatDateTime(row.created_at)}
-                {row.sent_at ? ` · sent ${formatDateTime(row.sent_at)}` : ""}
-                {row.attempts > 0 ? ` · ${row.attempts} attempt(s)` : ""}
-                {row.requeue_count > 0
-                  ? ` · requeued ${row.requeue_count} ${row.requeue_count === 1 ? "time" : "times"}`
-                  : ""}
-              </p>
-              {row.last_error ? (
-                <p className="mt-2 rounded-lg bg-paper-deep px-3 py-2 text-xs text-ink-soft">
-                  Latest failure: {row.last_error}
+          {pending.length === 0 && failed.length === 0 ? (
+            <EmptyState title="Mail queue is empty">
+              No skipped or failed notification emails are waiting. When a
+              send is skipped or fails, it appears here for retry.
+            </EmptyState>
+          ) : (
+            <ol className="mt-4 flex flex-col gap-2">
+              {[...pending, ...failed].map((row) => (
+              <li
+                key={row.id}
+                className="rounded-xl border border-line bg-paper px-4 py-3 text-sm"
+              >
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="font-medium text-ink">{row.subject}</p>
+                  <span
+                    className={`rounded-full border px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-wide ${STATUS_STYLES[row.status] ?? ""}`}
+                  >
+                    {row.status}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-ink-mute">
+                  To {row.to_email} · {row.kind} · queued{" "}
+                  {formatDateTime(row.created_at)}
+                  {row.sent_at ? ` · sent ${formatDateTime(row.sent_at)}` : ""}
+                  {row.attempts > 0 ? ` · ${row.attempts} attempt(s)` : ""}
+                  {row.requeue_count > 0
+                    ? ` · requeued ${row.requeue_count} ${row.requeue_count === 1 ? "time" : "times"}`
+                    : ""}
                 </p>
-              ) : null}
-              {row.first_error &&
-              row.first_error !== row.last_error ? (
-                <p className="mt-2 rounded-lg bg-paper-deep px-3 py-2 text-xs text-ink-soft">
-                  First failure: {row.first_error}
-                </p>
-              ) : null}
-              {row.status === "failed" ? (
-                <MailOutboxRequeueForm
-                  rowId={row.id}
-                  requeueCount={row.requeue_count ?? 0}
-                  maxRequeues={MAIL_OUTBOX_MAX_REQUEUES}
-                />
-              ) : null}
-            </li>
+                {row.last_error ? (
+                  <p className="mt-2 rounded-lg bg-paper-deep px-3 py-2 text-xs text-ink-soft">
+                    Latest failure: {row.last_error}
+                  </p>
+                ) : null}
+                {row.first_error &&
+                row.first_error !== row.last_error ? (
+                  <p className="mt-2 rounded-lg bg-paper-deep px-3 py-2 text-xs text-ink-soft">
+                    First failure: {row.first_error}
+                  </p>
+                ) : null}
+                {row.status === "failed" ? (
+                  <MailOutboxRequeueForm
+                    rowId={row.id}
+                    requeueCount={row.requeue_count ?? 0}
+                    maxRequeues={MAIL_OUTBOX_MAX_REQUEUES}
+                  />
+                ) : null}
+              </li>
           ))}
         </ol>
+      )}
+        </>
       )}
     </div>
   );

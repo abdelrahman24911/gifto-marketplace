@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Pagination } from "@/components/pagination";
+import { RefreshButton } from "@/components/dashboard/refresh-button";
 import { Breadcrumb, EmptyState } from "@/components/ui/section";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
@@ -153,9 +154,9 @@ export default async function AdminReviewsPage({
       {pendingResult.error ? (
         <div className="mt-4">
           <AdminNotice tone="danger" role="alert">
-            The review queue could not be loaded. Refresh the page to try
-            again.
+            The review queue could not be loaded.
           </AdminNotice>
+          <RefreshButton />
         </div>
       ) : null}
 

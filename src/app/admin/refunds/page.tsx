@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Pagination } from "@/components/pagination";
+import { RefreshButton } from "@/components/dashboard/refresh-button";
 import { Breadcrumb, EmptyState } from "@/components/ui/section";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
@@ -410,8 +411,9 @@ export default async function AdminRefundsPage({
         {listResult.error ? (
           <div className="mt-6">
             <AdminNotice tone="danger" role="alert">
-              Refund cases could not be loaded. Refresh the page to try again.
+              Refund cases could not be loaded.
             </AdminNotice>
+            <RefreshButton />
           </div>
         ) : cases.length === 0 ? (
           <div className="mt-6">

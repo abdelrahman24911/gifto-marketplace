@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Pagination } from "@/components/pagination";
+import { RefreshButton } from "@/components/dashboard/refresh-button";
 import {
   BUSINESS_TIME_ZONE,
   startOfBusinessDayOffset,
@@ -245,9 +246,10 @@ export default async function VendorOrdersPage({
       {loadFailed ? (
         <div className="mt-4">
           <VendorNotice tone="danger" role="alert">
-            Orders couldn&apos;t load. Refresh the page or try a different
-            filter.
+            Orders couldn&apos;t load. Try a different filter, or retry the
+            load.
           </VendorNotice>
+          <RefreshButton />
         </div>
       ) : null}
 
@@ -371,7 +373,7 @@ export default async function VendorOrdersPage({
             }
           >
             {loadFailed
-              ? "The order list didn't respond. Refresh the page to try again."
+              ? "The order list didn't respond. Use the Try again button above to reload it."
               : searchFailed
                 ? "Try clearing the search and filtering by status instead."
                 : searchTerm

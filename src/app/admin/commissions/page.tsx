@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Pagination } from "@/components/pagination";
+import { RefreshButton } from "@/components/dashboard/refresh-button";
 import { Breadcrumb, EmptyState } from "@/components/ui/section";
 import { requirePlatformAdmin } from "@/lib/auth";
 import {
@@ -344,9 +345,10 @@ export default async function AdminCommissionsPage({
         <div className="mt-4">
           <AdminNotice tone="warning" role="alert">
             {commissionsResult.failed
-              ? "Commission entries could not be loaded. Refresh the page to try again."
+              ? "Commission entries could not be loaded."
               : "Settlement data could not be read in full, so payout state is unavailable for these entries. Commission amounts and dates remain accurate."}
           </AdminNotice>
+          {commissionsResult.failed ? <RefreshButton /> : null}
         </div>
       ) : null}
 
