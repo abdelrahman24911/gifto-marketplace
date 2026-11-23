@@ -1340,4 +1340,243 @@ begin
   raise notice 'TEST 20 PASSED: gross 800 + adjustments -200 = net 600 reconciles; proof must equal the net';
 end $$;
 
+-- TEST 21 (P1, Batch 1): a paid settlement cannot be paid twice — the
+-- second mark-paid is refused with "already paid" and the paid record
+-- is unchanged. Paid must mean one genuine, verified payout.
+-- ---------------------------------------------------------------------------
+set role authenticated;
+set request.jwt.claim.sub = 'c1110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c1110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_oid uuid;
+begin
+  v_oid := gifto_test.place_order(
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria'
+  );
+  perform set_config('gifto_test.comm_order21_id', v_oid::text, false);
+end $$;
+
+set request.jwt.claim.sub = 'c2110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c2110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_ov uuid;
+begin
+  select id into v_ov
+    from public.order_vendors
+   where order_id = current_setting('gifto_test.comm_order21_id')::uuid
+     and vendor_id = '41100000-0000-0000-0000-000000000001';
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', 'TRK-0021');
+  perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
+end $$;
+
+set request.jwt.claim.sub = 'c3110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c3110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_sid uuid;
+begin
+  v_sid := public.create_settlement('41100000-0000-0000-0000-000000000001');
+  perform set_config('gifto_test.comm_settlement21_id', v_sid::text, false);
+end $$;
+
+do $$
+declare
+  v_sid   uuid := current_setting('gifto_test.comm_settlement21_id')::uuid;
+  v_total int;
+begin
+  select total_minor into v_total from public.settlements where id = v_sid;
+  if v_total is null or v_total <= 0 then
+    raise exception 'TEST 21 FAILED: settlement total % (expected a positive batch)', v_total;
+  end if;
+
+  perform public.mark_settlement_paid(
+    v_sid, v_total, 'bank_transfer', 'COMM-TEST21-001', 'Weekly remittance');
+
+  if not exists (
+    select 1 from public.settlements
+     where id = v_sid
+       and status = 'paid'
+       and total_minor = v_total
+       and paid_amount_minor = v_total
+       and transfer_reference = 'COMM-TEST21-001'
+  ) then
+    raise exception 'TEST 21 FAILED: first payment was not recorded exactly';
+  end if;
+
+  -- The second payment — same amount and reference, or a different one —
+  -- must be refused, and the paid record must not change.
+  begin
+    perform public.mark_settlement_paid(
+      v_sid, v_total, 'bank_transfer', 'COMM-TEST21-001');
+    raise exception 'TEST 21 FAILED: paying an already-paid settlement was accepted';
+  exception when check_violation then
+    if sqlerrm not like '%already paid%' then
+      raise exception 'TEST 21 FAILED: wrong error for double payment: %', sqlerrm;
+    end if;
+  end;
+
+  begin
+    perform public.mark_settlement_paid(
+      v_sid, v_total, 'bank_transfer', 'COMM-TEST21-002');
+    raise exception 'TEST 21 FAILED: paying an already-paid settlement with a new reference was accepted';
+  exception when check_violation then
+    if sqlerrm not like '%already paid%' then
+      raise exception 'TEST 21 FAILED: wrong error for double payment with a new reference: %', sqlerrm;
+    end if;
+  end;
+
+  if not exists (
+    select 1 from public.settlements
+     where id = v_sid
+       and status = 'paid'
+       and total_minor = v_total
+       and paid_amount_minor = v_total
+       and transfer_reference = 'COMM-TEST21-001'
+  ) then
+    raise exception 'TEST 21 FAILED: refused second payment changed the paid record';
+  end if;
+
+  if (select count(*) from public.settlements
+       where vendor_id = '41100000-0000-0000-0000-000000000001'
+         and status = 'paid'
+         and id = v_sid) <> 1 then
+    raise exception 'TEST 21 FAILED: paid settlement count is wrong after the refused second payment';
+  end if;
+
+  raise notice 'TEST 21 PASSED: a paid settlement refuses a second payment; the paid record is unchanged';
+end $$;
+
+-- TEST 22 (P1, Batch 1): voiding a settlement releases its lines, and a
+-- fresh create_settlement re-batches exactly those commissions — a void
+-- is not a loss of the underlying earned commission.
+-- ---------------------------------------------------------------------------
+set role authenticated;
+set request.jwt.claim.sub = 'c1110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c1110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_oid uuid;
+begin
+  v_oid := gifto_test.place_order(
+    '[{"product_id":"51100000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Sara Buyer', '01001112233', '12 Main Street', 'Alexandria', 'Alexandria'
+  );
+  perform set_config('gifto_test.comm_order22_id', v_oid::text, false);
+end $$;
+
+set request.jwt.claim.sub = 'c2110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c2110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_ov uuid;
+begin
+  select id into v_ov
+    from public.order_vendors
+   where order_id = current_setting('gifto_test.comm_order22_id')::uuid
+     and vendor_id = '41100000-0000-0000-0000-000000000001';
+  perform public.set_order_vendor_status(v_ov, 'confirmed', 'placed');
+  perform public.set_order_vendor_status(v_ov, 'shipped', 'confirmed', null, null, 'Test Courier', 'TRK-0022');
+  perform public.set_order_vendor_status(v_ov, 'delivered', 'shipped');
+end $$;
+
+set request.jwt.claim.sub = 'c3110000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"c3110000-0000-0000-0000-000000000001"}';
+do $$
+declare v_sid uuid;
+begin
+  v_sid := public.create_settlement('41100000-0000-0000-0000-000000000001');
+  perform set_config('gifto_test.comm_settlement22_id', v_sid::text, false);
+end $$;
+
+do $$
+declare
+  v_sid1  uuid := current_setting('gifto_test.comm_settlement22_id')::uuid;
+  v_sid2  uuid;
+  v_total int;
+  v_lines int;
+begin
+  select total_minor into v_total from public.settlements where id = v_sid1;
+  select count(*) into v_lines
+    from public.settlement_lines where settlement_id = v_sid1;
+  if v_total is null or v_total <= 0 or v_lines = 0 then
+    raise exception 'TEST 22 FAILED: first batch total % lines % (expected a positive batch)', v_total, v_lines;
+  end if;
+
+  perform public.void_settlement(v_sid1, 'TEST-22 void for re-batch');
+
+  if not exists (
+    select 1 from public.settlements
+     where id = v_sid1
+       and status = 'voided'
+       and total_minor = v_total
+       and void_reason = 'TEST-22 void for re-batch'
+  ) then
+    raise exception 'TEST 22 FAILED: void did not preserve the batch as voided history';
+  end if;
+
+  if exists (
+    select 1 from public.settlement_lines
+     where settlement_id = v_sid1
+       and (released_at is null or release_reason is null)
+  ) then
+    raise exception 'TEST 22 FAILED: void did not release every line';
+  end if;
+
+  -- The released commissions are earned and unbatched again.
+  if exists (
+    select 1
+      from public.settlement_lines l
+      join public.commission_entries ce on ce.id = l.commission_entry_id
+     where l.settlement_id = v_sid1
+       and ce.status <> 'earned'
+  ) then
+    raise exception 'TEST 22 FAILED: a voided line''s commission is no longer earned';
+  end if;
+
+  v_sid2 := public.create_settlement('41100000-0000-0000-0000-000000000001');
+  perform set_config('gifto_test.comm_settlement22b_id', v_sid2::text, false);
+
+  if v_sid2 = v_sid1 then
+    raise exception 'TEST 22 FAILED: re-batch returned the voided settlement id';
+  end if;
+
+  if not exists (
+    select 1 from public.settlements
+     where id = v_sid2
+       and status = 'open'
+       and total_minor = v_total
+  ) then
+    raise exception 'TEST 22 FAILED: re-batch total does not match the voided batch total %', v_total;
+  end if;
+
+  -- The re-batch contains exactly the voided batch's commissions, as
+  -- fresh unreleased lines; the old lines stay released with their reason.
+  if (select count(*) from public.settlement_lines where settlement_id = v_sid2) <> v_lines then
+    raise exception 'TEST 22 FAILED: re-batch line count does not match the voided batch';
+  end if;
+
+  if exists (
+    select 1
+      from public.settlement_lines l1
+     where l1.settlement_id = v_sid1
+       and not exists (
+         select 1 from public.settlement_lines l2
+          where l2.settlement_id = v_sid2
+            and l2.commission_entry_id = l1.commission_entry_id
+            and l2.released_at is null
+       )
+  ) then
+    raise exception 'TEST 22 FAILED: a voided commission was not re-batched';
+  end if;
+
+  if exists (
+    select 1 from public.settlement_lines
+     where settlement_id = v_sid1
+       and (released_at is null or release_reason <> 'TEST-22 void for re-batch')
+  ) then
+    raise exception 'TEST 22 FAILED: the voided batch''s released lines changed during re-batch';
+  end if;
+
+  raise notice 'TEST 22 PASSED: void releases lines and the next batch re-batches the same commissions with the same total';
+end $$;
+
 rollback;
