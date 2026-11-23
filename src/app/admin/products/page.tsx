@@ -2,11 +2,18 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Pagination } from "@/components/pagination";
+import { RefreshButton } from "@/components/dashboard/refresh-button";
+import { ProductImage } from "@/components/product-image";
 import { Breadcrumb, EmptyState } from "@/components/ui/section";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { formatEgp } from "@/lib/money";
+import {
+  PRODUCT_SORTS,
+  parseProductSort,
+  productSortLabel,
+} from "@/lib/product-sort";
 import {
   DEFAULT_PAGE_SIZE,
   clampPage,
@@ -21,6 +28,7 @@ import {
   AdminStatStrip,
 } from "../ui";
 
+import type { ProductSort } from "@/lib/product-sort";
 import type { ProductStatus } from "@/lib/supabase/database.types";
 
 export const metadata = { title: "Products — Admin — Gifto" };
@@ -35,6 +43,9 @@ type ProductRow = {
   created_at: string;
   vendor: { name: string; slug: string } | null;
   category: { name: string; slug: string } | null;
+  product_images:
+    | { path: string; alt: string | null; position: number }[]
+    | null;
 };
 
 type VendorOption = {
@@ -68,16 +79,19 @@ function productsHref({
   status,
   shop,
   page = 1,
+  sort = "newest",
 }: {
   query: string;
   status: ProductStatus | "all";
   shop: string;
   page?: number;
+  sort?: ProductSort;
 }) {
   const params = new URLSearchParams();
   if (query) params.set("q", query);
   if (status !== "all") params.set("status", status);
   if (shop) params.set("shop", shop);
+  if (sort !== "newest") params.set("sort", sort);
   if (page > 1) params.set("page", String(page));
   const search = params.toString();
   return search ? `/admin/products?${search}` : "/admin/products";
@@ -91,6 +105,7 @@ export default async function AdminProductsPage({
     status?: string;
     shop?: string;
     page?: string;
+    sort?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -107,19 +122,43 @@ export default async function AdminProductsPage({
   const statusFilter = isProductStatus(params.status) ? params.status : "all";
   const shopFilter =
     params.shop && UUID_PATTERN.test(params.shop) ? params.shop : "";
+  const sort = parseProductSort(params.sort);
   const requestedPage = parsePage(params.page);
   const range = pageWindow(requestedPage);
 
   let listQuery = supabase
     .from("products")
     .select(
-      "id, name, slug, status, stock, price_minor, created_at, vendor:vendors(name, slug), category:categories(name, slug)",
+      "id, name, slug, status, stock, price_minor, created_at, vendor:vendors(name, slug), category:categories(name, slug), product_images(path, alt, position)",
       { count: "exact" },
     );
 
   if (query) listQuery = listQuery.ilike("name", `%${query}%`);
   if (statusFilter !== "all") listQuery = listQuery.eq("status", statusFilter);
   if (shopFilter) listQuery = listQuery.eq("vendor_id", shopFilter);
+
+  if (sort === "name") {
+    listQuery = listQuery
+      .order("name", { ascending: true })
+      .order("id", { ascending: true });
+  } else if (sort === "price-asc") {
+    listQuery = listQuery
+      .order("price_minor", { ascending: true })
+      .order("id", { ascending: true });
+  } else if (sort === "price-desc") {
+    listQuery = listQuery
+      .order("price_minor", { ascending: false })
+      .order("id", { ascending: true });
+  } else if (sort === "stock") {
+    listQuery = listQuery
+      .order("stock", { ascending: true })
+      .order("name", { ascending: true })
+      .order("id", { ascending: true });
+  } else {
+    listQuery = listQuery
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false });
+  }
 
   const [
     listResult,
@@ -129,11 +168,7 @@ export default async function AdminProductsPage({
     lowStockResult,
     outOfStockResult,
   ] = await Promise.all([
-    listQuery
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false })
-      .range(range.from, range.to)
-      .returns<ProductRow[]>(),
+    listQuery.range(range.from, range.to).returns<ProductRow[]>(),
     fetchAllRows<VendorOption>((from, to) =>
       supabase
         .from("vendors")
@@ -170,6 +205,7 @@ export default async function AdminProductsPage({
         status: statusFilter,
         shop: shopFilter,
         page: currentPage,
+        sort,
       }),
     );
   }
@@ -249,6 +285,7 @@ export default async function AdminProductsPage({
                 query,
                 status: "all",
                 shop: shopFilter,
+                sort,
               })}
               active={statusFilter === "all"}
             >
@@ -257,7 +294,7 @@ export default async function AdminProductsPage({
             {PRODUCT_STATUSES.map((status) => (
               <AdminFilterPill
                 key={status}
-                href={productsHref({ query, status, shop: shopFilter })}
+                href={productsHref({ query, status, shop: shopFilter, sort })}
                 active={statusFilter === status}
               >
                 {PRODUCT_STATUS_LABELS[status]}
@@ -303,6 +340,22 @@ export default async function AdminProductsPage({
                 ))}
               </select>
             </label>
+            <label className="min-w-48">
+              <span className="mb-1 block text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-ink-mute">
+                Sort by
+              </span>
+              <select
+                name="sort"
+                defaultValue={sort}
+                className="w-full rounded-full border border-line-strong bg-paper-soft px-4 py-2 text-sm text-ink focus:border-berry focus:outline-none focus:ring-2 focus:ring-berry/15"
+              >
+                {PRODUCT_SORTS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button
               type="submit"
               className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-paper transition-colors hover:bg-wine-deep"
@@ -325,6 +378,7 @@ export default async function AdminProductsPage({
             {total.toLocaleString("en-US")}{" "}
             {total === 1 ? "product" : "products"}
             {filtersActive ? " match these filters" : " in the marketplace"}
+            {` · Sorted: ${productSortLabel(sort)}`}
           </p>
           <p className="text-xs text-ink-mute">
             Showing page {currentPage} of{" "}
@@ -335,8 +389,9 @@ export default async function AdminProductsPage({
         {listResult.error ? (
           <div className="mt-4">
             <AdminNotice tone="danger" role="alert">
-              Products could not be loaded. Refresh the page to try again.
+              Products could not be loaded.
             </AdminNotice>
+            <RefreshButton />
           </div>
         ) : products.length === 0 ? (
           <div className="mt-6">
@@ -358,6 +413,9 @@ export default async function AdminProductsPage({
         ) : (
           <ul className="mt-4 overflow-hidden rounded-2xl border border-line bg-paper-soft">
             {products.map((product) => {
+              const images = [...(product.product_images ?? [])].sort(
+                (a, b) => a.position - b.position,
+              );
               const lowStock =
                 product.status === "active" && product.stock <= 5;
               const outOfStock =
@@ -368,7 +426,15 @@ export default async function AdminProductsPage({
                   key={product.id}
                   className="grid gap-4 border-b border-line px-5 py-4 last:border-b-0 lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)_auto] lg:items-center"
                 >
-                  <div className="min-w-0">
+                  <div className="flex min-w-0 gap-3">
+                    <ProductImage
+                      path={images[0]?.path ?? null}
+                      alt={images[0]?.alt ?? product.name}
+                      name={product.name}
+                      className="h-16 w-16 shrink-0"
+                      sizes="64px"
+                    />
+                    <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="break-words text-base font-medium text-ink">
                         {product.name}
@@ -412,6 +478,7 @@ export default async function AdminProductsPage({
                         </span>
                       </span>
                     </div>
+                    </div>
                   </div>
 
                   <div className="text-left lg:text-right">
@@ -449,6 +516,7 @@ export default async function AdminProductsPage({
               status: statusFilter,
               shop: shopFilter,
               page,
+              sort,
             })
           }
         />
