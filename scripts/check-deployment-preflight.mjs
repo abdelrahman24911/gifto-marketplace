@@ -120,6 +120,96 @@ if (supabaseUrlValue) {
   }
 }
 
+async function checkBucket(bucketName, requiredTypes, headers) {
+  const typeList = requiredTypes.join(", ");
+  try {
+    const bucket = await request(
+      `${supabaseUrl}/storage/v1/bucket/${bucketName}`,
+      { headers },
+    );
+    if (!bucket.response.ok || !bucket.text) {
+      record(
+        "fail",
+        `${bucketName} bucket`,
+        `Bucket metadata is missing or inaccessible (${bucket.response.status}): ${safeError(bucket.text)}`,
+      );
+      return;
+    }
+
+    let metadata;
+    try {
+      metadata = JSON.parse(bucket.text);
+    } catch {
+      record("fail", `${bucketName} bucket`, "Bucket metadata was not JSON.");
+      return;
+    }
+
+    if (metadata.public !== true) {
+      record(
+        "fail",
+        `${bucketName} bucket`,
+        "Bucket is not public; stored images will not render.",
+      );
+    } else {
+      record("ok", `${bucketName} bucket`, "Bucket is public.");
+    }
+
+    if (typeof metadata.file_size_limit === "number") {
+      if (metadata.file_size_limit < appImageLimitBytes) {
+        record(
+          "fail",
+          `${bucketName} bucket`,
+          `Bucket limit ${metadata.file_size_limit} B is below the app limit ${appImageLimitBytes} B.`,
+        );
+      } else {
+        record(
+          "ok",
+          `${bucketName} bucket size`,
+          `Upload limit ${metadata.file_size_limit} B covers the app limit.`,
+        );
+      }
+    } else {
+      record(
+        "warn",
+        `${bucketName} bucket size`,
+        "Bucket has no explicit file_size_limit; verify the app-level 5 MB check is enough for your Storage plan.",
+      );
+    }
+
+    const allowed = Array.isArray(metadata.allowed_mime_types)
+      ? metadata.allowed_mime_types
+      : null;
+    if (allowed) {
+      const missing = requiredTypes.filter((type) => !allowed.includes(type));
+      if (missing.length > 0) {
+        record(
+          "fail",
+          `${bucketName} bucket MIME types`,
+          `Bucket rejects required types: ${missing.join(", ")}.`,
+        );
+      } else {
+        record(
+          "ok",
+          `${bucketName} bucket MIME types`,
+          `${typeList} are allowed.`,
+        );
+      }
+    } else {
+      record(
+        "warn",
+        `${bucketName} bucket MIME types`,
+        "Bucket has no explicit allowed_mime_types; the app still validates images.",
+      );
+    }
+  } catch (error) {
+    record(
+      "fail",
+      `${bucketName} bucket`,
+      `Request failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
 if (supabaseUrl && serviceRoleKey) {
   record("ok", "environment", `Supabase target ${new URL(supabaseUrl).host}.`);
 
@@ -225,94 +315,21 @@ if (supabaseUrl && serviceRoleKey) {
     );
   }
 
-  try {
-    const bucket = await request(
-      `${supabaseUrl}/storage/v1/bucket/occasion-images`,
-      { headers },
-    );
-    if (!bucket.response.ok || !bucket.text) {
-      record(
-        "fail",
-        "occasion-images bucket",
-        `Bucket metadata is missing or inaccessible (${bucket.response.status}): ${safeError(bucket.text)}`,
-      );
-    } else {
-      let metadata;
-      try {
-        metadata = JSON.parse(bucket.text);
-      } catch {
-        record("fail", "occasion-images bucket", "Bucket metadata was not JSON.");
-      }
-
-      if (metadata) {
-        if (metadata.public !== true) {
-          record(
-            "fail",
-            "occasion-images bucket",
-            "Bucket is not public; stored occasion images will not render.",
-          );
-        } else {
-          record("ok", "occasion-images bucket", "Bucket is public.");
-        }
-
-        if (typeof metadata.file_size_limit === "number") {
-          if (metadata.file_size_limit < appImageLimitBytes) {
-            record(
-              "fail",
-              "occasion-images bucket",
-              `Bucket limit ${metadata.file_size_limit} B is below the app limit ${appImageLimitBytes} B.`,
-            );
-          } else {
-            record(
-              "ok",
-              "occasion-images bucket size",
-              `Upload limit ${metadata.file_size_limit} B covers the app limit.`,
-            );
-          }
-        } else {
-          record(
-            "warn",
-            "occasion-images bucket size",
-            "Bucket has no explicit file_size_limit; verify the app-level 5 MB check is enough for your Storage plan.",
-          );
-        }
-
-        const allowed = Array.isArray(metadata.allowed_mime_types)
-          ? metadata.allowed_mime_types
-          : null;
-        if (allowed) {
-          const missing = requiredMimeTypes.filter(
-            (type) => !allowed.includes(type),
-          );
-          if (missing.length > 0) {
-            record(
-              "fail",
-              "occasion-images bucket MIME types",
-              `Bucket rejects required types: ${missing.join(", ")}.`,
-            );
-          } else {
-            record(
-              "ok",
-              "occasion-images bucket MIME types",
-              "JPEG, PNG and WebP are allowed.",
-            );
-          }
-        } else {
-          record(
-            "warn",
-            "occasion-images bucket MIME types",
-            "Bucket has no explicit allowed_mime_types; the app still validates images.",
-          );
-        }
-      }
-    }
-  } catch (error) {
-    record(
-      "fail",
-      "occasion-images bucket",
-      `Request failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
+  // All three image buckets must exist with the app's limits: occasion
+  // images allow JPEG/PNG/WebP, product images and vendor media also AVIF
+  // (migrations 09/21/26). A missing or misconfigured bucket fails the
+  // deploy gate — the app cannot render or accept images without it.
+  await checkBucket("occasion-images", requiredMimeTypes, headers);
+  await checkBucket(
+    "product-images",
+    [...requiredMimeTypes, "image/avif"],
+    headers,
+  );
+  await checkBucket(
+    "vendor-media",
+    [...requiredMimeTypes, "image/avif"],
+    headers,
+  );
 
   record(
     "warn",
