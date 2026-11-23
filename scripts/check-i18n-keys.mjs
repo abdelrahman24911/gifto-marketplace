@@ -3,15 +3,55 @@
 //   const t = useTranslations("order") / const t = await getTranslations("order")
 // next-intl keys are NOT type-checked (no IntlMessages declaration), so this
 // is the only guard against silent missing-key fallbacks at runtime.
+//
+// It also requires both locale files to exist and to expose the same key set.
+// A missing messages/ar.json used to pass silently because only en.json was
+// read; a missing file is now a hard failure, not a skipped check.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const messages = JSON.parse(readFileSync("messages/en.json", "utf8"));
 const flat = (o, p = "") =>
   Object.entries(o).flatMap(([k, v]) =>
     typeof v === "object" ? flat(v, `${p}${k}.`) : [`${p}${k}`],
   );
+
+function loadLocale(locale) {
+  const path = `messages/${locale}.json`;
+  let raw;
+  try {
+    raw = readFileSync(path, "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      console.log(`MISSING LOCALE FILE: ${path}`);
+    } else {
+      console.log(`UNREADABLE LOCALE FILE: ${path}: ${error?.message ?? error}`);
+    }
+    process.exit(1);
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    console.log(`INVALID LOCALE JSON: ${path}: ${error?.message ?? error}`);
+    process.exit(1);
+  }
+}
+
+const messages = loadLocale("en");
 const known = new Set(flat(messages));
+const arKnown = new Set(flat(loadLocale("ar")));
+
+const missingInAr = [...known].filter((key) => !arKnown.has(key));
+const extraInAr = [...arKnown].filter((key) => !known.has(key));
+if (missingInAr.length || extraInAr.length) {
+  console.log("LOCALE KEY MISMATCH (messages/en.json vs messages/ar.json):");
+  if (missingInAr.length) {
+    console.log("MISSING IN messages/ar.json:\n" + missingInAr.join("\n"));
+  }
+  if (extraInAr.length) {
+    console.log("ONLY IN messages/ar.json:\n" + extraInAr.join("\n"));
+  }
+  process.exit(1);
+}
 
 const files = [];
 (function walk(d) {
@@ -48,4 +88,7 @@ if (missing.length) {
   console.log("MISSING/WRONG-NAMESPACE KEYS:\n" + missing.join("\n"));
   process.exit(1);
 }
-console.log(`OK — ${usedCount} translator calls, all keys present in messages/en.json`);
+console.log(
+  `OK — ${usedCount} translator calls, all keys present in messages/en.json; ` +
+    `messages/en.json and messages/ar.json share ${known.size} keys`,
+);

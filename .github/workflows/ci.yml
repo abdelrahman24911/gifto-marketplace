@@ -37,7 +37,8 @@ jobs:
       # R-06: the i18n key guard is the only protection against silent
       # missing-key fallbacks (next-intl keys are not type-checked), so it
       # runs in CI, not just locally. It checks every t()/t.rich() call in
-      # src/ against messages/en.json.
+      # src/ against messages/en.json and requires messages/ar.json to exist
+      # with the same key set.
       - run: npm run check:i18n
       - run: npm run test
       - run: npm run build
