@@ -21,6 +21,7 @@
 import crypto from "node:crypto";
 import zlib from "node:zlib";
 import { createClient } from "@supabase/supabase-js";
+import { assertDemoTarget, demoTargetFromEnv } from "./demo-target-guard.mjs";
 
 // ---------------------------------------------------------------------------
 // Environment
@@ -36,6 +37,16 @@ const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!url || !serviceKey) {
   console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env.local");
+  process.exit(1);
+}
+
+// P5 demo separation: refuse unless the target is a demo environment
+// (and never the production project without an explicit opt-in). This
+// is the fail-closed gate — see scripts/demo-target-guard.mjs.
+try {
+  assertDemoTarget(demoTargetFromEnv());
+} catch (error) {
+  console.error(`Refusing to run against this target: ${error.message}`);
   process.exit(1);
 }
 
