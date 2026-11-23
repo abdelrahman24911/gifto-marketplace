@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Pagination } from "@/components/pagination";
+import { RefreshButton } from "@/components/dashboard/refresh-button";
 import {
   BUSINESS_TIME_ZONE,
   startOfBusinessDayOffset,
@@ -269,8 +270,6 @@ export default async function VendorFinancePage({
     entries.filter((entry) => entry.status === "earned"),
   );
 
-  const loadError =
-    entriesResult.failed || settlementsResult.failed || ledger.error;
   const totalsIncomplete =
     entriesResult.truncated || settlementsResult.truncated;
 
@@ -321,22 +320,23 @@ export default async function VendorFinancePage({
           </>
         }
         actions={
-          <Link
-            href={`/vendor/analytics?vendor=${access.vendorId}`}
-            className="rounded-full border border-line-strong bg-paper px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-berry/40 hover:bg-berry-soft"
-          >
-            Revenue analytics
-          </Link>
+          <>
+            <a
+              href={`/vendor/finance/export?vendor=${access.vendorId}&range=${range}`}
+              download
+              className="rounded-full border border-line-strong bg-paper px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-berry/40 hover:bg-berry-soft"
+            >
+              Download ledger (CSV)
+            </a>
+            <Link
+              href={`/vendor/analytics?vendor=${access.vendorId}`}
+              className="rounded-full border border-line-strong bg-paper px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-berry/40 hover:bg-berry-soft"
+            >
+              Revenue analytics
+            </Link>
+          </>
         }
       />
-
-      {loadError ? (
-        <div className="mt-4">
-          <VendorNotice tone="danger" role="alert">
-            Finance data could not be loaded. Refresh the page to try again.
-          </VendorNotice>
-        </div>
-      ) : null}
 
       {totalsIncomplete ? (
         <div className="mt-4">
@@ -349,31 +349,46 @@ export default async function VendorFinancePage({
       ) : null}
 
       <section className="mt-6">
-        <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {cards.map((card) => (
-            <div
-              key={card.state}
-              className={`rounded-2xl border px-4 py-4 ${card.className}`}
-            >
-              <dt className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-ink-mute">
-                {card.label}
-              </dt>
-              <dd className="mt-1 font-display text-2xl leading-tight tabular-nums text-ink">
-                {formatEgp(card.totals.commissionMinor)}
-              </dd>
-              <p className="mt-1 text-xs leading-relaxed text-ink-soft">
-                {card.totals.count}{" "}
-                {card.totals.count === 1 ? "suborder" : "suborders"} ·{" "}
-                {formatEgp(card.totals.netMinor)} shop net
-              </p>
-            </div>
-          ))}
-        </dl>
-        <p className="mt-3 text-xs text-ink-mute">
-          Earned lifetime: {formatEgp(earnedLifetime.commissionMinor)}{" "}
-          commission on {formatEgp(earnedLifetime.grossMinor)} delivered gross.
-          Reversed commission is excluded from current balances.
-        </p>
+        {entriesResult.failed ? (
+          <div>
+            <VendorNotice tone="danger" role="alert">
+              Commission balances could not be loaded.
+            </VendorNotice>
+            <RefreshButton />
+          </div>
+        ) : (
+          <>
+            <p className="text-xs text-ink-mute">
+              Current balances — all time, not limited to the date range
+              below. The ledger underneath follows the selected range.
+            </p>
+            <dl className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {cards.map((card) => (
+                <div
+                  key={card.state}
+                  className={`rounded-2xl border px-4 py-4 ${card.className}`}
+                >
+                  <dt className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-ink-mute">
+                    {card.label}
+                  </dt>
+                  <dd className="mt-1 font-display text-2xl leading-tight tabular-nums text-ink">
+                    {formatEgp(card.totals.commissionMinor)}
+                  </dd>
+                  <p className="mt-1 text-xs leading-relaxed text-ink-soft">
+                    {card.totals.count}{" "}
+                    {card.totals.count === 1 ? "suborder" : "suborders"} ·{" "}
+                    {formatEgp(card.totals.netMinor)} shop net
+                  </p>
+                </div>
+              ))}
+            </dl>
+            <p className="mt-3 text-xs text-ink-mute">
+              Earned lifetime: {formatEgp(earnedLifetime.commissionMinor)}{" "}
+              commission on {formatEgp(earnedLifetime.grossMinor)} delivered
+              gross. Reversed commission is excluded from current balances.
+            </p>
+          </>
+        )}
       </section>
 
       <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-b border-line">
@@ -421,9 +436,16 @@ export default async function VendorFinancePage({
         <section className="mt-6">
           <VendorSectionHeading
             title="Settlement history"
-            description="Voided batches stay visible with their original lines and total. Their commission becomes available to settle again. Open a batch to reconcile it against the numbers Gifto recorded."
+            description="All settlements, all time. Voided batches stay visible with their original lines and total. Their commission becomes available to settle again. Open a batch to reconcile it against the numbers Gifto recorded."
           />
-          {settlements.length === 0 ? (
+          {settlementsResult.failed ? (
+            <div className="mt-4">
+              <VendorNotice tone="danger" role="alert">
+                Settlement history could not be loaded.
+              </VendorNotice>
+              <RefreshButton />
+            </div>
+          ) : settlements.length === 0 ? (
             <div className="mt-4">
               <VendorEmpty title="No settlements yet">
                 Gifto opens settlement batches from earned commission. They
@@ -637,7 +659,14 @@ export default async function VendorFinancePage({
             </ul>
           )}
 
-          {clawbacks.length > 0 ? (
+          {clawbacksResult.error ? (
+            <section className="mt-8">
+              <VendorNotice tone="warning" role="status">
+                Paid-return clawbacks could not be loaded. The settlement
+                list above is unaffected.
+              </VendorNotice>
+            </section>
+          ) : clawbacks.length > 0 ? (
             <section className="mt-8">
               <VendorSectionHeading
                 title="Paid-return clawbacks"
@@ -694,10 +723,17 @@ export default async function VendorFinancePage({
         <section className="mt-6">
           <VendorSectionHeading
             title="Commission ledger"
-            description="Commission is recorded when a suborder is delivered. The rate is the one stored when the customer placed the order."
+            description={`Commission is recorded when a suborder is delivered. The rate is the one stored when the customer placed the order. Showing ${range === "all" ? "all time" : `the last ${rangeOption.label.toLowerCase()}`}.`}
           />
 
-          {ledgerRows.length === 0 ? (
+          {ledger.error ? (
+            <div className="mt-4">
+              <VendorNotice tone="danger" role="alert">
+                The commission ledger could not be loaded.
+              </VendorNotice>
+              <RefreshButton />
+            </div>
+          ) : ledgerRows.length === 0 ? (
             <div className="mt-4">
               <VendorEmpty
                 title={
@@ -722,8 +758,9 @@ export default async function VendorFinancePage({
               </VendorEmpty>
             </div>
           ) : (
-            <ul className="mt-4 flex flex-col divide-y divide-line overflow-hidden rounded-2xl border border-line bg-paper-soft">
-              {ledgerRows.map((entry) => {
+            <>
+              <ul className="mt-4 flex flex-col divide-y divide-line overflow-hidden rounded-2xl border border-line bg-paper-soft">
+                {ledgerRows.map((entry) => {
                 const state = getEntryFinanceState(entry, lookup);
                 const settlement = settlementByEntry.get(entry.id);
                 const suborder = Array.isArray(entry.order_vendor)
@@ -774,17 +811,18 @@ export default async function VendorFinancePage({
                   </li>
                 );
               })}
-            </ul>
+              </ul>
+              <Pagination
+                page={currentPage}
+                total={ledgerTotal}
+                pageSize={DEFAULT_PAGE_SIZE}
+                label="Commission ledger pages"
+                buildHref={(page) =>
+                  financeHref(access.vendorId, view, range, page)
+                }
+              />
+            </>
           )}
-          <Pagination
-            page={currentPage}
-            total={ledgerTotal}
-            pageSize={DEFAULT_PAGE_SIZE}
-            label="Commission ledger pages"
-            buildHref={(page) =>
-              financeHref(access.vendorId, view, range, page)
-            }
-          />
         </section>
       )}
     </div>

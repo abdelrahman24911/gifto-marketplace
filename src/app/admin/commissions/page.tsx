@@ -222,6 +222,13 @@ export default async function AdminCommissionsPage({
   const range = pageWindow(currentPage);
   const visible = filtered.slice(range.from, range.to + 1);
   const filtersActive = filter !== "all" || Boolean(shopFilter);
+  const exportHref = (() => {
+    const params = new URLSearchParams();
+    if (filter !== "all") params.set("state", filter);
+    if (shopFilter) params.set("shop", shopFilter);
+    const search = params.toString();
+    return search ? `/admin/commissions/export?${search}` : "/admin/commissions/export";
+  })();
   const earned = totalsForEntries(
     entries.filter((entry) => entry.status === "earned"),
   );
@@ -289,9 +296,18 @@ export default async function AdminCommissionsPage({
           title="Commissions"
           description="Every commission is snapshotted when a suborder is delivered. Reversed entries are kept for the audit trail; settlement and payout state comes from the finance ledger."
           actions={
-            <AdminActionLink href="/admin/settlements">
-              Open settlements
-            </AdminActionLink>
+            <>
+              <a
+                href={exportHref}
+                download
+                className="inline-flex items-center gap-2 rounded-full border border-line-strong bg-paper px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-berry/40 hover:bg-berry-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
+              >
+                Download CSV
+              </a>
+              <AdminActionLink href="/admin/settlements">
+                Open settlements
+              </AdminActionLink>
+            </>
           }
         />
       </div>
