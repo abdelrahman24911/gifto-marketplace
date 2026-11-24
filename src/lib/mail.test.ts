@@ -26,6 +26,7 @@ import {
   enqueueMailOutbox,
   getMailConfig,
   guestOrderRecoveryEmail,
+  orderPlacedAdminEmail,
   orderPlacedCustomerEmail,
   orderPlacedVendorEmail,
   orderStatusEmail,
@@ -35,6 +36,8 @@ import {
   refundCaseResolvedEmail,
   requeueMailOutbox,
   sendMail,
+  type OrderMailDetails,
+  type OrderMailVendor,
   vendorStaffInviteEmail,
   vendorStaffPendingInviteEmail,
 } from "./mail";
@@ -205,31 +208,112 @@ describe("customerOrderUrl", () => {
   });
 });
 
+const sampleVendor: OrderMailVendor = {
+  id: "suborder-1",
+  vendorId: "vendor-1",
+  vendorName: "Flower Shop",
+  dashboardUrl:
+    "https://gifto.example/vendor/orders/suborder-1?vendor=vendor-1",
+  subtotalMinor: 50000,
+  deliveryFeeMinor: 2000,
+  items: [
+    {
+      name: "Roses",
+      quantity: 2,
+      unitPriceMinor: 25000,
+      lineTotalMinor: 50000,
+    },
+  ],
+};
+
+function sampleOrderDetails(
+  overrides: Partial<OrderMailDetails> = {},
+): OrderMailDetails {
+  return {
+    reference: "GFT-ABCDEF123456",
+    orderUrl: "https://gifto.example/orders/123",
+    adminUrl: "https://gifto.example/admin/orders/order-1",
+    subtotalMinor: 50000,
+    deliveryFeeMinor: 2000,
+    totalMinor: 52000,
+    recipientName: "Mona",
+    contactPhone: "01000000000",
+    contactEmail: "mona@example.com",
+    addressLine: "12 Nile Street",
+    city: "Alexandria",
+    governorate: "Alexandria",
+    notes: "Call before delivery",
+    giftWrap: true,
+    giftMessage: "Happy birthday",
+    preferredDeliveryDate: "2026-12-01",
+    deliveryTimeNote: "After 5pm",
+    vendors: [sampleVendor],
+    ...overrides,
+  };
+}
+
 describe("mail templates", () => {
-  it("formats the customer order email in EGP and includes the order link", () => {
-    const message = orderPlacedCustomerEmail({
-      reference: "GFT-ABCDEF123456",
-      totalMinor: 17500,
-      orderUrl: "https://gifto.example/orders/123",
-    });
+  it("formats the customer order email with items and delivery details", () => {
+    const message = orderPlacedCustomerEmail(sampleOrderDetails());
     expect(message.subject).toContain("GFT-ABCDEF123456");
-    expect(message.text).toContain("EGP 175.00");
+    expect(message.text).toContain("Roses x 2 - EGP 500.00");
+    expect(message.text).toContain("EGP 520.00");
     expect(message.text).toContain("https://gifto.example/orders/123");
+    expect(message.text).toContain("12 Nile Street");
+    expect(message.text).toContain("Happy birthday");
     expect(message.text).toContain("cash on delivery");
   });
 
-  it("formats the vendor order email with the shop subtotal", () => {
-    const message = orderPlacedVendorEmail({
-      vendorName: "Flower Shop",
-      reference: "GFT-ABCDEF123456",
-      subtotalMinor: 25000,
-      itemCount: 2,
-      recipientName: "Mona",
-      contactPhone: "01000000000",
-    });
+  it("formats the vendor order email with only that shop's details", () => {
+    const message = orderPlacedVendorEmail(
+      sampleOrderDetails(),
+      sampleVendor,
+    );
     expect(message.subject).toContain("Flower Shop");
-    expect(message.text).toContain("EGP 250.00");
-    expect(message.text).toContain("2 items");
+    expect(message.text).toContain("Roses x 2 - EGP 500.00");
+    expect(message.text).toContain("Shop subtotal: EGP 500.00");
+    expect(message.text).toContain("12 Nile Street");
+    expect(message.text).toContain(
+      "https://gifto.example/vendor/orders/suborder-1?vendor=vendor-1",
+    );
+  });
+
+  it("formats the admin order email with customer and shop details", () => {
+    const message = orderPlacedAdminEmail(sampleOrderDetails());
+    expect(message.subject).toContain("New Gifto order");
+    expect(message.text).toContain("Mona");
+    expect(message.text).toContain("Roses x 2 - EGP 500.00");
+    expect(message.text).toContain("EGP 520.00");
+    expect(message.text).toContain(
+      "https://gifto.example/admin/orders/order-1",
+    );
+  });
+
+  it("does not leak another shop's items into a vendor email", () => {
+    const otherVendor: OrderMailVendor = {
+      id: "suborder-2",
+      vendorId: "vendor-2",
+      vendorName: "Chocolate Shop",
+      dashboardUrl:
+        "https://gifto.example/vendor/orders/suborder-2?vendor=vendor-2",
+      subtotalMinor: 10000,
+      deliveryFeeMinor: 0,
+      items: [
+        {
+          name: "Truffles",
+          quantity: 1,
+          unitPriceMinor: 10000,
+          lineTotalMinor: 10000,
+        },
+      ],
+    };
+    const details = sampleOrderDetails({
+      vendors: [sampleVendor, otherVendor],
+    });
+    const vendorMessage = orderPlacedVendorEmail(details, sampleVendor);
+    expect(vendorMessage.text).not.toContain("Chocolate Shop");
+    expect(vendorMessage.text).not.toContain("Truffles");
+    expect(orderPlacedCustomerEmail(details).text).toContain("Chocolate Shop");
   });
 
   it("labels the status change in plain language", () => {
@@ -379,14 +463,7 @@ describe("sendMail over real SMTP to a local sink", () => {
 
     try {
       const result = await sendMail({
-        ...orderPlacedVendorEmail({
-          vendorName: "Flower Shop",
-          reference: "GFT-ABCDEF123456",
-          subtotalMinor: 25000,
-          itemCount: 2,
-          recipientName: "Mona",
-          contactPhone: "01000000000",
-        }),
+        ...orderPlacedVendorEmail(sampleOrderDetails(), sampleVendor),
         to: "shop@example.com",
       });
       expect(result.sent).toBe(true);
@@ -1133,14 +1210,34 @@ describe("notifyOrderPlaced never breaks checkout", () => {
       user_id: null,
       public_reference: "GFT-ABCDEF123456",
       contact_email: "customer@example.com",
+      subtotal_minor: 50000,
+      delivery_fee_minor: 2000,
       total_minor: 52000,
       recipient_name: "Test Customer",
       contact_phone: "+201001234567",
+      address_line: "12 Nile Street",
+      city: "Alexandria",
+      governorate: "Alexandria",
+      notes: "Call before delivery",
+      gift_wrap: true,
+      gift_message: "Happy birthday",
+      preferred_delivery_date: "2026-12-01",
+      delivery_time_note: "After 5pm",
       order_vendors: [
         {
-          subtotal_minor: 52000,
+          id: "suborder-1",
+          vendor_id: "vendor-1",
+          subtotal_minor: 50000,
+          delivery_fee_minor: 2000,
           vendor: { name: "Test Shop", contact_email: "shop@example.com" },
-          order_items: [{ quantity: 2 }],
+          order_items: [
+            {
+              product_name: "Roses",
+              quantity: 2,
+              unit_price_minor: 25000,
+              line_total_minor: 50000,
+            },
+          ],
         },
       ],
     };
@@ -1152,6 +1249,16 @@ describe("notifyOrderPlaced never breaks checkout", () => {
             select: () => ({
               eq: () => ({
                 maybeSingle: async () => ({ data: orderRow, error: null }),
+              }),
+            }),
+          };
+        }
+        if (table === "profiles") {
+          return {
+            select: () => ({
+              eq: async () => ({
+                data: [{ email: "platform-admin@example.com" }],
+                error: null,
               }),
             }),
           };
@@ -1175,6 +1282,7 @@ describe("notifyOrderPlaced never breaks checkout", () => {
     serviceState.client = null;
     delete process.env.GIFTO_ENVIRONMENT;
     delete process.env.GIFTO_DEMO_ALLOW_EMAIL;
+    delete process.env.MAIL_ADMIN_TO;
   });
 
   afterEach(() => {
@@ -1182,6 +1290,7 @@ describe("notifyOrderPlaced never breaks checkout", () => {
     serviceState.client = null;
     delete process.env.GIFTO_ENVIRONMENT;
     delete process.env.GIFTO_DEMO_ALLOW_EMAIL;
+    delete process.env.MAIL_ADMIN_TO;
     Object.assign(process.env, originalEnv);
   });
 
@@ -1201,17 +1310,38 @@ describe("notifyOrderPlaced never breaks checkout", () => {
     );
   });
 
-  it("enqueues vendor + customer notifications on the happy path", async () => {
+  it("enqueues vendor + customer + admin notifications on the happy path", async () => {
     (process.env as { NODE_ENV?: string }).NODE_ENV = "production";
     process.env.NEXT_PUBLIC_SITE_URL = "https://gifto.example";
+    process.env.MAIL_ADMIN_TO = "admin@example.com";
     const fake = makeOrderPlacedFake();
     serviceState.client = fake;
 
     await expect(notifyOrderPlaced("order-1")).resolves.toBeUndefined();
-    expect(fake.inserts).toHaveLength(2);
-    expect(fake.inserts.map((row) => row.kind)).toEqual([
-      "order_placed_vendor",
+    expect(fake.inserts).toHaveLength(3);
+    expect(fake.inserts.map((row) => row.kind).sort()).toEqual([
+      "order_placed_admin",
       "order_placed_customer",
+      "order_placed_vendor",
     ]);
+    const customer = fake.inserts.find(
+      (row) => row.kind === "order_placed_customer",
+    );
+    expect(String(customer?.body_text)).toContain("Roses x 2 - EGP 500.00");
+    const admin = fake.inserts.find((row) => row.kind === "order_placed_admin");
+    expect(String(admin?.body_text)).toContain("12 Nile Street");
+  });
+
+  it("falls back to platform-admin profiles when MAIL_ADMIN_TO is empty", async () => {
+    (process.env as { NODE_ENV?: string }).NODE_ENV = "production";
+    process.env.NEXT_PUBLIC_SITE_URL = "https://gifto.example";
+    delete process.env.MAIL_ADMIN_TO;
+    const fake = makeOrderPlacedFake();
+    serviceState.client = fake;
+
+    await expect(notifyOrderPlaced("order-1")).resolves.toBeUndefined();
+    expect(
+      fake.inserts.some((row) => row.kind === "order_placed_admin"),
+    ).toBe(true);
   });
 });

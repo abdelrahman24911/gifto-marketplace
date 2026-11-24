@@ -76,6 +76,7 @@ export type MailSendResult =
 export type MailOutboxKind =
   | "order_placed_customer"
   | "order_placed_vendor"
+  | "order_placed_admin"
   | "order_status"
   | "refund_opened"
   | "refund_resolved"
@@ -595,15 +596,116 @@ export async function processMailOutbox(
 // Templates (plain-text first)
 // ---------------------------------------------------------------------------
 
-export function orderPlacedCustomerEmail(input: {
+export type OrderMailItem = {
+  name: string;
+  quantity: number;
+  unitPriceMinor: number;
+  lineTotalMinor: number;
+};
+
+export type OrderMailVendor = {
+  id: string;
+  vendorId: string;
+  vendorName: string;
+  dashboardUrl: string;
+  subtotalMinor: number;
+  deliveryFeeMinor: number;
+  items: OrderMailItem[];
+};
+
+export type OrderMailDetails = {
   reference: string;
-  totalMinor: number;
   orderUrl: string;
-}): MailMessage {
+  adminUrl: string;
+  subtotalMinor: number;
+  deliveryFeeMinor: number;
+  totalMinor: number;
+  recipientName: string;
+  contactPhone: string;
+  contactEmail: string | null;
+  addressLine: string;
+  city: string;
+  governorate: string;
+  notes: string | null;
+  giftWrap: boolean;
+  giftMessage: string | null;
+  preferredDeliveryDate: string | null;
+  deliveryTimeNote: string | null;
+  vendors: OrderMailVendor[];
+};
+
+function formatItemLines(items: OrderMailItem[]): string {
+  if (items.length === 0) return "- No items";
+  return items
+    .map((item) => {
+      const unit =
+        item.quantity > 1
+          ? ` (${formatEgp(item.unitPriceMinor)} each)`
+          : "";
+      return `- ${item.name} x ${item.quantity} - ${formatEgp(item.lineTotalMinor)}${unit}`;
+    })
+    .join("\n");
+}
+
+function formatDeliveryFee(minor: number): string {
+  return minor === 0 ? "Free" : formatEgp(minor);
+}
+
+function formatCustomerBlock(input: OrderMailDetails): string {
+  const lines = [input.recipientName, input.contactPhone];
+  if (input.contactEmail) lines.push(input.contactEmail);
+  lines.push(input.addressLine, `${input.city}, ${input.governorate}`);
+  if (input.notes) lines.push(`Delivery notes: ${input.notes}`);
+  return lines.join("\n");
+}
+
+function formatGiftBlock(input: OrderMailDetails): string {
+  const lines: string[] = [];
+  if (input.giftWrap) lines.push("Gift wrap: Yes");
+  if (input.giftMessage) lines.push(`Gift message: ${input.giftMessage}`);
+  if (input.preferredDeliveryDate) {
+    lines.push(`Preferred delivery date: ${input.preferredDeliveryDate}`);
+  }
+  if (input.deliveryTimeNote) {
+    lines.push(`Preferred delivery time: ${input.deliveryTimeNote}`);
+  }
+  return lines.join("\n");
+}
+
+function section(title: string, body: string): string {
+  return body ? `${title}\n${"-".repeat(title.length)}\n${body}\n\n` : "";
+}
+
+function formatVendorBlock(vendor: OrderMailVendor): string {
+  const lines = [
+    vendor.vendorName,
+    formatItemLines(vendor.items),
+    `Shop subtotal: ${formatEgp(vendor.subtotalMinor)}`,
+  ];
+  if (vendor.deliveryFeeMinor > 0) {
+    lines.push(`Delivery: ${formatEgp(vendor.deliveryFeeMinor)}`);
+  }
+  return lines.join("\n");
+}
+
+function formatVendorSummary(input: OrderMailDetails): string {
+  if (input.vendors.length === 0) return "No shop items";
+  return input.vendors.map(formatVendorBlock).join("\n\n");
+}
+
+export function orderPlacedCustomerEmail(
+  input: OrderMailDetails,
+): MailMessage {
+  const gift = formatGiftBlock(input);
   const text =
-    `Thank you — your Gifto order ${input.reference} is confirmed.\n\n` +
+    `Thank you - your Gifto order ${input.reference} is confirmed.\n\n` +
+    section("Order details", formatVendorSummary(input)) +
+    `Subtotal: ${formatEgp(input.subtotalMinor)}\n` +
+    `Delivery: ${formatDeliveryFee(input.deliveryFeeMinor)}\n` +
     `Total (cash on delivery): ${formatEgp(input.totalMinor)}\n\n` +
-    `Pay the courier in cash when your order arrives. You can follow it here:\n${input.orderUrl}\n\n` +
+    section("Deliver to", formatCustomerBlock(input)) +
+    section("Gift options", gift) +
+    `Pay the courier in cash when your order arrives. Follow it here:\n${input.orderUrl}\n\n` +
     `Each shop delivers its own items, so a multi-shop order may arrive in more than one delivery.`;
   return {
     to: "",
@@ -616,22 +718,44 @@ export function orderPlacedCustomerEmail(input: {
   };
 }
 
-export function orderPlacedVendorEmail(input: {
-  vendorName: string;
-  reference: string;
-  subtotalMinor: number;
-  itemCount: number;
-  recipientName: string;
-  contactPhone: string;
-}): MailMessage {
+export function orderPlacedVendorEmail(
+  input: OrderMailDetails,
+  vendor: OrderMailVendor,
+): MailMessage {
+  const gift = formatGiftBlock(input);
   const text =
-    `New Gifto order for ${input.vendorName}: ${input.reference}\n\n` +
-    `${input.itemCount} ${input.itemCount === 1 ? "item" : "items"} · shop subtotal ${formatEgp(input.subtotalMinor)}\n` +
-    `Recipient: ${input.recipientName} · ${input.contactPhone}\n\n` +
-    `Open your Gifto vendor dashboard to confirm and prepare this order.`;
+    `New Gifto order for ${vendor.vendorName}: ${input.reference}\n\n` +
+    section("Items", formatItemLines(vendor.items)) +
+    `Shop subtotal: ${formatEgp(vendor.subtotalMinor)}\n` +
+    (vendor.deliveryFeeMinor > 0
+      ? `Delivery: ${formatEgp(vendor.deliveryFeeMinor)}\n`
+      : "") +
+    `\n` +
+    section("Deliver to", formatCustomerBlock(input)) +
+    section("Gift options", gift) +
+    `Open your Gifto vendor dashboard to confirm and prepare this order:\n${vendor.dashboardUrl}`;
   return {
     to: "",
-    subject: `New Gifto order ${input.reference} for ${input.vendorName}`,
+    subject: `New Gifto order ${input.reference} for ${vendor.vendorName}`,
+    text,
+    html: htmlWrap(`New Gifto order ${input.reference}`, text),
+  };
+}
+
+export function orderPlacedAdminEmail(input: OrderMailDetails): MailMessage {
+  const gift = formatGiftBlock(input);
+  const text =
+    `New Gifto order ${input.reference}\n\n` +
+    section("Deliver to", formatCustomerBlock(input)) +
+    section("Gift options", gift) +
+    `Subtotal: ${formatEgp(input.subtotalMinor)}\n` +
+    `Delivery: ${formatDeliveryFee(input.deliveryFeeMinor)}\n` +
+    `Total (cash on delivery): ${formatEgp(input.totalMinor)}\n\n` +
+    section("Shops and items", formatVendorSummary(input)) +
+    `Open the admin order page:\n${input.adminUrl}`;
+  return {
+    to: "",
+    subject: `New Gifto order ${input.reference}`,
     text,
     html: htmlWrap(`New Gifto order ${input.reference}`, text),
   };
@@ -820,14 +944,31 @@ type OrderNotificationRow = {
   user_id: string | null;
   public_reference: string | null;
   contact_email: string | null;
+  subtotal_minor: number;
+  delivery_fee_minor: number;
   total_minor: number;
   recipient_name: string;
   contact_phone: string;
+  address_line: string;
+  city: string;
+  governorate: string;
+  notes: string | null;
+  gift_wrap: boolean;
+  gift_message: string | null;
+  preferred_delivery_date: string | null;
+  delivery_time_note: string | null;
   order_vendors: {
     id: string;
+    vendor_id: string;
     subtotal_minor: number;
+    delivery_fee_minor: number;
     vendor: { name: string; contact_email: string | null } | null;
-    order_items: { quantity: number }[] | null;
+    order_items: {
+      product_name: string;
+      quantity: number;
+      unit_price_minor: number;
+      line_total_minor: number;
+    }[] | null;
   }[];
 };
 
@@ -864,8 +1005,8 @@ async function fetchOrderForMail(
     const { data, error } = await service
       .from("orders")
       .select(
-        "id, user_id, public_reference, contact_email, total_minor, recipient_name, contact_phone, " +
-          "order_vendors(id, subtotal_minor, vendor:vendors(name, contact_email), order_items(quantity))",
+        "id, user_id, public_reference, contact_email, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, address_line, city, governorate, notes, gift_wrap, gift_message, preferred_delivery_date, delivery_time_note, " +
+          "order_vendors(id, vendor_id, subtotal_minor, delivery_fee_minor, vendor:vendors(name, contact_email), order_items(product_name, quantity, unit_price_minor, line_total_minor))",
       )
       .eq("id", orderId)
       .maybeSingle();
@@ -876,8 +1017,89 @@ async function fetchOrderForMail(
   }
 }
 
+function parseAdminRecipients(value: string | undefined): string[] {
+  return [
+    ...new Set(
+      (value ?? "")
+        .split(/[,;]/)
+        .map((email) => email.trim())
+        .filter((email) => EMAIL_PATTERN.test(email)),
+    ),
+  ];
+}
+
+export function getConfiguredAdminRecipients(
+  env: Record<string, string | undefined> = process.env,
+): string[] {
+  return parseAdminRecipients(env.MAIL_ADMIN_TO);
+}
+
+async function resolveAdminRecipients(): Promise<string[]> {
+  const configured = getConfiguredAdminRecipients();
+  if (configured.length > 0) return configured;
+  try {
+    const service = createServiceClient();
+    const { data, error } = await service
+      .from("profiles")
+      .select("email")
+      .eq("is_platform_admin", true);
+    if (error || !data) return [];
+    return [
+      ...new Set(
+        data
+          .map((row: { email: string | null }) => row.email)
+          .filter(
+            (email): email is string =>
+              typeof email === "string" && EMAIL_PATTERN.test(email),
+          ),
+      ),
+    ];
+  } catch {
+    return [];
+  }
+}
+
+function toOrderMailDetails(
+  order: OrderNotificationRow,
+  siteUrl: string,
+): OrderMailDetails {
+  return {
+    reference: order.public_reference ?? `#${order.id.slice(0, 8)}`,
+    orderUrl: customerOrderUrl(order, siteUrl),
+    adminUrl: `${siteUrl}/admin/orders/${order.id}`,
+    subtotalMinor: order.subtotal_minor,
+    deliveryFeeMinor: order.delivery_fee_minor,
+    totalMinor: order.total_minor,
+    recipientName: order.recipient_name,
+    contactPhone: order.contact_phone,
+    contactEmail: order.contact_email,
+    addressLine: order.address_line,
+    city: order.city,
+    governorate: order.governorate,
+    notes: order.notes,
+    giftWrap: order.gift_wrap,
+    giftMessage: order.gift_message,
+    preferredDeliveryDate: order.preferred_delivery_date,
+    deliveryTimeNote: order.delivery_time_note,
+    vendors: order.order_vendors.map((suborder) => ({
+      id: suborder.id,
+      vendorId: suborder.vendor_id,
+      vendorName: suborder.vendor?.name ?? "Gifto shop",
+      dashboardUrl: `${siteUrl}/vendor/orders/${suborder.id}?vendor=${encodeURIComponent(suborder.vendor_id)}`,
+      subtotalMinor: suborder.subtotal_minor,
+      deliveryFeeMinor: suborder.delivery_fee_minor,
+      items: (suborder.order_items ?? []).map((item) => ({
+        name: item.product_name,
+        quantity: item.quantity,
+        unitPriceMinor: item.unit_price_minor,
+        lineTotalMinor: item.line_total_minor,
+      })),
+    })),
+  };
+}
+
 /**
- * Vendor + customer email for a newly placed order.
+ * Customer + vendor + admin email for a newly placed order.
  *
  * Never throws: the order is already placed when this runs, so a broken
  * site URL, a missing order row, or a failed send must not turn a
@@ -901,41 +1123,50 @@ export async function notifyOrderPlaced(orderId: string): Promise<void> {
 async function notifyOrderPlacedInner(orderId: string): Promise<void> {
   const order = await fetchOrderForMail(orderId);
   if (!order) return;
-  const reference = order.public_reference ?? `#${order.id.slice(0, 8)}`;
   const siteUrl = getSiteUrl();
+  const details = toOrderMailDetails(order, siteUrl);
+  const sends: Promise<MailSendResult>[] = [];
 
   for (const suborder of order.order_vendors) {
     const vendor = suborder.vendor;
-    if (!vendor?.contact_email) continue;
-    const itemCount = (suborder.order_items ?? []).reduce(
-      (sum, item) => sum + item.quantity,
-      0,
+    const detailsForVendor = details.vendors.find(
+      (entry) => entry.id === suborder.id,
     );
-    await sendMail({
-      ...orderPlacedVendorEmail({
-        vendorName: vendor.name,
-        reference,
-        subtotalMinor: suborder.subtotal_minor,
-        itemCount,
-        recipientName: order.recipient_name,
-        contactPhone: order.contact_phone,
-      }),
-      to: vendor.contact_email,
-    },
-    { kind: "order_placed_vendor" });
+    if (!vendor?.contact_email || !detailsForVendor) continue;
+    sends.push(
+      sendMail(
+        {
+          ...orderPlacedVendorEmail(details, detailsForVendor),
+          to: vendor.contact_email,
+        },
+        { kind: "order_placed_vendor" },
+      ),
+    );
   }
 
   if (order.contact_email) {
-    await sendMail({
-      ...orderPlacedCustomerEmail({
-        reference,
-        totalMinor: order.total_minor,
-        orderUrl: customerOrderUrl(order, siteUrl),
-      }),
-      to: order.contact_email,
-    },
-    { kind: "order_placed_customer" });
+    sends.push(
+      sendMail(
+        {
+          ...orderPlacedCustomerEmail(details),
+          to: order.contact_email,
+        },
+        { kind: "order_placed_customer" },
+      ),
+    );
   }
+
+  const adminRecipients = await resolveAdminRecipients();
+  for (const to of adminRecipients) {
+    sends.push(
+      sendMail(
+        { ...orderPlacedAdminEmail(details), to },
+        { kind: "order_placed_admin" },
+      ),
+    );
+  }
+
+  await Promise.all(sends);
 }
 
 /** Customer email when one of their suborders changes status. */

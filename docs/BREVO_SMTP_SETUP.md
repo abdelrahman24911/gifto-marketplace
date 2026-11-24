@@ -56,6 +56,7 @@ Source: `src/lib/mail.ts`.
 |---|---|---|---|
 | Order placed (customer) | `order_placed_customer` | Yes | Safe to retry. |
 | Order placed (vendor) | `order_placed_vendor` | Yes | Safe to retry. |
+| Order placed (admin) | `order_placed_admin` | Yes | Safe to retry. |
 | Order status | `order_status` | Yes | Safe to retry. |
 | Refund opened | `refund_opened` | Yes | Safe to retry. |
 | Refund resolved | `refund_resolved` | Yes | Safe to retry. |
@@ -78,6 +79,7 @@ only when testing. Never commit values.
 | `SMTP_USER` | Brevo SMTP login | Account email or the generated `...@smtp-brevo.com` login; not necessarily `MAIL_FROM`. |
 | `SMTP_PASS` | Brevo SMTP key | Generate it in Brevo's SMTP/API settings. This is not the API v3 key. |
 | `MAIL_FROM` | A verified sender, e.g. `Gifto <no-reply@your-domain>` | The address/domain must be verified in Brevo. |
+| `MAIL_ADMIN_TO` | Comma-separated admin recipients, e.g. `ops@your-domain` | Optional. When empty, every profile with `is_platform_admin = true` is used; those profile addresses must be real. |
 | `SMTP_TIMEOUT_MS` | `5000` (default) or `10000` | Raise only if Brevo connections time out; keep it bounded. |
 | `CRON_SECRET` | Long random value | Required for the cron route; without it the route is fail-closed (503). |
 
@@ -89,6 +91,10 @@ Notes:
   transport, but Brevo relay authentication needs them.
 - Do not put the Brevo API v3 key in `SMTP_PASS`; it will not authenticate the
   SMTP relay.
+- New-order admin notifications use `MAIL_ADMIN_TO` when it is set. Otherwise
+  the app resolves every profile with `is_platform_admin = true`; placeholder
+  profile addresses such as `admin@gifto.example` must be replaced before
+  relying on that fallback.
 
 ## DNS and sender authentication
 
@@ -138,9 +144,9 @@ Do not assume app SMTP configuration covers Supabase Auth email.
 3. Add the Brevo DNS records (SPF, DKIM, DMARC, any bounce record) and verify
    the domain.
 4. In Vercel, set `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`,
-   `SMTP_PASS`, `MAIL_FROM`, `SMTP_TIMEOUT_MS`, and `CRON_SECRET` for the target
-   environment. Do not set them in a demo deployment unless test sends are
-   explicitly intended.
+   `SMTP_PASS`, `MAIL_FROM`, `MAIL_ADMIN_TO`, `SMTP_TIMEOUT_MS`, and
+   `CRON_SECRET` for the target environment. Do not set them in a demo
+   deployment unless test sends are explicitly intended.
 5. Redeploy so the environment is loaded.
 6. Run the local Brevo verifier first (see “Safe local verification” below), then
    send a test through the app (for example a support-status notification to a

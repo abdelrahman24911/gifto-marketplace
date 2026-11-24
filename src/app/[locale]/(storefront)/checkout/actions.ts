@@ -397,7 +397,7 @@ export async function placeOrder(
     revalidatePath("/admin/orders");
     revalidatePath("/shops");
 
-    // P1-01: vendor + customer order emails. A failed send never rolls the
+    // P1-01: customer + vendor + admin order emails. A failed send never
     // order back — notifyOrderPlaced catches and logs its own failures.
     await notifyOrderPlaced(data);
 
@@ -460,7 +460,8 @@ export async function placeOrder(
     revalidatePath("/admin/orders");
     revalidatePath("/shops");
 
-    // P1-01: vendor + customer order emails (never rolls the order back).
+    // P1-01: customer + vendor + admin order emails (never rolls the order
+    // back).
     await notifyOrderPlaced(data);
 
     return { orderId: data, isGuest: true, attempt };
