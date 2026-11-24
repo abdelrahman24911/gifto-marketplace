@@ -668,8 +668,9 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- TEST 10 (P1-13, H-10): a coverage-breaking correction needs an explicit
--- second confirmation naming the affected shop, and never applies silently.
+-- TEST 10 (P1-13, H-10): coverage is informational after migration 73; a
+-- correction to another valid Egyptian governorate applies directly and
+-- records no coverage acknowledgement.
 -- ---------------------------------------------------------------------------
 
 reset role;
@@ -703,46 +704,36 @@ declare
 begin
   v_oid := current_setting('gifto_test.addr_order2')::uuid;
 
-  -- Without the second confirmation: rejected, nothing changes.
+  -- Coverage lists are informational after migration 73: a different valid
+  -- governorate is not a coverage break and needs no second confirmation.
   v_result := public.correct_order_address(
     v_oid, 'Audit Buyer', '01001112233', '22 Audit Street',
     'Nasr City', 'Cairo', 'customer_request', 'Customer moved to Cairo');
-  if (v_result ->> 'ok')::boolean
-     or v_result ->> 'error' <> 'coverage_break'
-     or not (v_result -> 'vendors' ? 'Audit Shop A') then
-    raise exception 'TEST 10 FAILED: coverage break was not reported: %', v_result;
-  end if;
-
-  if (select governorate from public.orders where id = v_oid) <> 'Alexandria' then
-    raise exception 'TEST 10 FAILED: unconfirmed coverage-breaking correction changed the address';
-  end if;
-  if exists (select 1 from public.order_address_corrections where order_id = v_oid) then
-    raise exception 'TEST 10 FAILED: unconfirmed coverage-breaking correction wrote an audit row';
-  end if;
-
-  -- With the explicit confirmation: applies, and the audit row records it.
-  v_result := public.correct_order_address(
-    v_oid, 'Audit Buyer', '01001112233', '22 Audit Street',
-    'Nasr City', 'Cairo', 'customer_request', 'Customer moved to Cairo', true);
   if not (v_result ->> 'ok')::boolean then
-    raise exception 'TEST 10 FAILED: confirmed correction was rejected: %', v_result;
+    raise exception 'TEST 10 FAILED: valid correction was rejected: %', v_result;
+  end if;
+  if coalesce(v_result -> 'coverage_break', '[]'::jsonb) <> '[]'::jsonb then
+    raise exception 'TEST 10 FAILED: coverage still blocked the correction: %', v_result;
   end if;
 
   if (select governorate from public.orders where id = v_oid) <> 'Cairo' then
-    raise exception 'TEST 10 FAILED: confirmed correction was not stored';
+    raise exception 'TEST 10 FAILED: correction was not stored';
   end if;
 
   select * into v_correction from public.order_address_corrections
    where order_id = v_oid
    order by created_at desc, id desc
    limit 1;
-  if not v_correction.coverage_warning_acknowledged
+  if not found then
+    raise exception 'TEST 10 FAILED: correction wrote no audit row';
+  end if;
+  if v_correction.coverage_warning_acknowledged
      or v_correction.reason_code <> 'customer_request'
      or v_correction.after ->> 'governorate' <> 'Cairo' then
-    raise exception 'TEST 10 FAILED: confirmed correction audit row is wrong';
+    raise exception 'TEST 10 FAILED: correction audit row is wrong';
   end if;
 
-  raise notice 'TEST 10 PASSED: coverage break needs confirmation naming the shop, then applies audited';
+  raise notice 'TEST 10 PASSED: coverage no longer blocks a valid correction';
 end $$;
 
 -- ---------------------------------------------------------------------------

@@ -1,5 +1,9 @@
--- Gifto Phase 2 verification: vendor delivery coverage blocks checkout.
+-- Gifto verification: delivery coverage no longer gates checkout.
 -- Run after all migrations against a disposable database.
+--
+-- Migration 73 keeps the order_vendors trigger but redefines
+-- delivery_coverage_allows() as an Egyptian-governorate validity check.
+-- Vendor coverage lists are ignored and must remain stored.
 
 \set ON_ERROR_STOP on
 
@@ -24,11 +28,11 @@ insert into public.vendors (
   id, name, slug, status, commission_rate, delivery_coverage
 ) values (
   '41200000-0000-0000-0000-000000000001',
-  'Coverage Shop',
-  'coverage-shop',
+  'Alexandria Toy Corner',
+  'alexandria-toy-corner',
   'active',
   0.1000,
-  '{"governorates":["Cairo"],"areas":["Maadi"]}'::jsonb
+  '{"governorates":["Alexandria"],"areas":["Smouha","Sidi Gaber","Gleem","Damanhour"]}'::jsonb
 );
 
 insert into public.products (
@@ -44,40 +48,98 @@ insert into public.products (
 );
 
 -- ---------------------------------------------------------------------------
--- TEST 1: helper treats unconfigured coverage as open
+-- TEST 1: the reported bug - Cairo customer, Alexandria-only coverage.
+-- Also covers Aswan from a Nile Blossoms-style area list.
 -- ---------------------------------------------------------------------------
 do $$
 begin
   if not public.delivery_coverage_allows(
-    '{}'::jsonb, 'Alexandria', 'Alexandria', '1 Sea Road'
+    '{"governorates":["Alexandria"],"areas":["Smouha","Sidi Gaber","Gleem","Damanhour"]}'::jsonb,
+    'Cairo', 'Cairo', '12 Road 9, Maadi'
   ) then
-    raise exception 'TEST 1 FAILED: empty coverage blocked an address';
+    raise exception 'TEST 1 FAILED: Cairo was refused by Alexandria-only coverage';
   end if;
-  raise notice 'TEST 1 PASSED: empty coverage allows checkout';
+
+  if not public.delivery_coverage_allows(
+    '{"governorates":["Alexandria"],"areas":["Raml Station","Sidi Gaber","Smouha","San Stefano"]}'::jsonb,
+    'Aswan', 'Aswan', '1 Corniche El Nil'
+  ) then
+    raise exception 'TEST 1 FAILED: Aswan was refused by an Alexandria area list';
+  end if;
+
+  raise notice 'TEST 1 PASSED: cross-governorate orders are allowed';
 end $$;
 
 -- ---------------------------------------------------------------------------
--- TEST 2: helper matches governorate and area case-insensitively
+-- TEST 2: every Egyptian governorate is valid in English and Arabic.
+-- ---------------------------------------------------------------------------
+do $$
+declare
+  v_governorate text;
+  v_coverage    jsonb := '{"governorates":["Alexandria"],"areas":["Smouha"]}'::jsonb;
+begin
+  foreach v_governorate in array array[
+    'Cairo', 'Alexandria', 'Giza', 'Qalyubia', 'Dakahlia', 'Sharqia',
+    'Gharbia', 'Monufia', 'Beheira', 'Kafr El Sheikh', 'Damietta',
+    'Port Said', 'Ismailia', 'Suez', 'Faiyum', 'Beni Suef', 'Minya',
+    'Asyut', 'Sohag', 'Qena', 'Luxor', 'Aswan', 'Red Sea',
+    'New Valley', 'Matrouh', 'North Sinai', 'South Sinai',
+    'القاهرة', 'الإسكندرية', 'الجيزة', 'القليوبية', 'الدقهلية', 'الشرقية',
+    'الغربية', 'المنوفية', 'البحيرة', 'كفر الشيخ', 'دمياط', 'بورسعيد',
+    'الإسماعيلية', 'السويس', 'الفيوم', 'بني سويف', 'المنيا', 'أسيوط',
+    'سوهاج', 'قنا', 'الأقصر', 'أسوان', 'البحر الأحمر', 'الوادي الجديد',
+    'مطروح', 'شمال سيناء', 'جنوب سيناء'
+  ]
+  loop
+    if not public.delivery_coverage_allows(
+      v_coverage, 'Cairo', v_governorate, '12 Road 9'
+    ) then
+      raise exception 'TEST 2 FAILED: valid governorate % was refused', v_governorate;
+    end if;
+  end loop;
+
+  raise notice 'TEST 2 PASSED: all 27 governorates are valid in English and Arabic';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- TEST 3: missing or non-Egyptian governorates still fail.
 -- ---------------------------------------------------------------------------
 do $$
 begin
-  if not public.delivery_coverage_allows(
-    '{"governorates":[" cairo "],"areas":["MAADI"]}'::jsonb,
-    'maadi', 'CAIRO', '12 Road 9'
-  ) then
-    raise exception 'TEST 2 FAILED: valid coverage was rejected';
-  end if;
   if public.delivery_coverage_allows(
     '{"governorates":["Cairo"],"areas":["Maadi"]}'::jsonb,
-    'Nasr City', 'Cairo', '12 Abbas El Akkad'
+    'Cairo', '', '12 Road 9'
   ) then
-    raise exception 'TEST 2 FAILED: out-of-area city was allowed';
+    raise exception 'TEST 3 FAILED: an empty governorate was allowed';
   end if;
-  raise notice 'TEST 2 PASSED: coverage matches governorates and areas';
+
+  if public.delivery_coverage_allows(
+    '{"governorates":["Cairo"],"areas":["Maadi"]}'::jsonb,
+    'Cairo', 'Atlantis', '12 Road 9'
+  ) then
+    raise exception 'TEST 3 FAILED: a non-Egyptian governorate was allowed';
+  end if;
+
+  if public.delivery_coverage_allows(
+    '{"governorates":["Cairo"],"areas":["Maadi"]}'::jsonb,
+    'Cairo', 'Cairoo', '12 Road 9'
+  ) then
+    raise exception 'TEST 3 FAILED: a near-miss governorate was allowed';
+  end if;
+
+  if public.delivery_coverage_allows(
+    '{"governorates":["Cairo"],"areas":["Maadi"]}'::jsonb,
+    'Cairo', 'New Cairo', '12 Road 9'
+  ) then
+    raise exception 'TEST 3 FAILED: a city name was accepted as a governorate';
+  end if;
+
+  raise notice 'TEST 3 PASSED: invalid governorates are still refused';
 end $$;
 
 -- ---------------------------------------------------------------------------
--- TEST 3: checkout rolls back when any shop does not cover the address
+-- TEST 4: checkout places Cairo and Aswan orders through a vendor whose
+-- stored coverage is Alexandria-only, and leaves that coverage untouched.
 -- ---------------------------------------------------------------------------
 set role authenticated;
 set request.jwt.claim.sub = '11200000-0000-0000-0000-000000000001';
@@ -86,289 +148,111 @@ set request.jwt.claims = '{"sub":"11200000-0000-0000-0000-000000000001"}';
 do $$
 declare
   v_order_id uuid;
-  v_blocked  boolean := false;
-begin
-  begin
-    perform gifto_test.place_order(
-      '[{"product_id":"51200000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
-      'Coverage Buyer', '01001112233', '12 Pyramid Street',
-      'Giza', 'Giza', null
-    );
-  exception when sqlstate '23514' then
-    v_blocked := true;
-  end;
-
-  if not v_blocked then
-    raise exception 'TEST 3 FAILED: out-of-coverage checkout was accepted';
-  end if;
-
-  v_order_id := gifto_test.place_order(
-    '[{"product_id":"51200000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
-    'Coverage Buyer', '01001112233', '12 Road 9, Maadi',
-    'Maadi', 'Cairo', null
-  );
-
-  if v_order_id is null then
-    raise exception 'TEST 3 FAILED: covered checkout returned no order';
-  end if;
-
-  raise notice 'TEST 3 PASSED: coverage is enforced inside checkout';
-end $$;
-
--- ---------------------------------------------------------------------------
--- TEST 4 (P1-06 / N-04): governorate variant tolerance — the old
--- false-reject pair. The checkout dropdown now sends only canonical
--- values, so "Cairo Governorate" can no longer be typed; the tolerance
--- below is the bridge for legacy stored values and direct calls.
--- ---------------------------------------------------------------------------
-reset role;
-do $$
-begin
-  -- "Cairo Governorate" order vs "Cairo" coverage now allows.
-  if not public.delivery_coverage_allows(
-    '{"governorates":["Cairo"],"areas":["Maadi"]}'::jsonb,
-    'Maadi', 'Cairo Governorate', '12 Road 9'
-  ) then
-    raise exception 'TEST 4 FAILED: "Cairo Governorate" was rejected against "Cairo" coverage';
-  end if;
-
-  -- Both directions: "Cairo" order vs "Cairo Governorate" coverage.
-  if not public.delivery_coverage_allows(
-    '{"governorates":["Cairo Governorate"],"areas":["Maadi"]}'::jsonb,
-    'Maadi', 'Cairo', '12 Road 9'
-  ) then
-    raise exception 'TEST 4 FAILED: "Cairo" was rejected against "Cairo Governorate" coverage';
-  end if;
-
-  -- Arabic variants: "محافظة القاهرة" order vs "Cairo" coverage.
-  if not public.delivery_coverage_allows(
-    '{"governorates":["Cairo"],"areas":["Maadi"]}'::jsonb,
-    'Maadi', 'محافظة القاهرة', '12 Road 9'
-  ) then
-    raise exception 'TEST 4 FAILED: Arabic governorate variant was rejected';
-  end if;
-
-  -- A genuinely different governorate still fails.
-  if public.delivery_coverage_allows(
-    '{"governorates":["Cairo"],"areas":["Maadi"]}'::jsonb,
-    'Maadi', 'Giza', '12 Road 9'
-  ) then
-    raise exception 'TEST 4 FAILED: Giza was allowed against Cairo coverage';
-  end if;
-
-  -- No guessing: a near-miss spelling still fails.
-  if public.delivery_coverage_allows(
-    '{"governorates":["Cairo"],"areas":["Maadi"]}'::jsonb,
-    'Maadi', 'Cairoo', '12 Road 9'
-  ) then
-    raise exception 'TEST 4 FAILED: a near-miss governorate was allowed';
-  end if;
-
-  raise notice 'TEST 4 PASSED: governorate variants tolerate, different governorates still fail';
-end $$;
-
--- Checkout-level: the old placeholder example now places an order.
-set role authenticated;
-set request.jwt.claim.sub = '11200000-0000-0000-0000-000000000001';
-set request.jwt.claims = '{"sub":"11200000-0000-0000-0000-000000000001"}';
-
-do $$
-declare v_order_id uuid;
-begin
-  v_order_id := gifto_test.place_order(
-    '[{"product_id":"51200000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
-    'Coverage Buyer', '01001112233', '12 Road 9, Maadi',
-    'Maadi', 'Cairo Governorate', null
-  );
-
-  if v_order_id is null then
-    raise exception 'TEST 4 FAILED: variant-tolerant checkout returned no order';
-  end if;
-
-  raise notice 'TEST 4 PASSED: checkout with "Cairo Governorate" places against "Cairo" coverage';
-end $$;
-
--- ---------------------------------------------------------------------------
--- TEST 5 (P1-06 / N-04): LIKE escaping — an area containing % or _
--- matches literally only and can no longer widen matching.
--- ---------------------------------------------------------------------------
-reset role;
-do $$
-begin
-  -- Area "%" matches only an address containing a literal %.
-  if not public.delivery_coverage_allows(
-    '{"governorates":["Cairo"],"areas":["%"]}'::jsonb,
-    'Cairo', 'Cairo', '12 100% Street'
-  ) then
-    raise exception 'TEST 5 FAILED: literal percent area did not match a percent address';
-  end if;
-  if public.delivery_coverage_allows(
-    '{"governorates":["Cairo"],"areas":["%"]}'::jsonb,
-    'Cairo', 'Cairo', '12 Main Street'
-  ) then
-    raise exception 'TEST 5 FAILED: percent area widened to an address without percent';
-  end if;
-
-  -- Area "a_b": the underscore is literal, not a single-character wildcard.
-  if not public.delivery_coverage_allows(
-    '{"governorates":["Cairo"],"areas":["a_b"]}'::jsonb,
-    'Cairo', 'Cairo', 'Flat a_b, 5 Road'
-  ) then
-    raise exception 'TEST 5 FAILED: literal a_b area did not match';
-  end if;
-  if public.delivery_coverage_allows(
-    '{"governorates":["Cairo"],"areas":["a_b"]}'::jsonb,
-    'Cairo', 'Cairo', 'Flat axb, 5 Road'
-  ) then
-    raise exception 'TEST 5 FAILED: _ in an area acted as a wildcard';
-  end if;
-
-  -- A backslash in an area is literal too.
-  if not public.delivery_coverage_allows(
-    '{"governorates":["Cairo"],"areas":["a\\b"]}'::jsonb,
-    'Cairo', 'Cairo', 'Flat a\b, 5 Road'
-  ) then
-    raise exception 'TEST 5 FAILED: literal backslash area did not match';
-  end if;
-  if public.delivery_coverage_allows(
-    '{"governorates":["Cairo"],"areas":["a\\b"]}'::jsonb,
-    'Cairo', 'Cairo', 'Flat axb, 5 Road'
-  ) then
-    raise exception 'TEST 5 FAILED: backslash in an area acted as an escape';
-  end if;
-
-  raise notice 'TEST 5 PASSED: percent and underscore in areas match literally only';
-end $$;
-
--- Checkout-level: the wildcard can no longer smuggle an out-of-area order
--- through the trigger, and a literal match still places.
-reset role;
-insert into public.vendors (
-  id, name, slug, status, commission_rate, delivery_coverage
-) values (
-  '41200000-0000-0000-0000-000000000002',
-  'Wildcard Shop',
-  'wildcard-shop',
-  'active',
-  0.1000,
-  '{"governorates":["Cairo"],"areas":["%", "a_b"]}'::jsonb
-);
-
-insert into public.products (
-  id, vendor_id, name, slug, price_minor, stock, status
-) values (
-  '51200000-0000-0000-0000-000000000002',
-  '41200000-0000-0000-0000-000000000002',
-  'Wildcard Gift',
-  'wildcard-gift',
-  10000,
-  5,
-  'active'
-);
-
-set role authenticated;
-set request.jwt.claim.sub = '11200000-0000-0000-0000-000000000001';
-set request.jwt.claims = '{"sub":"11200000-0000-0000-0000-000000000001"}';
-
-do $$
-declare
-  v_order_id uuid;
-  v_blocked  boolean := false;
   v_stock    int;
 begin
-  -- "axb" must not match the "a_b" area: blocked, nothing ordered.
-  begin
-    perform gifto_test.place_order(
-      '[{"product_id":"51200000-0000-0000-0000-000000000002","quantity":1}]'::jsonb,
-      'Coverage Buyer', '01001112233', 'Flat axb, 5 Road',
-      'Cairo', 'Cairo', null
-    );
-  exception when sqlstate '23514' then
-    v_blocked := true;
-  end;
-
-  if not v_blocked then
-    raise exception 'TEST 5 FAILED: wildcard _ allowed an out-of-area checkout';
-  end if;
-
-  select stock into v_stock from public.products
-   where id = '51200000-0000-0000-0000-000000000002';
-  if v_stock <> 5 then
-    raise exception 'TEST 5 FAILED: blocked checkout changed stock to %', v_stock;
-  end if;
-
-  -- A literal "a_b" in the address places.
   v_order_id := gifto_test.place_order(
-    '[{"product_id":"51200000-0000-0000-0000-000000000002","quantity":1}]'::jsonb,
-    'Coverage Buyer', '01001112233', 'Flat a_b, 5 Road',
+    '[{"product_id":"51200000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Coverage Buyer', '01001112233', '12 Road 9, Maadi',
     'Cairo', 'Cairo', null
   );
 
   if v_order_id is null then
-    raise exception 'TEST 5 FAILED: literal area checkout returned no order';
+    raise exception 'TEST 4 FAILED: Cairo checkout returned no order';
   end if;
 
-  raise notice 'TEST 5 PASSED: wildcard areas cannot smuggle checkout through the trigger';
+  v_order_id := gifto_test.place_order(
+    '[{"product_id":"51200000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+    'Coverage Buyer', '01001112233', '1 Corniche El Nil',
+    'Aswan', 'Aswan', null
+  );
+
+  if v_order_id is null then
+    raise exception 'TEST 4 FAILED: Aswan checkout returned no order';
+  end if;
+
+  select stock into v_stock
+    from public.products
+   where id = '51200000-0000-0000-0000-000000000001';
+  if v_stock <> 3 then
+    raise exception 'TEST 4 FAILED: expected stock 3 after two orders, got %', v_stock;
+  end if;
+
+  raise notice 'TEST 4 PASSED: cross-coverage checkout places orders';
+end $$;
+
+reset role;
+do $$
+declare
+  v_coverage jsonb;
+begin
+  select delivery_coverage into v_coverage
+    from public.vendors
+   where id = '41200000-0000-0000-0000-000000000001';
+  if v_coverage is distinct from
+     '{"governorates":["Alexandria"],"areas":["Smouha","Sidi Gaber","Gleem","Damanhour"]}'::jsonb then
+    raise exception 'TEST 4 FAILED: coverage data changed: %', v_coverage;
+  end if;
+
+  raise notice 'TEST 4 PASSED: stored coverage data is unchanged';
 end $$;
 
 -- ---------------------------------------------------------------------------
--- TEST 6 (P1-06): out-of-coverage still raises 23514 and rolls back —
--- no order, no stock change — and a later in-coverage order still works.
+-- TEST 5: invalid governorates still block before anything is written.
 -- ---------------------------------------------------------------------------
+set role authenticated;
+set request.jwt.claim.sub = '11200000-0000-0000-0000-000000000001';
+set request.jwt.claims = '{"sub":"11200000-0000-0000-0000-000000000001"}';
+
 do $$
 declare
   v_blocked  boolean := false;
   v_stock    int;
   v_orders   int;
-  v_order_id uuid;
 begin
-  select stock into v_stock from public.products
-   where id = '51200000-0000-0000-0000-000000000001';
-  -- TEST 3 placed 1 and TEST 4 placed 1 of the original 5.
-  if v_stock <> 3 then
-    raise exception 'TEST 6 FAILED: expected stock 3 before the block, got %', v_stock;
-  end if;
-
   begin
     perform gifto_test.place_order(
       '[{"product_id":"51200000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
-      'Coverage Buyer', '01001112233', '12 Pyramid Street',
-      'Giza', 'Giza', null
+      'Coverage Buyer', '01001112233', '12 Road 9',
+      'Cairo', 'Cairoo', null
     );
   exception when sqlstate '23514' then
     v_blocked := true;
   end;
 
   if not v_blocked then
-    raise exception 'TEST 6 FAILED: out-of-coverage checkout was accepted';
+    raise exception 'TEST 5 FAILED: an unknown governorate placed an order';
   end if;
 
-  select stock into v_stock from public.products
+  v_blocked := false;
+  begin
+    perform gifto_test.place_order(
+      '[{"product_id":"51200000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
+      'Coverage Buyer', '01001112233', '12 Road 9',
+      'Cairo', '', null
+    );
+  exception when sqlstate '22023' then
+    v_blocked := true;
+  end;
+
+  if not v_blocked then
+    raise exception 'TEST 5 FAILED: an empty governorate placed an order';
+  end if;
+
+  select stock into v_stock
+    from public.products
    where id = '51200000-0000-0000-0000-000000000001';
   if v_stock <> 3 then
-    raise exception 'TEST 6 FAILED: blocked checkout changed stock to %', v_stock;
+    raise exception 'TEST 5 FAILED: refused checkout changed stock to %', v_stock;
   end if;
 
-  select count(*) into v_orders from public.orders
-   where id in (
-     select order_id from public.order_vendors
-      where vendor_id = '41200000-0000-0000-0000-000000000001'
-   );
+  select count(*) into v_orders
+    from public.order_vendors
+   where vendor_id = '41200000-0000-0000-0000-000000000001';
   if v_orders <> 2 then
-    raise exception 'TEST 6 FAILED: expected 2 orders for the shop, got %', v_orders;
+    raise exception 'TEST 5 FAILED: expected 2 orders, got %', v_orders;
   end if;
 
-  v_order_id := gifto_test.place_order(
-    '[{"product_id":"51200000-0000-0000-0000-000000000001","quantity":1}]'::jsonb,
-    'Coverage Buyer', '01001112233', '12 Road 9, Maadi',
-    'Maadi', 'Cairo', null
-  );
-
-  if v_order_id is null then
-    raise exception 'TEST 6 FAILED: in-coverage checkout after a block returned no order';
-  end if;
-
-  raise notice 'TEST 6 PASSED: out-of-coverage rolls back cleanly; in-coverage still passes';
+  raise notice 'TEST 5 PASSED: invalid governorates roll back cleanly';
 end $$;
 
 rollback;

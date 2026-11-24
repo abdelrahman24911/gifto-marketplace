@@ -83,9 +83,9 @@ Only ever apply migrations to the **Gifto** project. Do not link or push to the 
 
 Current hosted state is tracked in exactly one place: `docs/HOSTED_STATE.md`.
 Do not rely on any hosted-state claim elsewhere in this file or in `docs/` —
-the table there is the single source of truth. Locally, forward migrations run to 66
-(`ls supabase/migrations/*.sql | grep -v rollback | wc -l`  66, recounted 2026-11-22;
-66 adds the P0 guest-refund expiry check): migration 11
+the table there is the single source of truth. Locally, forward migrations run to 73
+(`ls supabase/migrations/*.sql | grep -v rollback | wc -l`  73, recounted 2026-11-24;
+73 removes the delivery-coverage checkout gate): migration 11
 adds guest COD checkout; migration 12 hardens the order tables to least-privilege grants; migration
 13 adds failed-COD-delivery handling and the parent-only `partially_completed` status. Migration 14
 adds managed vendor onboarding; 15 adds active-vendor hardening, stock-column grants, normalized
@@ -96,11 +96,13 @@ removes Supabase's default-ACL write grants from the `public_vendors` view so it
 API roles. Migrations 20-25 add vendor profile privacy, vendor media, checkout pause, support
 requests, analytics indexes, and atomic settlement payout; 26-27 add occasion discovery and atomic
 occasion matching-rule replacement; 28 adds order status history, the audited status RPC, and
-delivered-at indexes; 29 enforces vendor delivery coverage at checkout and on direct suborder
-inserts; 30 adds refund cases, an append-only commission-adjustment ledger, guest/customer/admin
+delivered-at indexes; 29 originally enforced vendor delivery coverage at checkout and on direct
+suborder inserts (migration 73 removes the coverage gate); 30 adds refund cases, an append-only commission-adjustment ledger, guest/customer/admin
 refund RPCs, and net-commission settlement creation; 31 locks the parent order row before
-recounting suborders (parent-status race fix); 32 adds token-gated guest order cancellation.
-Migrations 28-66 are applied locally only and
+recounting suborders (parent-status race fix); 32 adds token-gated guest order cancellation;
+72 adds pending vendor invitations; 73 makes vendor delivery coverage informational and keeps
+only the Egyptian-governorate validity check.
+Migrations 28-73 are applied locally only and
 have not been pushed to the hosted project (hosted state is UNVERIFIED; see
 `docs/HOSTED_STATE.md`). Apply migrations in order. Pushing requires a valid CLI
 login (`supabase login`) and the project database password for `db push`.
@@ -169,8 +171,8 @@ transaction and ends with `rollback`, even on success.
 | `supabase/tests/rls_guest_orders_test.sql` | Phase 11: guest COD checkout with no Auth user, service-role-only RPCs, catalog pricing, idempotent retries, token-gated confirmation, checkout quota, authenticated path unchanged; migration 42 (P1-15): guest order payload carries courier, tracking reference and handover time after shipment |
 | `supabase/tests/rls_occasions_test.sql` | Phase 26/27: occasion/tag curation, vendor suggestions, slug redirects, matching modes, storage policies, least-privilege grants |
 | `supabase/tests/rls_vendor_dashboard_test.sql` | Migrations 20-25: vendor profile privacy, media isolation, checkout pause, support queue, analytics index; migration 41 (P1-14): owner-only roster management, `list_vendor_members` isolation, last-owner guard |
-| `supabase/tests/rls_order_audit_test.sql` | Migration 28: audited status RPC, stale-page protection, required admin reasons, actor resolution, event read isolation; migration 40 (P1-13): admin address correction with mandatory reason, delivered/returned guard, coverage-break confirmation, and its own append-only audit table |
-| `supabase/tests/rls_delivery_coverage_test.sql` | Migration 29: exact governorate matching, city/address area matching, empty-list allow behavior, trigger enforcement on direct suborder inserts |
+| `supabase/tests/rls_order_audit_test.sql` | Migration 28: audited status RPC, stale-page protection, required admin reasons, actor resolution, event read isolation; migration 40 (P1-13): admin address correction with mandatory reason, delivered/returned guard, and its own append-only audit table; migration 73: coverage no longer blocks a valid correction |
+| `supabase/tests/rls_delivery_coverage_test.sql` | Migration 73: vendor coverage lists no longer gate checkout; all 27 Egyptian governorates (English and Arabic) pass, invalid/missing governorates fail, and stored coverage data remains unchanged |
 | `supabase/tests/rls_refunds_test.sql` | Migration 30: customer/guest case creation, buyer isolation, admin approval, commission-adjustment ledger, net settlement and active-settlement guard |
 | `supabase/tests/concurrency_parent_status_test.sql` | Migration 31: parent-order status race — concurrent suborder transitions, parent lock ordering, audit events; discovered by `scripts/run-rls-suites.sh` like the other suites |
 
@@ -372,9 +374,11 @@ Running it through the API requires platform-admin — it is a development conve
   `mark_settlement_paid` verifies the line still equals the entry plus adjustments.
 - Guest refund RPCs are service-role-only and require the order token hash. Direct
   writes to the refund tables are not granted; all changes go through RPCs.
-- Migration 29 adds delivery coverage at checkout and a trigger on
-  `order_vendors`, so direct suborder inserts cannot bypass the address check.
-  The checkout governorate input is still free text (dropdown/normalisation is P1-06).
+- Migration 29 originally added per-vendor delivery coverage at checkout through
+  a trigger on `order_vendors`. Migration 73 removes that gate: Gifto ships the
+  order, so vendor governorate/area lists are informational and remain stored
+  and editable in the admin/vendor settings. The trigger now only requires a
+  valid Egyptian governorate (same normalisation as `src/lib/governorates.ts`).
 - Return policy (D-09, decided 2026-11-20): 7 days from delivery, suborder-level
   only, admin approves and the vendor inspects, return courier paid by the customer
   unless the gift is wrong/damaged (then the vendor pays), inspect-then-restock

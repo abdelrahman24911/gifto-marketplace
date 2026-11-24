@@ -94,11 +94,11 @@ type DemoVendorRow = {
 };
 
 /**
- * Checkout pre-check (mirrors deliveryCoverageError in the checkout
- * action): the first demo vendor in the cart whose orders are contained,
- * or null when nothing is blocked / the check cannot run. Uses the exact
- * paused wording the database raises, so the customer sees one message
- * either way.
+ * Checkout pre-check (mirrors the demo-vendor containment branch in the
+ * checkout action): the first demo vendor in the cart whose orders are
+ * contained, or null when nothing is blocked / the check cannot run. Uses
+ * the exact paused wording the database raises, so the customer sees one
+ * message either way.
  */
 export async function demoVendorOrderError(
   items: unknown,

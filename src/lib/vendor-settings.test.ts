@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { GOVERNORATES } from "@/lib/governorates";
 import {
   CONTACT_EMAIL_PATTERN,
   VENDOR_COVERAGE_MAX_ITEMS,
@@ -89,13 +90,71 @@ describe("coverageToJson and formatCoverageList", () => {
 });
 
 describe("deliveryCoverageAllows", () => {
+  const alexandriaToyCorner = {
+    governorates: ["Alexandria"],
+    areas: ["Smouha", "Sidi Gaber", "Gleem", "Damanhour"],
+  };
+  const nileBlossoms = {
+    governorates: ["Alexandria"],
+    areas: ["Raml Station", "Sidi Gaber", "Smouha", "San Stefano"],
+  };
   const address = {
     city: "Maadi",
     governorate: "Cairo",
     addressLine: "12 Road 9, Maadi",
   };
 
-  it("allows every address when the shop has not configured coverage", () => {
+  it("allows the reported Cairo to Alexandria Toy Corner order", () => {
+    expect(
+      deliveryCoverageAllows(alexandriaToyCorner, {
+        city: "Cairo",
+        governorate: "Cairo",
+        addressLine: "12 Road 9, Maadi",
+      }),
+    ).toBe(true);
+  });
+
+  it("allows an Aswan order from Nile Blossoms", () => {
+    expect(
+      deliveryCoverageAllows(nileBlossoms, {
+        city: "Aswan",
+        governorate: "Aswan",
+        addressLine: "1 Corniche El Nil",
+      }),
+    ).toBe(true);
+  });
+
+  it.each(GOVERNORATES.map(({ en }) => en))(
+    "allows %s from a vendor whose lists are elsewhere",
+    (governorate) => {
+      expect(
+        deliveryCoverageAllows(alexandriaToyCorner, {
+          ...address,
+          governorate,
+        }),
+      ).toBe(true);
+      expect(
+        deliveryCoverageAllows(nileBlossoms, {
+          ...address,
+          governorate,
+        }),
+      ).toBe(true);
+    },
+  );
+
+  it.each(GOVERNORATES.map(({ en, ar }) => [en, ar] as const))(
+    "accepts the Arabic form for %s",
+    (_en, arabic) => {
+      expect(
+        deliveryCoverageAllows(nileBlossoms, {
+          ...address,
+          governorate: arabic,
+        }),
+      ).toBe(true);
+    },
+  );
+
+  it("allows every address when the shop lists nothing", () => {
     expect(
       deliveryCoverageAllows(
         { governorates: [], areas: [] },
@@ -104,83 +163,51 @@ describe("deliveryCoverageAllows", () => {
     ).toBe(true);
   });
 
-  it("matches governorates and areas case-insensitively", () => {
+  it("ignores stored coverage values entirely", () => {
     expect(
       deliveryCoverageAllows(
-        { governorates: [" cairo "], areas: ["MAADI"] },
-        address,
-      ),
-    ).toBe(true);
-  });
-
-  it("rejects a governorate outside coverage", () => {
-    expect(
-      deliveryCoverageAllows(
-        { governorates: ["Giza"], areas: [] },
-        address,
-      ),
-    ).toBe(false);
-  });
-
-  it("matches an area in the street address", () => {
-    expect(
-      deliveryCoverageAllows(
-        { governorates: ["Cairo"], areas: ["road 9"] },
-        address,
-      ),
-    ).toBe(true);
-  });
-
-  it("rejects a city and street outside the area list", () => {
-    expect(
-      deliveryCoverageAllows(
-        { governorates: ["Cairo"], areas: ["Zamalek"] },
-        address,
-      ),
-    ).toBe(false);
-  });
-
-  it("treats area-only coverage as a required area match", () => {
-    expect(
-      deliveryCoverageAllows({ governorates: [], areas: ["Nasr City"] }, address),
-    ).toBe(false);
-  });
-
-  it("tolerates governorate variants the way the database does (P1-06)", () => {
-    // The old false-reject pair: "Cairo Governorate" vs "Cairo".
-    expect(
-      deliveryCoverageAllows(
-        { governorates: ["Cairo"], areas: ["Maadi"] },
-        { ...address, governorate: "Cairo Governorate" },
-      ),
-    ).toBe(true);
-    expect(
-      deliveryCoverageAllows(
-        { governorates: ["Cairo Governorate"], areas: ["Maadi"] },
+        { governorates: ["Giza"], areas: ["Zamalek"] },
         address,
       ),
     ).toBe(true);
     expect(
       deliveryCoverageAllows(
         { governorates: ["Cairo"], areas: ["Maadi"] },
-        { ...address, governorate: "محافظة القاهرة" },
+        { ...address, governorate: "Aswan" },
       ),
     ).toBe(true);
   });
 
-  it("still rejects a genuinely different governorate", () => {
+  it("tolerates the same governorate variants as the database", () => {
     expect(
-      deliveryCoverageAllows(
-        { governorates: ["Cairo"], areas: ["Maadi"] },
-        { ...address, governorate: "Giza" },
-      ),
-    ).toBe(false);
+      deliveryCoverageAllows(alexandriaToyCorner, {
+        ...address,
+        governorate: "Cairo Governorate",
+      }),
+    ).toBe(true);
     expect(
-      deliveryCoverageAllows(
-        { governorates: ["Cairo"], areas: ["Maadi"] },
-        { ...address, governorate: "Cairoo" },
-      ),
-    ).toBe(false);
+      deliveryCoverageAllows(alexandriaToyCorner, {
+        ...address,
+        governorate: "محافظة القاهرة",
+      }),
+    ).toBe(true);
+    expect(
+      deliveryCoverageAllows(alexandriaToyCorner, {
+        ...address,
+        governorate: "الاسكندريه",
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects a missing or non-Egyptian governorate", () => {
+    for (const governorate of ["", "   ", "Atlantis", "Cairoo", "New Cairo"]) {
+      expect(
+        deliveryCoverageAllows(alexandriaToyCorner, {
+          ...address,
+          governorate,
+        }),
+      ).toBe(false);
+    }
   });
 });
 

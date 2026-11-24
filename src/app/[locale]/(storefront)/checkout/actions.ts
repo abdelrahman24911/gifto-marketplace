@@ -19,10 +19,6 @@ import { notifyOrderPlaced } from "@/lib/mail";
 import { recordPriceConsentRefusal } from "@/lib/price-consent-refusal";
 import { isGovernorate } from "@/lib/governorates";
 import { validateGiftOptions } from "@/lib/gift-options";
-import {
-  coverageFromJson,
-  deliveryCoverageAllows,
-} from "@/lib/vendor-settings";
 import { demoVendorOrderError } from "@/lib/demo-containment";
 import {
   buildPriceDiff,
@@ -74,17 +70,6 @@ function readValues(formData: FormData): CheckoutValues {
   };
 }
 
-type CoverageVendor = {
-  id: string;
-  name: string;
-  delivery_coverage: Json;
-};
-
-type CoverageProductRow = {
-  id: string;
-  vendor: CoverageVendor | CoverageVendor[] | null;
-};
-
 function requestedProductIds(items: unknown): string[] {
   if (!Array.isArray(items)) return [];
 
@@ -95,51 +80,6 @@ function requestedProductIds(items: unknown): string[] {
   });
 
   return [...new Set(ids)];
-}
-
-/**
- * Friendly pre-check for the common UI path. The database trigger on
- * `order_vendors` remains authoritative, including for direct RPC calls.
- */
-async function deliveryCoverageError(
-  items: unknown,
-  values: CheckoutValues,
-): Promise<string | null> {
-  const productIds = requestedProductIds(items);
-  if (productIds.length === 0) return null;
-
-  try {
-    const service = createServiceClient();
-    const { data, error } = await service
-      .from("products")
-      .select("id, vendor:vendors!inner(id, name, delivery_coverage)")
-      .in("id", productIds)
-      .returns<CoverageProductRow[]>();
-
-    if (error || !data) return null;
-
-    const vendors = new Map<string, CoverageVendor>();
-    for (const row of data) {
-      const vendor = Array.isArray(row.vendor) ? row.vendor[0] : row.vendor;
-      if (vendor) vendors.set(vendor.id, vendor);
-    }
-
-    for (const vendor of vendors.values()) {
-      if (
-        !deliveryCoverageAllows(coverageFromJson(vendor.delivery_coverage), {
-          city: values.city,
-          governorate: values.governorate,
-          addressLine: values.addressLine,
-        })
-      ) {
-        return `${vendor.name} does not deliver to this address. Choose an address in one of its delivery areas or remove its items from the cart.`;
-      }
-    }
-  } catch {
-    // The database trigger still blocks out-of-coverage orders.
-  }
-
-  return null;
 }
 
 type QuotaResult = "ok" | "limited" | "unavailable";
@@ -335,6 +275,9 @@ export async function placeOrder(
   // P1-06: the governorate is chosen from the dropdown, never typed.
   // A non-canonical value can only arrive from a tampered or stale
   // submit; reject it here instead of letting the DB trigger decide.
+  // Delivery coverage is informational after migration 73, so this is
+  // the only address gate in the checkout pre-check; Gifto ships every
+  // order to a valid Egyptian governorate.
   if (!isGovernorate(values.governorate)) {
     return {
       error: "Choose a governorate from the list.",
@@ -354,11 +297,6 @@ export async function placeOrder(
   });
   if (giftError) {
     return { error: giftError, values, attempt };
-  }
-
-  const coverageError = await deliveryCoverageError(items, values);
-  if (coverageError) {
-    return { error: coverageError, values, attempt };
   }
 
   // P0 demo containment (migration 67): a demo vendor's order is refused

@@ -259,60 +259,24 @@ export function formatCoverageList(values: string[]): string {
   return values.join(", ");
 }
 
-function normalizeCoverageValue(value: string): string {
-  return value.trim().replace(/\s+/g, " ").toLowerCase();
-}
-
 /**
- * Mirrors the database trigger that guards checkout. Empty lists mean the shop
- * has not configured coverage, so the address is allowed for backwards
- * compatibility. Governorates must match exactly; areas may match the city or
- * appear in the street address.
+ * Delivery coverage is informational: Gifto ships the order, so a vendor's
+ * stored governorate/area lists no longer gate checkout. They remain stored
+ * and editable for a future per-vendor delivery model.
  *
- * P1-06: governorate comparison uses the same normalisation as
- * delivery_coverage_allows() (migration 37) — trim, case, a trailing
- * "Governorate" suffix or a leading "محافظة" prefix, Arabic
- * orthography — with the plain trimmed comparison as fallback for
- * values the normaliser cannot map. Areas use String.includes, which
- * is already literal; the DB escapes LIKE wildcards.
+ * The only rule here is address validity: the order's governorate must map to
+ * one of Egypt's 27 governorates. Normalisation is the same as
+ * normalize_governorate_name() in SQL — trim, case-fold, tolerate a trailing
+ * "Governorate" suffix or leading "محافظة" prefix, and accept Arabic
+ * orthographic variants. City and street validation stay with the caller.
+ *
+ * Mirrors public.delivery_coverage_allows() after migration 73.
  */
 export function deliveryCoverageAllows(
-  coverage: DeliveryCoverage,
+  _coverage: DeliveryCoverage,
   address: { city: string; governorate: string; addressLine: string },
 ): boolean {
-  const governorates = coverage.governorates
-    .map(normalizeCoverageValue)
-    .filter(Boolean);
-  const areas = coverage.areas.map(normalizeCoverageValue).filter(Boolean);
-
-  if (governorates.length === 0 && areas.length === 0) return true;
-
-  const city = normalizeCoverageValue(address.city);
-  const governorate = normalizeCoverageValue(address.governorate);
-  // Canonical form of the order's governorate, or null when it cannot
-  // be mapped — compared against each stored value's canonical form,
-  // exactly like normalize_governorate_name() in the database.
-  const governorateCanonical = normalizeGovernorate(address.governorate);
-  const addressLine = normalizeCoverageValue(address.addressLine);
-
-  if (
-    governorates.length > 0 &&
-    !governorates.includes(governorate) &&
-    !(
-      governorateCanonical !== null &&
-      governorates.some(
-        (stored) => normalizeGovernorate(stored) === governorateCanonical,
-      )
-    )
-  ) {
-    return false;
-  }
-
-  if (areas.length > 0 && !areas.includes(city)) {
-    if (!areas.some((area) => addressLine.includes(area))) return false;
-  }
-
-  return true;
+  return normalizeGovernorate(address.governorate) !== null;
 }
 
 /**
