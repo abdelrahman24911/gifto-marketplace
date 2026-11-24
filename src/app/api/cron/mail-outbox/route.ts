@@ -11,7 +11,8 @@ export const runtime = "nodejs";
  * Automatic mail-outbox retry worker (Phase 2, item 1).
  *
  * Vercel Cron calls this route on the schedule declared in vercel.json
- * (every 5 minutes). It runs the same `processMailOutbox` code path as
+ * (daily at 03:00 UTC, the Hobby-compatible cadence). It runs the same
+ * `processMailOutbox` code path as
  * the admin retry button, so it inherits every existing safeguard:
  *   - at most MAIL_OUTBOX_MAX_ATTEMPTS (5) sends per retry cycle;
  *   - a demo environment is refused before any row is read, unless

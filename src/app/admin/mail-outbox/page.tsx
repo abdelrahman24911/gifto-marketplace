@@ -30,7 +30,7 @@ function formatDateTime(value: string | null): string {
  * (no SMTP provider configured) or failed to send, queued for retry.
  * Recovery, password-reset and staff-invite emails are never queued —
  * their single-use links must not be persisted. Retries run
- * automatically every 5 minutes via /api/cron/mail-outbox (scheduled in
+ * automatically once daily via /api/cron/mail-outbox (scheduled in
  * vercel.json) and can also be triggered here by an admin.
  */
 export default async function AdminMailOutboxPage() {

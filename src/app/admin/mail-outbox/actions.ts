@@ -18,7 +18,7 @@ export type MailOutboxActionState = {
 /**
  * Retries pending mail-outbox rows (migration 63). Admin-only, quota
  * guarded like the other admin mutations. Retries also run
- * automatically every 5 minutes from the CRON_SECRET-protected
+ * automatically once daily from the CRON_SECRET-protected
  * /api/cron/mail-outbox route (vercel.json); this action is the manual
  * path and uses the same processMailOutbox caps. The retry never
  * re-enqueues a failed send — a row that fails again stays pending (or

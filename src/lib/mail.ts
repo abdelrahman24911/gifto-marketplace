@@ -443,7 +443,7 @@ export async function requeueMailOutbox(
 /**
  * Retries pending outbox rows, oldest first (admin-triggered from
  * /admin/mail-outbox, and automatically by the cron route
- * /api/cron/mail-outbox every 5 minutes). Each row is sent with
+ * /api/cron/mail-outbox once daily). Each row is sent with
  * `enqueue: false` so a failed retry never re-enqueues itself. After
  * MAIL_OUTBOX_MAX_ATTEMPTS the row is marked 'failed' (terminal)
  * instead of spinning forever. Terminally failed rows are never picked

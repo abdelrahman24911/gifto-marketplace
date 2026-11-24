@@ -48,7 +48,7 @@ Source: `src/lib/mail.ts`.
 | Demo boundary | `GIFTO_ENVIRONMENT=demo` blocks real sends unless `GIFTO_DEMO_ALLOW_EMAIL=true`; the retry worker refuses the same way (lines 169–176, 261–275, 499–515). |
 | Outbox caps | 5 attempts per retry cycle; at most 2 admin requeues; total bound 15 attempts (`MAIL_OUTBOX_MAX_ATTEMPTS=5`, `MAIL_OUTBOX_MAX_REQUEUES=2`, lines 85–95). |
 | Cron | `/api/cron/mail-outbox` requires `Authorization: Bearer $CRON_SECRET`; missing secret → 503, wrong secret → 401; timing-safe comparison (`src/app/api/cron/mail-outbox/route.ts:31-79`). |
-| Schedule | `vercel.json` calls the route every 5 minutes (`*/5 * * * *`). A Vercel plan that supports sub-daily cron is required. |
+| Schedule | `vercel.json` calls the route daily at 03:00 UTC (`0 3 * * *`). This is the Vercel Hobby-compatible cadence; higher-frequency schedules require Pro. |
 
 ### What is enqueued vs never enqueued
 
