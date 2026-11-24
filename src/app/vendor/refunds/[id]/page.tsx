@@ -9,6 +9,10 @@ import {
   REFUND_RETURN_PATH_LABELS,
 } from "@/lib/refunds";
 import { requireVendorRole } from "@/lib/vendor";
+import {
+  vendorContactName,
+  vendorContactPhone,
+} from "@/lib/vendor-pii";
 
 import { VendorNotice, VendorPageHeader } from "../../ui";
 import { AcknowledgeRefundForm } from "../acknowledge-refund-form";
@@ -68,7 +72,8 @@ export default async function VendorRefundDetailPage({
 }) {
   const { id } = await params;
   const { vendor } = await searchParams;
-  const { supabase, access } = await requireVendorRole(vendor);
+  const { supabase, access, canViewCustomerPii } =
+    await requireVendorRole(vendor);
   const vendorId = access.vendorId;
 
   const { data, error } = await supabase
@@ -84,6 +89,14 @@ export default async function VendorRefundDetailPage({
   const refundCase = data as unknown as VendorRefundDetail;
   const reference =
     refundCase.order?.public_reference ?? `#${refundCase.order_id.slice(0, 8)}`;
+  const customerName = vendorContactName(
+    refundCase.order?.recipient_name,
+    canViewCustomerPii,
+  );
+  const customerPhone = vendorContactPhone(
+    refundCase.order?.contact_phone,
+    canViewCustomerPii,
+  );
   const createdAt = new Date(refundCase.created_at).toLocaleString("en-GB", {
     day: "numeric",
     month: "short",
@@ -124,10 +137,8 @@ export default async function VendorRefundDetailPage({
         <dl className="mt-4 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
           <dt className="text-ink-mute">Customer</dt>
           <dd className="text-ink">
-            {refundCase.order?.recipient_name ?? "—"}
-            {refundCase.order?.contact_phone
-              ? ` · ${refundCase.order.contact_phone}`
-              : null}
+            {customerName}
+            {customerPhone ? ` · ${customerPhone}` : null}
           </dd>
           <dt className="text-ink-mute">Shop subtotal</dt>
           <dd className="tabular-nums text-ink">
@@ -150,6 +161,13 @@ export default async function VendorRefundDetailPage({
             {refundCase.order_vendor?.status ?? "—"}
           </dd>
         </dl>
+
+        {!canViewCustomerPii ? (
+          <p className="mt-2 text-xs text-ink-mute">
+            Contact details are masked for staff accounts. Owners and managers
+            can see full contact details.
+          </p>
+        ) : null}
 
         <p className="mt-4 whitespace-pre-line border-t border-line pt-4 text-sm leading-relaxed text-ink-soft">
           {refundCase.reason}

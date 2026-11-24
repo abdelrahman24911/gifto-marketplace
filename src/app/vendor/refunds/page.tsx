@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Pagination } from "@/components/pagination";
 import { RefreshButton } from "@/components/dashboard/refresh-button";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
+import { maskName, maskPhone } from "@/lib/mask-contact";
 import { formatEgp } from "@/lib/money";
 import {
   DEFAULT_PAGE_SIZE,
@@ -334,10 +335,10 @@ export default async function VendorRefundsPage({
                         </div>
                         <p className="mt-1 text-sm text-ink-soft">
                           {refundCase.order?.recipient_name
-                            ? `${refundCase.order.recipient_name}`
+                            ? maskName(refundCase.order.recipient_name)
                             : null}
                           {refundCase.order?.contact_phone
-                            ? ` · ${refundCase.order.contact_phone}`
+                            ? ` · ${maskPhone(refundCase.order.contact_phone)}`
                             : null}
                           {` · shop subtotal ${formatEgp(subtotal)}`}
                         </p>

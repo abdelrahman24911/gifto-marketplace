@@ -35,8 +35,8 @@ import {
   refundCaseResolvedEmail,
   requeueMailOutbox,
   sendMail,
-  vendorStaffAddedEmail,
   vendorStaffInviteEmail,
+  vendorStaffPendingInviteEmail,
 } from "./mail";
 
 describe("getMailConfig", () => {
@@ -284,7 +284,7 @@ describe("mail templates", () => {
     expect(message.text).toContain("expires after one hour");
   });
 
-  it("invites staff with the shop, role and a single-use link", () => {
+  it("invites staff to set a password before accepting", () => {
     const message = vendorStaffInviteEmail({
       shopName: "Flower Shop",
       role: "manager",
@@ -296,16 +296,22 @@ describe("mail templates", () => {
       "https://gifto.example/auth/accept-invite?code=abc",
     );
     expect(message.text).toContain("expires after 24 hours");
+    expect(message.text).toContain("No access is granted until you accept");
   });
 
-  it("tells an existing account they were added, with no link to leak", () => {
-    const message = vendorStaffAddedEmail({
+  it("points an existing account at the invitations page", () => {
+    const message = vendorStaffPendingInviteEmail({
       shopName: "Flower Shop",
       role: "staff",
+      invitationsUrl: "https://gifto.example/account/invitations",
     });
     expect(message.text).toContain("Flower Shop");
     expect(message.text).toContain("as staff");
-    expect(message.text).not.toMatch(/https?:\/\//);
+    expect(message.text).toContain(
+      "https://gifto.example/account/invitations",
+    );
+    expect(message.text).toContain("No access is granted until you accept");
+    expect(message.text).not.toContain("code=");
   });
 });
 

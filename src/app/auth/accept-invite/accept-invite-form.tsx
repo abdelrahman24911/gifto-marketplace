@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { getSafeAuthPath } from "@/lib/auth-redirect";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/toast-provider";
 
@@ -15,6 +16,7 @@ type Status = "loading" | "ready" | "invalid";
 export function AcceptInviteForm() {
   const router = useRouter();
   const { flash } = useToast();
+  const nextPathRef = useRef("/account");
   const [status, setStatus] = useState<Status>("loading");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -26,6 +28,7 @@ export function AcceptInviteForm() {
 
     const query = new URLSearchParams(window.location.search);
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    nextPathRef.current = getSafeAuthPath(query.get("next"));
     const code = query.get("code");
     const accessToken = hash.get("access_token");
     const refreshToken = hash.get("refresh_token");
@@ -123,10 +126,8 @@ export function AcceptInviteForm() {
         return;
       }
 
-      // R-08: setting the password ends in a navigation to /account,
-      // so the confirmation is flashed — the path that survives it.
-      flash("Your password is set — welcome to Gifto.", "success");
-      router.replace("/account");
+      flash("Your password is set - welcome to Gifto.", "success");
+      router.replace(nextPathRef.current);
       router.refresh();
     } catch {
       setError("Something went wrong. Please try again.");
@@ -155,8 +156,8 @@ export function AcceptInviteForm() {
           Invitation unavailable
         </h1>
         <p className="mt-2 text-sm text-zinc-600">
-          This invitation link is invalid or has expired. Ask the Gifto team to
-          send a new invitation.
+          This invitation link is invalid or has expired. Ask the person who
+          invited you to send a new invitation.
         </p>
         <div className="mt-5 flex flex-wrap gap-3 text-sm">
           <Link href="/" className="font-medium text-zinc-900 underline">

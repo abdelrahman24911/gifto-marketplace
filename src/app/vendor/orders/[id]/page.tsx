@@ -15,6 +15,11 @@ import {
   isOrderStatusReasonCode,
 } from "@/lib/order-status-reasons";
 import { requireVendorRole } from "@/lib/vendor";
+import {
+  vendorContactEmail,
+  vendorContactName,
+  vendorContactPhone,
+} from "@/lib/vendor-pii";
 
 import { VendorNotice, VendorPageHeader } from "../../ui";
 import { SuborderActions } from "../suborder-actions";
@@ -38,7 +43,8 @@ export default async function VendorOrderDetailPage({
 }) {
   const { id } = await params;
   const { vendor } = await searchParams;
-  const { supabase, access, canManage } = await requireVendorRole(vendor);
+  const { supabase, access, canManage, canViewCustomerPii } =
+    await requireVendorRole(vendor);
 
   const [suborderResult, eventsResult, refundResult] = await Promise.all([
     supabase
@@ -107,6 +113,18 @@ export default async function VendorOrderDetailPage({
     clawbacks: commission?.commission_clawbacks ?? [],
   });
   const reference = order?.public_reference ?? `#${suborder.id.slice(0, 8)}`;
+  const customerName = vendorContactName(
+    order?.recipient_name,
+    canViewCustomerPii,
+  );
+  const customerPhone = vendorContactPhone(
+    order?.contact_phone,
+    canViewCustomerPii,
+  );
+  const customerEmail = vendorContactEmail(
+    order?.contact_email,
+    canViewCustomerPii,
+  );
 
   return (
     <div className="w-full">
@@ -116,8 +134,7 @@ export default async function VendorOrderDetailPage({
         description={
           <>
             Placed {formatDateTime(suborder.created_at)}
-            {order ? ` · for ${order.recipient_name}` : ""} · cash on
-            delivery
+            {order ? ` · for ${customerName}` : ""} · cash on delivery
           </>
         }
         actions={
@@ -165,8 +182,9 @@ export default async function VendorOrderDetailPage({
       {!canManage ? (
         <div className="mt-4">
           <VendorNotice tone="info">
-            Staff access is read-only for orders. Owners and managers can
-            update shop-line status.
+            Staff access is read-only for orders, and customer contact details
+            are masked. Owners and managers can update shop-line status and see
+            full contact details.
           </VendorNotice>
         </div>
       ) : null}
@@ -178,10 +196,10 @@ export default async function VendorOrderDetailPage({
           </p>
           {order ? (
             <div className="mt-2 text-sm leading-relaxed">
-              <p className="font-medium text-ink">{order.recipient_name}</p>
-              <p className="text-ink-soft">{order.contact_phone}</p>
-              {order.contact_email ? (
-                <p className="text-ink-soft">{order.contact_email}</p>
+              <p className="font-medium text-ink">{customerName}</p>
+              <p className="text-ink-soft">{customerPhone ?? "—"}</p>
+              {customerEmail ? (
+                <p className="text-ink-soft">{customerEmail}</p>
               ) : null}
               <p className="mt-1 text-ink-soft">
                 {order.address_line}

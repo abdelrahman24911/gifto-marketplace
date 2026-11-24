@@ -6,6 +6,7 @@ import {
   changeVendorMemberRole,
   inviteVendorMember,
   removeVendorMember,
+  revokeVendorInvitation,
   type VendorStaffState,
 } from "./actions";
 
@@ -17,6 +18,14 @@ export type StaffMember = {
   fullName: string | null;
   role: VendorRole;
   createdAt: string;
+};
+
+export type StaffInvitation = {
+  id: string;
+  email: string;
+  role: VendorRole;
+  createdAt: string;
+  expiresAt: string;
 };
 
 const inputClass =
@@ -87,13 +96,75 @@ function InviteForm({ vendorId }: { vendorId: string }) {
         </button>
       </form>
       <p className="mt-2 text-xs text-ink-mute">
-        A new teammate gets an invitation email to set a password and join
-        the shop. Someone with a Gifto account is added straight away.
+        A new teammate gets an invitation email to set a password, then
+        accepts from their account. Someone with a Gifto account gets a
+        notice and accepts there too. Nothing changes until they accept.
         Ownership is transferred by changing a member&apos;s role, never by
         invitation.
       </p>
       <StateMessage state={state} />
     </div>
+  );
+}
+
+function PendingInvitationRow({
+  invitation,
+  vendorId,
+  canManage,
+}: {
+  invitation: StaffInvitation;
+  vendorId: string;
+  canManage: boolean;
+}) {
+  const [state, formAction, pending] = useActionState<
+    VendorStaffState,
+    FormData
+  >(revokeVendorInvitation, null);
+
+  return (
+    <li className="rounded-xl border border-line bg-paper px-4 py-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="break-all text-sm font-medium text-ink">
+          {invitation.email}
+        </p>
+        <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-wide text-amber-800">
+          Pending
+        </span>
+      </div>
+      <p className="mt-0.5 text-xs text-ink-mute">
+        Invited as {ROLE_LABELS[invitation.role]}
+      </p>
+      <p className="mt-0.5 text-xs text-ink-mute">
+        Sent {new Date(invitation.createdAt).toLocaleDateString("en-GB")} -
+        expires{" "}
+        {new Date(invitation.expiresAt).toLocaleDateString("en-GB")}
+      </p>
+
+      {canManage ? (
+        <form action={formAction} className="mt-3">
+          <input type="hidden" name="vendor" value={vendorId} />
+          <input type="hidden" name="invitation_id" value={invitation.id} />
+          <button
+            type="submit"
+            disabled={pending}
+            className={dangerClass}
+            onClick={(event) => {
+              if (
+                !window.confirm(
+                  `Revoke the invitation for ${invitation.email}?`,
+                )
+              ) {
+                event.preventDefault();
+              }
+            }}
+          >
+            {pending ? "Revoking." : "Revoke invitation"}
+          </button>
+        </form>
+      ) : null}
+
+      <StateMessage state={state} />
+    </li>
   );
 }
 
@@ -204,17 +275,21 @@ function MemberRow({
 }
 
 /**
- * Shop staff list and management (P1-14, H-07). Owners invite, re-role and
- * remove; managers and staff see the same list read-only.
+ * Shop staff list and management (P1-14, H-07). Owners send pending
+ * invitations, re-role and remove; managers and staff see the list read-only.
  */
 export function StaffManagement({
   vendorId,
   members,
+  invitations,
+  invitationsUnavailable,
   canManage,
   selfId,
 }: {
   vendorId: string;
   members: StaffMember[];
+  invitations: StaffInvitation[];
+  invitationsUnavailable: boolean;
   canManage: boolean;
   selfId: string;
 }) {
@@ -237,6 +312,31 @@ export function StaffManagement({
           who has access to this shop below.
         </p>
       )}
+
+      {canManage && !invitationsUnavailable ? (
+        <section className="rounded-2xl border border-line bg-paper-soft p-5">
+          <h2 className="font-display text-lg text-ink">
+            Pending invitations ({invitations.length})
+          </h2>
+          {invitations.length === 0 ? (
+            <p className="mt-2 text-sm text-ink-mute">
+              No pending invitations. Invited people appear here until they
+              accept or the invitation expires.
+            </p>
+          ) : (
+            <ul className="mt-4 flex flex-col gap-3">
+              {invitations.map((invitation) => (
+                <PendingInvitationRow
+                  key={invitation.id}
+                  invitation={invitation}
+                  vendorId={vendorId}
+                  canManage={canManage}
+                />
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
 
       <section className="rounded-2xl border border-line bg-paper-soft p-5">
         <h2 className="font-display text-lg text-ink">

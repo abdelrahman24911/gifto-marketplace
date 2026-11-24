@@ -2,8 +2,12 @@ import fs from "node:fs";
 
 import { defineConfig, devices } from "@playwright/test";
 
+import {
+  assertLocalE2ETarget,
+  isLocalE2EHost,
+} from "./tests/assert-local-e2e-target";
+
 const DEFAULT_PORT = "3100";
-const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 
 function resolveBaseUrl(): { baseURL: string; explicit: boolean } {
   const configured = process.env.PLAYWRIGHT_BASE_URL?.trim();
@@ -25,7 +29,7 @@ function resolveBaseUrl(): { baseURL: string; explicit: boolean } {
     );
   }
 
-  if (!LOCAL_HOSTS.has(parsed.hostname)) {
+  if (!isLocalE2EHost(parsed.hostname)) {
     throw new Error(
       `Refusing to run E2E tests against non-local host "${parsed.hostname}". ` +
         "Set PLAYWRIGHT_BASE_URL to a local Gifto server (for example http://127.0.0.1:3100).",
@@ -59,6 +63,11 @@ function loadLocalPublicEnv() {
 }
 
 loadLocalPublicEnv();
+
+assertLocalE2ETarget(
+  "NEXT_PUBLIC_SUPABASE_URL",
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+);
 
 const { baseURL, explicit } = resolveBaseUrl();
 

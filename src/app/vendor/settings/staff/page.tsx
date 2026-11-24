@@ -3,7 +3,11 @@ import Link from "next/link";
 import { requireVendorRole } from "@/lib/vendor";
 
 import { VendorNotice, VendorPageHeader } from "../../ui";
-import { StaffManagement, type StaffMember } from "./staff-management";
+import {
+  StaffManagement,
+  type StaffInvitation,
+  type StaffMember,
+} from "./staff-management";
 
 export const metadata = { title: "Shop staff — Gifto" };
 
@@ -60,6 +64,31 @@ export default async function VendorStaffPage({
     createdAt: row.created_at,
   }));
 
+  let invitations: StaffInvitation[] = [];
+  let invitationsUnavailable = false;
+
+  if (canManage) {
+    const { data: pending, error: pendingError } = await supabase
+      .from("vendor_invitations")
+      .select("id,email,role,created_at,expires_at")
+      .eq("vendor_id", access.vendorId)
+      .eq("status", "pending")
+      .gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false });
+
+    if (pendingError) {
+      invitationsUnavailable = true;
+    } else {
+      invitations = (pending ?? []).map((row) => ({
+        id: row.id,
+        email: row.email,
+        role: row.role,
+        createdAt: row.created_at,
+        expiresAt: row.expires_at,
+      }));
+    }
+  }
+
   return (
     <div className="w-full">
       <VendorPageHeader
@@ -81,10 +110,27 @@ export default async function VendorStaffPage({
         }
       />
 
+      {invitationsUnavailable ? (
+        <div className="mt-6">
+          <VendorNotice tone="danger" role="alert">
+            Pending invitations couldn&apos;t load.{" "}
+            <Link
+              href={`/vendor/settings/staff?vendor=${access.vendorId}`}
+              className="font-medium text-berry hover:underline"
+            >
+              Try again
+            </Link>
+            .
+          </VendorNotice>
+        </div>
+      ) : null}
+
       <div className="mt-6">
         <StaffManagement
           vendorId={access.vendorId}
           members={members}
+          invitations={invitations}
+          invitationsUnavailable={invitationsUnavailable}
           canManage={canManage}
           selfId={user.id}
         />

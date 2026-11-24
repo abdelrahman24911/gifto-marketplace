@@ -119,7 +119,7 @@ export default async function AdminRefundsPage({
   let listQuery = supabase
     .from("refund_cases")
     .select(
-      "id, order_id, order_vendor_id, vendor_id, source, status, reason, requested_amount_minor, refund_amount_minor, resolution_note, created_at, resolved_at, resolved_by, return_path, received_at, acknowledged_at, restocked_at, escalation_count, escalated_at, escalation_note, first_resolved_at, order:orders(public_reference, recipient_name, contact_phone), order_vendor:order_vendors(status, subtotal_minor, vendor:vendors(name, slug))",
+      "id, order_id, order_vendor_id, vendor_id, source, status, reason, requested_amount_minor, refund_amount_minor, resolution_note, created_at, resolved_at, resolved_by, return_path, received_at, receipt_note, inspection_condition, return_courier_paid_by, inspection_condition_previous, inspection_corrected_by, inspection_corrected_at, acknowledged_at, restocked_at, escalation_count, escalated_at, escalation_note, first_resolved_at, order:orders(public_reference, recipient_name, contact_phone), order_vendor:order_vendors(status, subtotal_minor, vendor:vendors(name, slug))",
       { count: "exact" },
     );
 

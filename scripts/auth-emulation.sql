@@ -12,7 +12,8 @@
 -- never apply it to a hosted project, and never rely on it outside tests.
 --
 -- Emulated surface (the minimum the migrations and suites touch):
---   auth.users (id uuid PK, email, raw_user_meta_data jsonb, created_at)
+--   auth.users (id uuid PK, email, raw_user_meta_data jsonb,
+--               email_confirmed_at timestamptz, created_at)
 --   auth.uid() — reads request.jwt.claim.sub, like PostgREST does
 --   roles anon, authenticated, service_role (NOLOGIN; SET ROLE works)
 
@@ -22,8 +23,12 @@ create table if not exists auth.users (
   id                uuid primary key,
   email             text,
   raw_user_meta_data jsonb not null default '{}'::jsonb,
+  email_confirmed_at timestamptz,
   created_at        timestamptz not null default now()
 );
+
+alter table auth.users
+  add column if not exists email_confirmed_at timestamptz;
 
 create or replace function auth.uid()
 returns uuid

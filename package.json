@@ -19,6 +19,7 @@
     "test:e2e:report": "playwright show-report",
     "typecheck": "tsc --noEmit",
     "check:i18n": "node scripts/check-i18n-keys.mjs",
+    "mail:verify": "node --env-file-if-exists=.env.local scripts/verify-brevo-smtp.mjs",
     "preflight:deploy": "node scripts/check-deployment-preflight.mjs",
     "seed:demo": "node scripts/seed-demo.mjs",
     "demo:passwords": "node scripts/demo-passwords.mjs",

@@ -118,7 +118,7 @@ export default async function AdminOrdersPage({
   let listQuery = supabase
     .from("orders")
     .select(
-      "id, public_reference, user_id, status, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, contact_email, city, governorate, created_at, order_vendors(id, status, subtotal_minor, commission_rate, vendor:vendors(name, slug), order_items(product_name, quantity, line_total_minor), commission_entries(amount_minor, status))",
+      "id, public_reference, user_id, status, subtotal_minor, delivery_fee_minor, total_minor, recipient_name, contact_phone, contact_email, city, governorate, created_at, order_vendors(id, status, subtotal_minor, commission_rate, vendor:vendors(name, slug), order_items(product_name, quantity, line_total_minor), commission_entries(amount_minor, status, commission_clawbacks(amount_minor, status)))",
       { count: "exact" },
     );
 
@@ -442,7 +442,7 @@ export default async function AdminOrdersPage({
                         const commissionNote = returnedCommissionNote({
                           status: suborder.status ?? "",
                           commission: commission ?? null,
-                          clawbacks: [],
+                          clawbacks: commission?.commission_clawbacks ?? [],
                         });
 
                         return (

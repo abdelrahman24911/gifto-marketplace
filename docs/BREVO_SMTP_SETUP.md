@@ -4,9 +4,10 @@
 **Branch:** `muse/decision-closure-brevo`
 **Scope:** Prepare the existing SMTP mail module for Brevo without committing
 credentials or changing application behaviour.
-**Status:** Documentation and non-secret configuration guidance only. No Brevo
-account, verified sender, DNS access, or credentials were available in this
-session, so **no live send was performed or verified**.
+**Status:** Local Brevo SMTP configuration is in place and the verifier is
+available. A live relay test was accepted on 2026-11-24; inbox receipt,
+SPF/DKIM/DMARC, Vercel/hosted configuration, and app-triggered delivery remain
+**unverified**. No credentials are committed.
 
 ## Executive summary
 
@@ -19,7 +20,8 @@ session, so **no live send was performed or verified**.
   - host: `smtp-relay.brevo.com`
   - port: `587` with `SMTP_SECURE=false` (STARTTLS), or `465` with
     `SMTP_SECURE=true` (implicit TLS)
-  - `SMTP_USER`: the Brevo account/login email
+  - `SMTP_USER`: the Brevo SMTP login (the account email, or the generated
+    `...@smtp-brevo.com` login Brevo shows on the SMTP page)
   - `SMTP_PASS`: the **Brevo SMTP key** (not the Brevo API v3 key)
   - `MAIL_FROM`: a sender address verified in Brevo
 - DNS must be configured from the exact records Brevo shows for the sending
@@ -58,10 +60,10 @@ Source: `src/lib/mail.ts`.
 | Refund opened | `refund_opened` | Yes | Safe to retry. |
 | Refund resolved | `refund_resolved` | Yes | Safe to retry. |
 | Support status | `support_status` | Yes | Safe to retry. |
-| Staff added (existing account) | `staff_added` | Yes | No single-use link. |
+| Staff invitation notice (existing account) | `staff_invited` | Yes | No single-use link; it points at the account invitations page. |
 | Password reset | — | **No** (`enqueue: false`) | Single-use link must not be persisted. |
 | Guest order recovery | — | **No** (`enqueue: false`) | Single-use link/code must not be persisted. |
-| Vendor staff invite | — | **No** (`enqueue: false`) | Single-use invite link must not be persisted. |
+| Vendor staff invite (new account) | — | **No** (`enqueue: false`) | Single-use invite link must not be persisted. |
 
 ## Required Brevo values
 
@@ -73,7 +75,7 @@ only when testing. Never commit values.
 | `SMTP_HOST` | `smtp-relay.brevo.com` | Brevo SMTP relay. |
 | `SMTP_PORT` | `587` or `465` | 587 = STARTTLS; 465 = implicit TLS. |
 | `SMTP_SECURE` | `false` for 587; `true` for 465 | The code also defaults to `true` when the port is 465. |
-| `SMTP_USER` | Brevo account/login email | This is the SMTP login, not necessarily `MAIL_FROM`. |
+| `SMTP_USER` | Brevo SMTP login | Account email or the generated `...@smtp-brevo.com` login; not necessarily `MAIL_FROM`. |
 | `SMTP_PASS` | Brevo SMTP key | Generate it in Brevo's SMTP/API settings. This is not the API v3 key. |
 | `MAIL_FROM` | A verified sender, e.g. `Gifto <no-reply@your-domain>` | The address/domain must be verified in Brevo. |
 | `SMTP_TIMEOUT_MS` | `5000` (default) or `10000` | Raise only if Brevo connections time out; keep it bounded. |
@@ -112,9 +114,9 @@ and land in the inbox (not spam) for the owner's test recipients.
 
 ## Supabase Auth is a separate surface
 
-The app mail module covers order/refund/support/staff-added mail and the
-password-reset/staff-invite/recovery messages that are generated with
-`generateLink` and sent through `sendMail`.
+The app mail module covers order/refund/support mail, the staff pending-invite
+notice for existing accounts, and the password-reset/staff-invite/recovery
+messages that are generated with `generateLink` and sent through `sendMail`.
 
 Supabase Auth can also send its own emails (for example signup confirmation or
 magic links) using the SMTP settings in the Supabase dashboard. Those do **not**
@@ -140,7 +142,8 @@ Do not assume app SMTP configuration covers Supabase Auth email.
    environment. Do not set them in a demo deployment unless test sends are
    explicitly intended.
 5. Redeploy so the environment is loaded.
-6. Send a test through the app (for example a support-status notification to a
+6. Run the local Brevo verifier first (see “Safe local verification” below), then
+   send a test through the app (for example a support-status notification to a
    controlled recipient) and confirm:
    - the message arrives,
    - SPF/DKIM/DMARC pass,
@@ -170,14 +173,35 @@ What this proves:
 - retry caps and requeue caps hold;
 - single-use-link sends are not enqueued.
 
+To verify the real Brevo relay, put the SMTP values in `.env.local` only and run:
+
+```powershell
+npm run mail:verify -- --check-only
+npm run mail:verify -- --to=you@example.com
+```
+
+The first command validates the Brevo host, port/TLS pairing, sender format, and
+the presence of the SMTP login/key without connecting. The second connects with
+SMTP AUTH and sends one test message. The npm script loads `.env.local`
+automatically, refuses non-Brevo hosts, mismatched TLS settings, missing
+recipients, and sends from a demo environment; it prints only redacted
+addresses and never prints `SMTP_PASS`. A successful send still does not prove
+DNS authentication or deliverability to a strict inbox, so also inspect the
+received headers and Brevo's dashboard.
+
 It does **not** prove Brevo deliverability, DNS authentication, or the hosted
 cron.
 
+Local result on 2026-11-24: `--check-only` passed and one relay test was
+accepted for the configured sender. Inbox receipt was not inspected from this
+environment.
+
 ## What remains blocked
 
-- Brevo account, verified sender/domain, and SMTP key.
-- DNS access and the owner's DMARC policy.
-- A controlled test recipient and a deployed environment with the new values.
+- Vercel/hosted environment values and a redeploy; only local `.env.local` is
+  configured.
+- Brevo sender/domain verification and DNS authentication evidence.
+- Inbox receipt/deliverability on a controlled mailbox.
 - Supabase Auth SMTP configuration, if separate Auth emails are in scope.
 - Hosted migration 63/65 (mail_outbox) must be applied before the outbox/cron
   path can work in production; production was observed at migration 27.
@@ -185,6 +209,9 @@ cron.
 ## Acceptance criteria
 
 - [ ] Brevo domain/sender verified.
+- [x] `npm run mail:verify -- --check-only` passes with the local Brevo values.
+- [x] `npm run mail:verify -- --to=<controlled mailbox>` sends one test message
+  (Brevo relay accepted it on 2026-11-24; inbox receipt not inspected here).
 - [ ] SPF, DKIM, and DMARC pass for a real test message.
 - [ ] App test message arrives from the verified sender.
 - [ ] Password reset and guest recovery arrive in both locales.

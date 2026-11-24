@@ -30,9 +30,10 @@ import type { OrderStatus } from "./supabase/database.types";
  * mail_outbox table (migration 63) so they can be retried from
  * /admin/mail-outbox or automatically by the cron route
  * (/api/cron/mail-outbox, scheduled in vercel.json); recovery,
- * password-reset and staff-invite emails are never enqueued — their
- * single-use links must not be persisted, and a retry after expiry
- * would be useless.
+ * password-reset and new-account staff-invite emails are never enqueued —
+ * their single-use links must not be persisted, and a retry after expiry
+ * would be useless. Existing-account staff notices carry no token and are
+ * safe to retry through the outbox.
  *
  * Templates are plain-text first; the HTML body is the same content in a
  * minimal wrapper. Amounts use the existing EGP formatter (integer
@@ -79,7 +80,7 @@ export type MailOutboxKind =
   | "refund_opened"
   | "refund_resolved"
   | "support_status"
-  | "staff_added"
+  | "staff_invited"
   | "notification";
 
 /** A retry stops permanently after this many failed attempts. */
@@ -745,8 +746,8 @@ export function vendorStaffInviteEmail(input: {
 }): MailMessage {
   const text =
     `You have been invited to join ${input.shopName} on Gifto as ${input.role}.\n\n` +
-    `Use this link to set your password and join the shop (it expires after 24 hours and can be used once):\n${input.inviteUrl}\n\n` +
-    `If you were not expecting this invitation, ignore this email — no access has been granted yet.`;
+    `Use this link to set your password and continue to your invitations page (it expires after 24 hours and can be used once):\n${input.inviteUrl}\n\n` +
+    `No access is granted until you accept the invitation. If you were not expecting this invitation, ignore this email.`;
   return {
     to: "",
     subject: `Invitation to join ${input.shopName} on Gifto`,
@@ -771,34 +772,40 @@ export async function sendVendorStaffInviteEmail(
   );
 }
 
-export function vendorStaffAddedEmail(input: {
+export function vendorStaffPendingInviteEmail(input: {
   shopName: string;
   role: string;
+  invitationsUrl: string;
 }): MailMessage {
   const text =
-    `You have been added to ${input.shopName} on Gifto as ${input.role}.\n\n` +
-    `Sign in with your existing Gifto account to open the shop dashboard. ` +
-    `If you cannot sign in, ask the shop owner to resend the invitation.`;
+    `You have been invited to join ${input.shopName} on Gifto as ${input.role}.\n\n` +
+    `Sign in to your Gifto account and accept the invitation here:\n${input.invitationsUrl}\n\n` +
+    `No access is granted until you accept. This invitation expires after 7 days. ` +
+    `If you were not expecting it, ignore this email.`;
   return {
     to: "",
-    subject: `You were added to ${input.shopName} on Gifto`,
+    subject: `Invitation to join ${input.shopName} on Gifto`,
     text,
-    html: htmlWrap(`You were added to ${input.shopName} on Gifto`, text),
+    html: htmlWrap(`Invitation to join ${input.shopName} on Gifto`, text),
   };
 }
 
-/** Tells an existing account they were added to a shop (no invite link). */
-export async function sendVendorStaffAddedEmail(
+export async function sendVendorStaffPendingInviteEmail(
   email: string,
   shopName: string,
   role: string,
+  invitationsUrl: string,
 ): Promise<MailSendResult> {
   return sendMail(
     {
-      ...vendorStaffAddedEmail({ shopName, role }),
+      ...vendorStaffPendingInviteEmail({
+        shopName,
+        role,
+        invitationsUrl,
+      }),
       to: email,
     },
-    { kind: "staff_added" },
+    { kind: "staff_invited" },
   );
 }
 

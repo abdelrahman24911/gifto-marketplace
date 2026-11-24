@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { assertSessionStillValid, getRequestContext } from "@/lib/auth";
+import { canViewVendorCustomerPii } from "@/lib/vendor-pii";
 
 import type { VendorRole, VendorStatus } from "@/lib/supabase/database.types";
 
@@ -21,6 +22,8 @@ export type VendorSession = {
   shops: VendorAccess[];
   /** Write access to products, mirroring the catalog RLS policies. */
   canManage: boolean;
+  /** Full customer contact details are limited to owners and managers. */
+  canViewCustomerPii: boolean;
   isPlatformAdmin: boolean;
 };
 
@@ -67,6 +70,18 @@ export async function requireVendorRole(
 
   const canManage =
     access.role === "owner" || access.role === "manager" || isPlatformAdmin;
+  const canViewCustomerPii = canViewVendorCustomerPii(
+    access.role,
+    isPlatformAdmin,
+  );
 
-  return { supabase, user, access, shops, canManage, isPlatformAdmin };
+  return {
+    supabase,
+    user,
+    access,
+    shops,
+    canManage,
+    canViewCustomerPii,
+    isPlatformAdmin,
+  };
 }

@@ -1,7 +1,7 @@
-// Masking for customer contact details in list views (admin orders list).
-// The list is a triage surface: an admin can tell orders apart without the
-// full name, phone or email, which stay visible only on the order-detail
-// page where they are needed to operate (address corrections, calls).
+// Masking for customer contact details in list views (admin orders, vendor
+// orders/refunds/overview). A list is a triage surface: staff can tell orders
+// apart without the full name, phone or email. Full contact stays on detail
+// pages for owners/managers (and admins), where it is needed to operate.
 // Masking is display-only — the search still matches the full values.
 
 /** "Abdelrahman Osama" -> "Abdelrahman O."; a single name -> "Mona…" */

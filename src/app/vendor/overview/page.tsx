@@ -8,6 +8,7 @@ import {
 } from "@/lib/business-time";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { totalsForEntries } from "@/lib/finance";
+import { maskName } from "@/lib/mask-contact";
 import { formatEgp } from "@/lib/money";
 import {
   ORDER_STATUS_LABELS,
@@ -482,8 +483,10 @@ export default async function VendorOverviewPage({
                           {orderRef(suborder)}
                         </span>
                         <span className="mt-0.5 block truncate text-xs text-ink-mute">
-                          {order?.recipient_name ?? "Customer"} ·{" "}
-                          {timeAgo(suborder.created_at, now)}
+                          {order?.recipient_name
+                            ? maskName(order.recipient_name)
+                            : "Customer"}{" "}
+                          · {timeAgo(suborder.created_at, now)}
                         </span>
                       </span>
                       <span className="shrink-0 text-right">
@@ -587,8 +590,10 @@ export default async function VendorOverviewPage({
                         {orderRef(suborder)}
                       </p>
                       <p className="mt-0.5 truncate text-xs text-ink-mute">
-                        {order?.recipient_name ?? "Customer"} ·{" "}
-                        {formatDateTime(suborder.created_at)} ·{" "}
+                        {order?.recipient_name
+                          ? maskName(order.recipient_name)
+                          : "Customer"}{" "}
+                        · {formatDateTime(suborder.created_at)} ·{" "}
                         {timeAgo(suborder.created_at, now)}
                       </p>
                     </div>

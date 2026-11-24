@@ -7,6 +7,7 @@ import {
   BUSINESS_TIME_ZONE,
   startOfBusinessDayOffset,
 } from "@/lib/business-time";
+import { maskName, maskPhone } from "@/lib/mask-contact";
 import { formatEgp } from "@/lib/money";
 import {
   ORDER_STATUS_LABELS,
@@ -141,7 +142,7 @@ export default async function VendorOrdersPage({
   let listQuery = supabase
     .from("order_vendors")
     .select(
-      "id, status, subtotal_minor, created_at, order:orders(id, public_reference, recipient_name, contact_phone, address_line, city, governorate, notes, created_at), order_items(id, product_name, quantity, unit_price_minor, line_total_minor), refund_cases(id)",
+      "id, status, subtotal_minor, created_at, courier_name, tracking_ref, handed_over_at, order:orders(id, public_reference, recipient_name, contact_phone, city, governorate, notes, gift_wrap, gift_message, preferred_delivery_date, delivery_time_note, created_at), order_items(id, product_name, quantity, unit_price_minor, line_total_minor), refund_cases(id)",
       { count: "exact" },
     )
     .eq("vendor_id", access.vendorId);
@@ -228,8 +229,9 @@ export default async function VendorOrdersPage({
       {!canManage ? (
         <div className="mt-4">
           <VendorNotice tone="info">
-            Staff access is read-only for orders. Owners and managers can
-            update shop-line status.
+            Staff access is read-only for orders, and customer contact details
+            are masked. Owners and managers can update shop-line status and see
+            full contact details.
           </VendorNotice>
         </div>
       ) : null}
@@ -415,6 +417,17 @@ export default async function VendorOrdersPage({
                         Line {suborder.id.slice(0, 8)} · placed{" "}
                         {formatDateTime(suborder.created_at)}
                       </p>
+                      {suborder.courier_name ? (
+                        <p className="mt-1 text-xs text-ink-mute">
+                          Shipped via {suborder.courier_name}
+                          {suborder.tracking_ref
+                            ? ` · ${suborder.tracking_ref}`
+                            : ""}
+                          {suborder.handed_over_at
+                            ? ` · handed over ${formatDateTime(suborder.handed_over_at)}`
+                            : ""}
+                        </p>
+                      ) : null}
                     </div>
                     <span
                       className={`rounded-full border px-3 py-1 text-xs font-medium ${ORDER_STATUS_STYLES[status]}`}
@@ -431,17 +444,43 @@ export default async function VendorOrdersPage({
                       {order ? (
                         <div className="mt-2 text-sm leading-relaxed">
                           <p className="font-medium text-ink">
-                            {order.recipient_name}
+                            {order.recipient_name
+                              ? maskName(order.recipient_name)
+                              : "Customer"}
                           </p>
-                          <p className="text-ink-soft">{order.contact_phone}</p>
+                          <p className="text-ink-soft">
+                            {order.contact_phone
+                              ? maskPhone(order.contact_phone)
+                              : "—"}
+                          </p>
                           <p className="mt-1 text-ink-soft">
-                            {order.address_line}
-                            <br />
                             {order.city}, {order.governorate}
                           </p>
                           {order.notes ? (
                             <p className="mt-2 rounded-lg bg-paper-deep/70 px-3 py-2 text-xs text-ink-soft">
                               Customer note: {order.notes}
+                            </p>
+                          ) : null}
+                          {order.gift_wrap || order.gift_message ? (
+                            <p className="mt-2 rounded-lg border border-berry-tint bg-berry-soft px-3 py-2 text-xs text-berry-deep">
+                              Gift wrap requested
+                              {order.gift_message
+                                ? ` — “${order.gift_message}”`
+                                : ""}
+                            </p>
+                          ) : null}
+                          {order.preferred_delivery_date ? (
+                            <p className="mt-2 text-xs text-ink-mute">
+                              Preferred delivery day:{" "}
+                              {order.preferred_delivery_date}
+                              {order.delivery_time_note
+                                ? ` · ${order.delivery_time_note}`
+                                : ""}
+                            </p>
+                          ) : order.delivery_time_note ? (
+                            <p className="mt-2 text-xs text-ink-mute">
+                              Preferred delivery time:{" "}
+                              {order.delivery_time_note}
                             </p>
                           ) : null}
                           <p className="mt-2 text-xs text-ink-mute">

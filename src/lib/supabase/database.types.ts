@@ -68,6 +68,11 @@ export type TagSuggestionStatus = "pending" | "approved" | "rejected";
 export type OrderStatusActorRole = "customer" | "vendor" | "admin" | "system";
 export type RefundCaseStatus = "open" | "approved" | "rejected" | "cancelled";
 export type RefundCaseSource = "customer" | "guest" | "admin";
+export type VendorInvitationStatus =
+  | "pending"
+  | "accepted"
+  | "revoked"
+  | "expired";
 
 /** The Storage bucket reserved for catalog media (upload arrives later). */
 export const PRODUCT_IMAGES_BUCKET = "product-images";
@@ -237,6 +242,73 @@ export type Database = {
           {
             foreignKeyName: "vendor_members_profile_id_fkey";
             columns: ["profile_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+            isOneToOne: false;
+          },
+        ];
+      };
+      vendor_invitations: {
+        Row: {
+          id: string;
+          vendor_id: string;
+          email: string;
+          role: VendorRole;
+          status: VendorInvitationStatus;
+          invited_by: string | null;
+          auth_user_id: string | null;
+          created_at: string;
+          expires_at: string;
+          accepted_at: string | null;
+          accepted_by: string | null;
+          revoked_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          vendor_id: string;
+          email: string;
+          role: VendorRole;
+          status?: VendorInvitationStatus;
+          invited_by?: string | null;
+          auth_user_id?: string | null;
+          created_at?: string;
+          expires_at?: string;
+          accepted_at?: string | null;
+          accepted_by?: string | null;
+          revoked_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          vendor_id?: string;
+          email?: string;
+          role?: VendorRole;
+          status?: VendorInvitationStatus;
+          invited_by?: string | null;
+          auth_user_id?: string | null;
+          created_at?: string;
+          expires_at?: string;
+          accepted_at?: string | null;
+          accepted_by?: string | null;
+          revoked_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "vendor_invitations_vendor_id_fkey";
+            columns: ["vendor_id"];
+            referencedRelation: "vendors";
+            referencedColumns: ["id"];
+            isOneToOne: false;
+          },
+          {
+            foreignKeyName: "vendor_invitations_invited_by_fkey";
+            columns: ["invited_by"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+            isOneToOne: false;
+          },
+          {
+            foreignKeyName: "vendor_invitations_accepted_by_fkey";
+            columns: ["accepted_by"];
             referencedRelation: "profiles";
             referencedColumns: ["id"];
             isOneToOne: false;
@@ -2368,6 +2440,22 @@ export type Database = {
           role: VendorRole;
           created_at: string;
         }[];
+      };
+      list_my_vendor_invitations: {
+        Args: Record<string, never>;
+        Returns: {
+          id: string;
+          vendor_id: string;
+          vendor_name: string;
+          vendor_slug: string;
+          role: VendorRole;
+          created_at: string;
+          expires_at: string;
+        }[];
+      };
+      accept_vendor_invitation: {
+        Args: { p_invitation_id: string };
+        Returns: string;
       };
       create_settlement: {
         Args: { p_vendor_id: string; p_note?: string | null };

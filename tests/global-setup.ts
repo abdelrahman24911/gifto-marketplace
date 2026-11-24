@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { assertLocalE2ETarget } from "./assert-local-e2e-target";
+
 const TESTS_DIR = path.join(process.cwd(), "tests");
 
 const FORBIDDEN_RULES = [
@@ -37,6 +39,11 @@ function collectSpecFiles(directory: string): string[] {
 }
 
 export default async function globalSetup(): Promise<void> {
+  assertLocalE2ETarget(
+    "NEXT_PUBLIC_SUPABASE_URL",
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+  );
+
   const violations: string[] = [];
 
   for (const file of collectSpecFiles(TESTS_DIR)) {
