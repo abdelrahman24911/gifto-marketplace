@@ -1,10 +1,10 @@
 # Gifto Marketplace — Consolidated Analysis of the 13 Audit Documents and Execution Plan
 
-- **Status:** Analysis complete. Phase 1 containment, P1-3 vendor PII masking, and P1-4 pending vendor invitations are implemented in the working tree (uncommitted). Phase 2+ owner decisions and P1-1/P1-2 remain pending. Migration 72 and its rollback were added locally but not applied to any hosted database; no CI config, environment value, branch, or hosted record was modified.
+- **Status:** Analysis complete. Phase 1 containment, P1-3 vendor PII masking, P1-4 pending vendor invitations, and the Brevo SMTP verifier are committed in `4081ec8` and pushed. Phase 2+ owner decisions and P1-1/P1-2 remain pending. Migration 72 and its rollback are committed but not applied to any hosted database; no CI config, environment value, branch, or hosted record was modified.
 - **Date:** 2026-11-24
 - **Repository:** `C:\Users\bodyo\OneDrive\Desktop\gifto-marketplace`
 - **Remote:** `https://github.com/abdelrahman24911/gifto-marketplace.git`
-- **Branch / HEAD:** `muse/decision-closure-brevo` at `54c780b`
+- **Branch / HEAD:** `muse/decision-closure-brevo` at `4081ec8`
 - **Baseline:** `main` at `b369412`; branch is 58 ahead and 0 behind; merge-base is the `main` tip.
 - **Scope:** Consolidate the 13 Muse audit documents, verify what is verifiable in this clone, identify contradictions, and produce one execution plan with owner decisions and acceptance criteria.
 - **Deliverable mapping:** Part I replaces `THIRTEEN_DOCUMENTS_ANALYSIS.md`; Part II replaces `CONSOLIDATED_EXECUTION_PLAN.md`; Part III replaces `OWNER_DECISIONS_REQUIRED.md`. The owner requested all three in one file.
@@ -15,7 +15,7 @@ Evidence labels used throughout:
 
 | Label | Meaning |
 |---|---|
-| **VERIFIED HERE** | Checked directly in this clone at `54c780b` during this analysis (file content, git objects, a local command). |
+| **VERIFIED HERE** | Checked directly in this clone at `54c780b` during this analysis, with implementation evidence at `4081ec8` (file content, git objects, a local command). |
 | **DOC CLAIM** | Asserted by one or more source documents, usually about hosted Supabase, Vercel, GitHub settings, email, or monitoring. Not independently verified from this environment. |
 | **CORRECTED** | A source claim contradicted by repository evidence in this clone. |
 | **STALE** | A pre-existing document that predates the current branch state and should not be treated as current. |
@@ -26,14 +26,14 @@ Safety boundaries observed by this analysis:
 
 - No migration, correction script (including C1), or SQL was run against any hosted database.
 - No production or staging environment was touched.
-- No secret or environment value was read or printed. `.env.local` existence was checked with `Test-Path` only.
+- No secret or environment value was committed or printed in cleartext. `.env.local` was loaded only by the verifier; its sender/login output was redacted and its values were not inspected directly.
 - No branch was switched, deleted, reset, rebased, or merged.
-- No hosted migration, workflow, or hosted configuration was edited. Migration 72 was added locally and has not been applied. Phase 1, P1-3, and P1-4 source/test changes are listed in the implementation update below.
+- No hosted migration, workflow, or hosted configuration was edited. Migration 72 is committed locally and has not been applied. Phase 1, P1-3, P1-4, and Brevo verifier changes are listed in the implementation update below.
 - No dependency installation, browser download, or Playwright browser run was performed; only `--list` was used to validate the E2E guard.
 
-## Implementation update (working tree, uncommitted)
+## Implementation update (committed `4081ec8`; migration 72 unapplied)
 
-After the analysis was accepted, Phase 1 containment, P1-3 vendor PII masking, and P1-4 pending vendor invitations were implemented locally. Nothing was committed, pushed, or applied to any hosted environment.
+After the analysis was accepted, Phase 1 containment, P1-3 vendor PII masking, P1-4 pending vendor invitations, and the Brevo SMTP verifier were implemented. The changes are committed in `4081ec8` and pushed to `origin/muse/decision-closure-brevo`. No hosted environment was modified.
 
 | Item | Status | Evidence |
 |---|---|---|
@@ -47,7 +47,7 @@ After the analysis was accepted, Phase 1 containment, P1-3 vendor PII masking, a
 | P1-3 vendor PII masking | Implemented; display-level | New `src/lib/vendor-pii.ts` plus 5 tests; `VendorSession.canViewCustomerPii`; vendor order/refund/overview lists mask name and phone, and the order list drops street address; detail pages show full contact to owner/manager/platform admin and masked contact to staff; staff notices updated |
 | P1-4 vendor staff invitations | Implemented; local only; migration 72 unapplied | New `vendor_invitations` table, owner/admin RLS, `list_my_vendor_invitations`, and `accept_vendor_invitation`; staff actions create a pending invitation and never insert `vendor_members`; existing accounts get a `staff_invited` notice and accept from `/account/invitations`; new accounts get a `generateLink` invite redirecting to `/auth/accept-invite?next=/account/invitations`; acceptance creates the membership only after email confirmation; 10 new action tests and updated mail tests; RLS suite written but not executed (no Docker/local Postgres); hosted email-confirmation setting unverified |
 | Gates | PASS (static); E2E list rerun | Typecheck, lint, Vitest 712/712 (81 files), build 55/55 static pages including `/[locale]/account/invitations`, i18n 788/648; loopback Playwright `--list` passes (51 tests, 9 files) and `git diff --check` exits 0 (CRLF normalization warnings only); browser E2E not run |
-| Commit/push/hosted writes | None | Working tree only; no commit, no push, no SQL |
+| Commit/push/hosted writes | Commit `4081ec8` pushed | No hosted SQL or configuration write. Migration 72 remains unapplied. |
 
 Guard verification found that the existing `.env.local` resolves to a non-local Supabase host (the production project). The default Playwright lane now refuses to start in the unmodified environment. This is the intended protection: before this change, the lane would have used the production project. To run the lane locally, set `NEXT_PUBLIC_SUPABASE_URL` to a loopback stack. No environment value was changed.
 
