@@ -3,6 +3,7 @@ import { Fraunces, Geist, Geist_Mono, IBM_Plex_Sans_Arabic } from "next/font/goo
 import { headers } from "next/headers";
 import type { ReactNode } from "react";
 
+import { Analytics } from "@vercel/analytics/next";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 
@@ -138,6 +139,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             <NavigationGuardProvider>{children}</NavigationGuardProvider>
           </ToastProvider>
         </NextIntlClientProvider>
+        <Analytics />
       </body>
     </html>
   );
